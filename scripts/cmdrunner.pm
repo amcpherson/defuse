@@ -55,6 +55,10 @@ sub submitter
 	{
 		$self->{submitter} = \&submitter_pbs_cluster
 	}
+	elsif($submitter eq "lsf")
+	{
+		$self->{submitter} = \&submitter_lsf_cluster
+	}
 	else
 	{
 		die "Error: Unrecognized submitter\nSupported submitters: direct, sge, pbs\n";
@@ -177,11 +181,71 @@ sub submitter_sge_cluster
 	my $qsub_commands = "-l mem_free=$job_mem";
 	
 	# Do the command with qsub and write the stdout and stderr to the log file
+	#  '-sync y' means block until finished
+	#  '-notify' means warn the script with a signal before killing.  on oursystem the interrupt signal is sent, but that had to be configured properly in the sge cluster config.  basically this allows alignment jobs to clean up after themselves by removing temporary files, which is important if you are writing to a local disk and dont want to have to go and clean up each nodes disk after a cancel.
+	#  '-b y' means run as a binary rather than in a bash shell, and from memory is required for the above to work
+	#  '-j y' means join std out and std in
+	#  '-o $job_out' sends std out and std in to the job_out file
+	#  '-N' just specifies the job name for qstat
+	#  '$qsub_commands' are things like queue requests or resource requests.
+	
 	my $qsub_output = `qsub -sync y -notify -b y -j y -o $job_out -N $job_name $qsub_commands -S /bin/bash 'bash $job_script' 2>&1`;
 	my $sysretcode = $? >> 8;
 	
 	return ($sysretcode,$qsub_output);
 }
+
+
+sub check_bsub
+{
+	# Check bsub exists on this machine
+	my $bsub_exists = system "which bsub > /dev/null 2>&1";
+	print STDERR "Error: no bsub on this machine\n" and return 0 if $bsub_exists != 0;
+	
+	return 1;
+}
+
+sub submitter_lsf_cluster
+{
+	my $job_cmd = shift;
+	my $job_name = shift;
+	my $job_script = shift;
+	my $job_out = shift;
+	my $cmdrunner = shift;
+	
+	return 1 if not check_bsub();
+
+	create_job_bash_script($job_cmd, $job_script);
+
+	my $job_mem = $cmdrunner->{jobmem};
+	my $job_mem_mb = ($job_mem / 1000000); #Mb
+	my $job_mem_kb = ($job_mem / 1000); #Kb
+
+	# Set a hard memory cap of 4 Gb, unless the job is going to request more (then use that amount as the hard cap)
+	my $hard_cap = 4000000;
+	if ($job_mem_kb > $hard_cap) {$hard_cap = $job_mem_kb;}
+
+	my $bsub_commands = "-q techd -R 'select[mem>$job_mem_mb] rusage[mem=$job_mem_mb]'";
+	
+	# Do the command with bsub and write the stdout and stderr to the log file
+	#  '-K' means block until finished
+	#  '-N' prevents extra output after the exit codes (which was interferring with the sysretcode parsing downstream)
+	#  '-notify' means warn the script with a signal before killing.  On oursystem the interrupt signal is sent, but that had to be configured properly in the sge cluster config.  basically this allows alignment jobs to clean up after themselves by removing temporary files, which is important if you are writing to a local disk and dont want to have to go and clean up each nodes disk after a cancel.
+	# '-b y' means run as a binary rather than in a bash shell, and from memory is required for the above to work
+	# '-oo $job_out' sends std out and std in to the job_out file
+	# '-J' specifies the job name
+	# '$bsub_commands' are things like queue requests or resource requests.
+	# '-q techd'  - use 'long' or 'techd' 
+	# -R "rusage[mem=$job_mem]" 
+
+	my $cmd = "bsub -M $hard_cap -N -K -oo $job_out -J $job_name $bsub_commands 'bash $job_script' > /dev/null 2>&1";
+	#print STDERR "\n\nAttempting job submission as follows:\n\n$cmd\n\n";
+	my $sysretcode = system $cmd;
+	#print STDERR "\n\nDEBUG sysretcode: $sysretcode\n\n";
+
+	return $sysretcode;
+}
+
 
 sub get_pbs_jobstate
 {
@@ -343,7 +407,7 @@ sub uptodate
 	}
 
 	# Return 1 if up to date
-	return 1 if max(@intimes) < min(@outtimes) and min(@outtimes) != 0;
+	return 1 if max(@intimes) <= min(@outtimes) and min(@outtimes) != 0;
 	
 	# Return 0 if not up to date or missing
 	return 0;
@@ -630,6 +694,9 @@ sub prun
 				# Add job output files to the list of all temp files
 				$self->{alltempfiles}{$job_pid} = [@outgenerated];
 			}
+
+			# Wait 1 second before submitting next job
+			sleep 1;
 		}
 
 		# Dont wait for nothing

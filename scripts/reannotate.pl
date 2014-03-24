@@ -85,30 +85,13 @@ my $config = configdata->new();
 $config->read($config_filename);
 
 # Config values
-my $genome_fasta          = $config->get_value("genome_fasta");
-my $cdna_gene_fasta       = $config->get_value("cdna_gene_fasta");
-my $cdna_gene_regions     = $config->get_value("cdna_gene_regions");
-my $cdna_fasta            = $config->get_value("cdna_fasta");
-my $cdna_regions          = $config->get_value("cdna_regions");
-my $gene_tran_list        = $config->get_value("gene_tran_list");
-my $ig_gene_list          = $config->get_value("ig_gene_list");
-my $max_insert_size       = $config->get_value("max_insert_size");
-my $span_count_threshold  = $config->get_value("span_count_threshold");
-my $clustering_precision  = $config->get_value("clustering_precision");
 my $scripts_directory     = $config->get_value("scripts_directory");
 my $tools_directory       = $config->get_value("tools_directory");
-my $reads_per_job         = $config->get_value("reads_per_job");
-my $regions_per_job       = $config->get_value("regions_per_job");
-my $gene_info_list        = $config->get_value("gene_info_list");
 my $samtools_bin          = $config->get_value("samtools_bin");
 my $rscript_bin           = $config->get_value("rscript_bin");
-my $split_min_anchor      = $config->get_value("split_min_anchor");
-my $cov_samp_density      = $config->get_value("covariance_sampling_density");
-my $denovo_assembly       = $config->get_value("denovo_assembly");
 my $remove_job_files      = $config->get_value("remove_job_files");
 my $positive_controls     = $config->get_value("positive_controls");
-
-my $cdna_fasta_fai        = $cdna_fasta.".fai";
+my $probability_threshold = $config->get_value("probability_threshold");
 
 my $mailto;
 if ($config->has_value("mailto"))
@@ -139,70 +122,13 @@ END
 	$? = $retcode;
 }
 
-sub verify_file_exists
-{
-	my $filename = shift;
-	
-	if (not -e $filename)
-	{
-		die "Error: Required file $filename does not exist\n";
-	}
-}
-
-sub verify_directory_exists
-{
-	my $filename = shift;
-	
-	if (not -e $filename)
-	{
-		die "Error: Required directory $filename does not exist\n";
-	}
-}
-
-# Ensure required files exist
-verify_file_exists($genome_fasta);
-verify_file_exists($cdna_gene_fasta);
-verify_file_exists($cdna_fasta);
-verify_file_exists($cdna_fasta_fai);
-verify_file_exists($gene_tran_list);
-verify_file_exists($ig_gene_list);
-
-# Ensure required directories exist
-verify_directory_exists($scripts_directory);
-
 # Script and binary paths
-my $retreive_fastq_script = "$scripts_directory/retreive_fastq.pl";
-my $remove_end_sed_command = "sed 's#/[12]\$##g'";
-my $alignjob_script = "$scripts_directory/alignjob.pl";
-my $filter_bowtie_script = "$scripts_directory/filter_bowtie.pl";
-my $filter_reference_script = "$scripts_directory/filter_bowtie_reference.pl";
-my $read_stats_script = "$scripts_directory/read_stats.pl";
-my $expression_script = "$scripts_directory/calculate_expression_simple.pl";
-my $split_fastq_script = "$scripts_directory/split_fastq.pl";
-my $split_regions_script = "$scripts_directory/split_regions.pl";
-my $split_candidate_reads_script = "$scripts_directory/split_candidate_reads.pl";
-my $get_align_regions_script = "$scripts_directory/get_align_regions.pl";
-my $merge_read_stats_script = "$scripts_directory/merge_read_stats.pl";
-my $merge_expression_script = "$scripts_directory/merge_expression.pl";
-my $split_align_merge_script = "$scripts_directory/splitalignmerge.pl";
-my $split_seq_merge_script = "$scripts_directory/splitseqmerge.pl";
-my $get_cluster_alignments_script = "$scripts_directory/get_cluster_alignments.pl";
-my $bowtie2sam_script = "$scripts_directory/bowtie2sam.pl";
-my $calccov_bin = "$tools_directory/calccov";
-my $maxvalclust_bin = "$tools_directory/maximalvalidclusters";
-my $setcover_bin = "$tools_directory/setcover";
-my $split_seq_bin = "$tools_directory/splitseq";
-my $denovo_seq_bin = "$tools_directory/denovoseq";
-my $findcandidatereads_bin = "$tools_directory/findcandidatereads";
-my $dosplitalign_bin = "$tools_directory/dosplitalign";
-my $evalsplitalign_bin = "$tools_directory/evalsplitalign";
-my $calc_span_pvalues_script = "$scripts_directory/calc_span_pvalues.pl";
-my $calc_split_pvalues_script = "$scripts_directory/calc_split_pvalues.pl";
 my $calc_map_stats_script = "$scripts_directory/calculate_mapping_stats.pl";
 my $annotate_fusions_script = "$scripts_directory/annotate_fusions.pl";
 my $filter_fusions_script = "$scripts_directory/filter_fusions.pl";
 my $coallate_fusions_script = "$scripts_directory/coallate_fusions.pl";
 my $adaboost_rscript = "$rscript_bin ".$scripts_directory."/run_adaboost.R";
+my $filter_script = "$scripts_directory/filter.pl";
 
 mkdir $output_directory if not -e $output_directory;
 
@@ -217,6 +143,7 @@ my $runner = cmdrunner->new();
 $runner->name("reannotate");
 $runner->prefix($log_prefix);
 $runner->maxparallel($max_parallel);
+$runner->submitter($submitter_type);
 
 print "Annotating fusions\n";
 my $splitr_span_pval = $output_directory."/splitr.span.pval";
@@ -228,19 +155,17 @@ my $mapping_stats_filename = $output_directory."/mapping.stats";
 $runner->run("$annotate_fusions_script -c $config_filename -o $output_directory -n $library_name > #>1", [$splitr_span_pval,$denovo_span_pval,$splitr_split_pval], [$annotations_filename]);
 $runner->run("$calc_map_stats_script -c $config_filename -o $output_directory > #>1", [$clusters_sc_sam], [$mapping_stats_filename]);
 
-print "Filtering fusions\n";
-my $filtered_filename = $output_directory."/filtered.txt";
-$runner->run("$filter_fusions_script -c $config_filename -o $output_directory > #>1", [$annotations_filename], [$filtered_filename]);
-
 print "Coallating fusions\n";
 my $results_filename = $output_directory."/results.txt";
-my $filtered_results_filename = $output_directory."/results.filtered.txt";
 $runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$annotations_filename], [$results_filename]);
-$runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$filtered_filename], [$filtered_results_filename]);
 
 print "Running adaboost classifier\n";
 my $results_classify = $output_directory."/results.classify.txt";
 $runner->run("$adaboost_rscript $positive_controls #<1 #>1", [$results_filename], [$results_classify]);
+
+print "Filtering fusions\n";
+my $filtered_results_filename = $output_directory."/results.filtered.txt";
+$runner->run("$filter_script probability '> $probability_threshold' < #<1 > #>1", [$results_classify], [$filtered_results_filename]);
 
 print "Success\n";
 $status = "success";

@@ -16,8 +16,12 @@ features <- c(
 "splitr_min_pvalue",
 "breakpoint_homology",
 "span_coverage_min",
-"breakseqs_estislands_percident"
-);
+"breakseqs_estislands_percident",
+"num_splice_variants",
+"splice_score",
+"max_repeat_proportion",
+"mean_map_count"
+)
 
 controls_features <- controls[,match(features,names(controls))]
 controls_class <- controls$validated == "Y"

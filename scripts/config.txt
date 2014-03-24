@@ -54,6 +54,9 @@ cdna_gene_fasta_cluster                     = $(cluster_prefix).cdna.gene.fa
 prefilter1                                  = $(cluster_dir)/Homo_sapiens.GRCh37.59.dna.fa
 prefilter2                                  = $(cluster_dir)/Hs.seq.uniq
 
+# Repeats downloaded from ucsc and formatted, included in dataset for hg19
+repeats_filename                            = $(dataset_dir)/repeats.txt
+
 # Path where you unpacked the source
 source_directory                            = [where you unpacked the source code]
 
@@ -84,20 +87,20 @@ cdna_utr_extend                             = 500
 rrna_extend                                 = 100
 
 # Max insert size considered by bowtie
-max_insert_size                             = 400
+max_insert_size                             = 500
 
 # Trim length for discordant reads (split reads are not trimmed)
 discord_read_trim                           = 50
 
 # Filtering parameters
 clustering_precision                        = 0.95
-span_coverage_threshold                     = 0.3
+span_coverage_threshold                     = 0.2
 span_count_threshold                        = 5
 split_count_threshold                       = 3
-split_pos_pvalue_threshold                  = 0.01
-split_min_pvalue_threshold                  = 0.01
-span_length_pvalue_threshold                = 0.01
-percent_identity_threshold                  = 0.80
+split_pos_pvalue_threshold                  = 0.05
+split_min_pvalue_threshold                  = 0.05
+span_length_pvalue_threshold                = 0.05
+percent_identity_threshold                  = 0.90
 max_dist_pos                                = 600
 num_dist_genes                              = 500
 split_min_anchor                            = 4
@@ -109,6 +112,7 @@ cdna_breakseq_threshold                     = 0.1
 est_breakseq_threshold                      = 0.2
 estislands_breakseq_threshold               = 0.2
 positive_controls                           = $(data_directory)/controls.txt
+probability_threshold                       = 0.6
 
 # Position density when calculating covariance
 covariance_sampling_density                 = 0.01

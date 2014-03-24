@@ -107,6 +107,7 @@ my $gene_tran_list        = $config->get_value("gene_tran_list");
 my $ig_gene_list          = $config->get_value("ig_gene_list");
 my $max_insert_size       = $config->get_value("max_insert_size");
 my $span_count_threshold  = $config->get_value("span_count_threshold");
+my $probability_threshold = $config->get_value("probability_threshold");
 my $clustering_precision  = $config->get_value("clustering_precision");
 my $scripts_directory     = $config->get_value("scripts_directory");
 my $tools_directory       = $config->get_value("tools_directory");
@@ -213,7 +214,7 @@ my $calc_span_pvalues_script = "$scripts_directory/calc_span_pvalues.pl";
 my $calc_split_pvalues_script = "$scripts_directory/calc_split_pvalues.pl";
 my $annotate_fusions_script = "$scripts_directory/annotate_fusions.pl";
 my $calc_map_stats_script = "$scripts_directory/calculate_mapping_stats.pl";
-my $filter_fusions_script = "$scripts_directory/filter_fusions.pl";
+my $filter_script = "$scripts_directory/filter.pl";
 my $coallate_fusions_script = "$scripts_directory/coallate_fusions.pl";
 my $adaboost_rscript = "$rscript_bin ".$scripts_directory."/run_adaboost.R";
 
@@ -253,7 +254,7 @@ if (defined $source_directory)
 print "Splitting fastq files\n";
 my $reads_split_prefix = $job_directory."/reads";
 my $reads_split_catalog = $output_directory."/reads.split.catalog";
-$runner->run("$split_fastq_script $reads_prefix $reads_per_job $reads_split_prefix > #>1", [$reads_end_1_fastq,$reads_end_1_fastq], [$reads_split_catalog]);
+$runner->run("$split_fastq_script $reads_prefix $reads_per_job $reads_split_prefix > #>1", [$reads_end_1_fastq,$reads_end_2_fastq], [$reads_split_catalog]);
 
 # Read split catalog
 my @split_fastq_prefixes = readsplitcatalog($reads_split_catalog);
@@ -367,19 +368,17 @@ my $mapping_stats_filename = $output_directory."/mapping.stats";
 $runner->run("$annotate_fusions_script -c $config_filename -o $output_directory -n $library_name > #>1", [$splitr_span_pval,$denovo_span_pval,$splitr_split_pval], [$annotations_filename]);
 $runner->run("$calc_map_stats_script -c $config_filename -o $output_directory > #>1", [$clusters_sc_sam], [$mapping_stats_filename]);
 
-print "Filtering fusions\n";
-my $filtered_filename = $output_directory."/filtered.txt";
-$runner->run("$filter_fusions_script -c $config_filename -o $output_directory > #>1", [$annotations_filename], [$filtered_filename]);
-
 print "Coallating fusions\n";
 my $results_filename = $output_directory."/results.txt";
-my $filtered_results_filename = $output_directory."/results.filtered.txt";
 $runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$annotations_filename], [$results_filename]);
-$runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$filtered_filename], [$filtered_results_filename]);
 
 print "Running adaboost classifier\n";
 my $results_classify = $output_directory."/results.classify.txt";
 $runner->run("$adaboost_rscript $positive_controls #<1 #>1", [$results_filename], [$results_classify]);
+
+print "Filtering fusions\n";
+my $filtered_results_filename = $output_directory."/results.filtered.txt";
+$runner->run("$filter_script probability '> $probability_threshold' < #<1 > #>1", [$results_classify], [$filtered_results_filename]);
 
 print "Success\n";
 
