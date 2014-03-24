@@ -108,7 +108,7 @@ my $exons_fasta           = $config->get_value("exons_fasta");
 my $cds_fasta             = $config->get_value("cds_fasta");
 my $rrna_fasta            = $config->get_value("rrna_fasta");
 my $est_fasta             = $config->get_value("est_fasta");
-my $est_split_catalog     = $config->get_value("est_split_catalog");
+my @est_split_fastas      = $config->get_list("est_split_fasta");
 my $ig_gene_list          = $config->get_value("ig_gene_list");
 my $max_insert_size       = $config->get_value("max_insert_size");
 my $span_count_threshold  = $config->get_value("span_count_threshold");
@@ -183,13 +183,6 @@ sub verify_directory_exists
 		die "Error: Required directory $filename does not exist\n";
 	}
 }
-
-# Ensure required files exist
-verify_file_exists($genome_fasta);
-verify_file_exists($reference_fasta);
-verify_file_exists($cdna_fasta);
-verify_file_exists($cdna_fasta_fai);
-verify_file_exists($ig_gene_list);
 
 # Ensure required directories exist
 verify_directory_exists($scripts_directory);
@@ -318,6 +311,19 @@ my $fragment_max = int($fragment_mean + 3 * $fragment_stddev);
 print "Read Stats\n";
 print "\tFragment mean $fragment_mean stddev $fragment_stddev\n";
 print "\tRead length min $read_length_min max $read_length_max\n";
+
+if ($fragment_mean / $discord_read_trim < 3)
+{
+	my $suggested_discord_read_trim = int($fragment_mean / 3);
+	if ($suggested_discord_read_trim < 25)
+	{
+		print "WARNING: cdna fragments too short, deFuse may produce poor results\n";
+	}
+	else
+	{
+		print "WARNING: discord_read_trim likely set too high, should be at most $suggested_discord_read_trim\n";
+	}
+}
 
 print "Finding paired end alignment covariance\n";
 my $cov_stats = $output_directory."/covariance.stats";
@@ -777,7 +783,7 @@ sub padd_doblatalignments
 	foreach my $split_fasta (@{$split_fastas_ref})
 	{
 		my $output_psl = $split_fasta.".".$align_name.".psl";
-		$runner->padd("$blat_bin -noHead -stepSize=12 -tileSize=12 -minMatch=4 $blat_parameters $reference.2bit #<1 #>1", [$split_fasta], [$output_psl]);
+		$runner->padd("$blat_bin -noHead $blat_parameters $reference.2bit #<1 #>1", [$split_fasta], [$output_psl]);
 		push @output_psls, $output_psl;
 	}
 	
@@ -805,8 +811,6 @@ sub padd_doblatalignments_est
 	my $split_fastas_ref = shift;
 	my $blat_parameters = shift;
 	my $align_name = shift;
-	
-	my @est_split_fastas = readsplitcatalog($est_split_catalog);
 	
 	my @output_psls;
 	foreach my $est_split_fasta_index (0..$#est_split_fastas)

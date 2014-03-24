@@ -43,7 +43,15 @@ reference_fasta                             = $(dataset_prefix).reference.fa
 rrna_fasta                                  = $(dataset_prefix).rrna.fa
 ig_gene_list                                = $(dataset_prefix).ig.gene.list
 repeats_regions                             = $(dataset_directory)/repeats.regions
-est_split_catalog                           = $(dataset_directory)/est.fa.split.catalog
+est_split_fasta1                            = $(dataset_directory)/est.1.fa
+est_split_fasta2                            = $(dataset_directory)/est.2.fa
+est_split_fasta3                            = $(dataset_directory)/est.3.fa
+est_split_fasta4                            = $(dataset_directory)/est.4.fa
+est_split_fasta5                            = $(dataset_directory)/est.5.fa
+est_split_fasta6                            = $(dataset_directory)/est.6.fa
+est_split_fasta7                            = $(dataset_directory)/est.7.fa
+est_split_fasta8                            = $(dataset_directory)/est.8.fa
+est_split_fasta9                            = $(dataset_directory)/est.9.fa
 
 # Fasta files with bowtie indices for prefiltering reads for concordantly mapping pairs
 prefilter1                                  = $(unigene_fasta)

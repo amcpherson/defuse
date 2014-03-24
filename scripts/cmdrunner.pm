@@ -548,6 +548,10 @@ sub prun
 			my $allin = join(" ", @{$in_args});
 			$job_cmd =~ s/#<A/$allin/g;
 		
+			# Add array outputs to command
+			my $allout = join(" ", @{$out_args});
+			$job_cmd =~ s/#>A/$allout/g;
+		
 			# Add outputs to command
 			# Keep track of which outputs are on the command line
 			# Add temporary files to static list

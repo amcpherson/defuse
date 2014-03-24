@@ -48,7 +48,7 @@ my $rrna_fasta			        = $config->get_value("rrna_fasta");
 my $cdna_regions		        = $config->get_value("cdna_regions");
 my $cdna_fasta			        = $config->get_value("cdna_fasta");
 my $est_fasta			        = $config->get_value("est_fasta");
-my $est_split_catalog           = $config->get_value("est_split_catalog");
+my @est_split_fastas            = $config->get_list("est_split_fasta");
 my $ig_gene_list		        = $config->get_value("ig_gene_list");
 my $reference_fasta             = $config->get_value("reference_fasta");
 my $repeats_filename            = $config->get_value("repeats_filename");
@@ -63,7 +63,7 @@ my $samtools_bin		        = $config->get_value("samtools_bin");
 my $fatotwobit_bin				= $config->get_value("fatotwobit_bin");
 my $scripts_directory			= $config->get_value("scripts_directory");
 
-my $split_fasta_script = $scripts_directory."/split_fasta.pl";
+my $divide_fasta_script = $scripts_directory."/divide_fasta.pl";
 
 sub verify_file_exists
 {
@@ -354,6 +354,49 @@ sub output_spliced_sequences
 	}
 }
 
+sub revcomp
+{
+        my $sequence = shift;
+        my $revcomp = reverse($sequence);
+        $revcomp =~ tr/ACGTacgt/TGCAtgca/;
+        return $revcomp;
+}
+
+sub output_spliced_sequences_polya
+{
+	my $filename = shift;
+	my $transcripts = shift;
+	my $genes = shift;
+	my $chromosomes = shift;
+	my $strands = shift;
+	my $regions = shift;
+
+	my $seqio = Bio::SeqIO->new('-file' => ">$filename", '-format' => 'fasta');
+
+	foreach my $transcript (keys %{$transcripts})
+	{
+		next if not defined $regions->{$transcript};
+		
+		my $gene = $genes->{$transcript};
+		my $chromosome = $chromosomes->{$transcript};
+		my $strand = $strands->{$transcript};
+		
+		my $seq_name = $gene."|".$transcript;
+		
+		my $seq = "";
+		foreach my $region (@{$regions->{$transcript}})
+		{
+			$seq = $seq.$dna_db->seq($chromosome, $region->[0], $region->[1]);
+		}
+		
+		$seq = revcomp($seq) if defined $strand and $strand eq "-";
+		$seq .= "A" x 50;
+
+		my $seqobj = Bio::Seq->new(-seq => $seq, -id => $seq_name);
+		$seqio->write_seq($seqobj);
+	}
+}
+
 sub output_spliced_regions
 {
 	my $filename = shift;
@@ -441,7 +484,7 @@ if (not cmdrunner::uptodate([$genome_fasta,$gene_models], [$cds_fasta]))
 if (not cmdrunner::uptodate([$genome_fasta,$gene_models], [$cdna_fasta,$cdna_regions]))
 {
 	print "Writing cdna sequences and regions\n";
-	output_spliced_sequences($cdna_fasta, \%candidate_transcripts, \%transcript_gene, \%transcript_chromosome, \%transcript_strand, \%transcript_exon);
+	output_spliced_sequences_polya($cdna_fasta, \%candidate_transcripts, \%transcript_gene, \%transcript_chromosome, \%transcript_strand, \%transcript_exon);
 	output_spliced_regions($cdna_regions, \%candidate_transcripts, \%transcript_gene, \%transcript_chromosome, \%transcript_strand, \%transcript_exon);
 }
 	
@@ -482,14 +525,7 @@ $runner->run("$samtools_bin faidx $cdna_fasta", [$cdna_fasta], [$cdna_fasta.".fa
 $runner->run("$samtools_bin faidx $reference_fasta", [$reference_fasta], [$reference_fasta.".fai"]);
 
 print "Splitting est file\n";
-if (not cmdrunner::uptodate([$est_fasta], [$est_split_catalog]))
-{
-	unlink(<$est_fasta.split.*.fa>);
-	unlink(<$est_fasta.split.*.fa.2bit>);
-	$runner->run("$split_fasta_script #<1 1000000 $est_fasta > #>1", [$est_fasta], [$est_split_catalog]);
-}
-my @est_split_filenames = `cat $est_split_catalog`;
-chomp(@est_split_filenames);
+$runner->run("$divide_fasta_script #<1 #>A", [$est_fasta], [@est_split_fastas]);
 
 print "Splitting genome file\n";
 my $genome_in = Bio::SeqIO->new(-format => "fasta", -file => $genome_fasta);
@@ -511,9 +547,9 @@ $runner->run("$fatotwobit_bin #<1 #>1", [$cdna_fasta], [$cdna_fasta.".2bit"]);
 $runner->run("$fatotwobit_bin #<1 #>1", [$rrna_fasta], [$rrna_fasta.".2bit"]);
 $runner->run("$fatotwobit_bin #<1 #>1", [$cds_fasta], [$cds_fasta.".2bit"]);
 $runner->run("$fatotwobit_bin #<1 #>1", [$exons_fasta], [$exons_fasta.".2bit"]);
-foreach my $est_split_filename (@est_split_filenames)
+foreach my $est_split_fasta (@est_split_fastas)
 {
-	$runner->run("$fatotwobit_bin #<1 #>1", [$est_split_filename], [$est_split_filename.".2bit"]);
+	$runner->run("$fatotwobit_bin #<1 #>1", [$est_split_fasta], [$est_split_fasta.".2bit"]);
 }
 foreach my $chromosome (keys %chromosomes)
 {

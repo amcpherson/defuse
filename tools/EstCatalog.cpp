@@ -43,16 +43,21 @@ void EstCatalog::ReadEsts(istream& in)
 			continue;
 		}
 		
-		string chromosome = estFields[13];
+		string chromosome = estFields[14];
 	
 		if (chromosome.substr(0,3) == "chr")
 		{
 			chromosome = chromosome.substr(3);
 		}
+
+		if (chromosome == "M")
+		{
+			chromosome = "MT";
+		}
 		
 		Segment alignment;
-		alignment.start = lexical_cast<int>(estFields[15]) + 1;
-		alignment.end = lexical_cast<int>(estFields[16]);
+		alignment.start = lexical_cast<int>(estFields[16]) + 1;
+		alignment.end = lexical_cast<int>(estFields[17]);
 		
 		mChrSegments[chromosome].push_back(alignment);
 	}
@@ -124,6 +129,11 @@ void EstCatalog::FilterContainedInEstIslands(istream& in, ostream& out)
 		if (chromosome.substr(0,3) == "chr")
 		{
 			chromosome = chromosome.substr(3);
+		}
+
+		if (chromosome == "M")
+		{
+			chromosome = "MT";
 		}
 
 		Segment searchSegment;
