@@ -35,16 +35,16 @@ struct RefBinPacked
 	RefBinPacked() {}
 	RefBinPacked(const RefStrand& refStrand, int bin) : referenceIndex(refStrand.referenceIndex), strand(refStrand.strand), bin(bin)
 	{
-		if (refStrand.referenceIndex >= (1<<18))
+		if (refStrand.referenceIndex >= (1<<16))
 		{
 			cerr << "Packing failed, too many reference sequences" << endl;
 			exit(1);
 		}
 
-		if (bin >= (1<<13))
+		if (bin >= (1<<15))
 		{
 			cout << bin << endl;
-			cout << (1<<13) << endl;
+			cout << (1<<15) << endl;
 			cerr << "Packing failed, chromosome too large" << endl;
 			exit(1);
 		}
@@ -54,9 +54,9 @@ struct RefBinPacked
 	{
 		struct
 		{
-			unsigned int referenceIndex : 18;
+			unsigned int referenceIndex : 16;
 			unsigned int strand : 1;
-			unsigned int bin : 13;
+			unsigned int bin : 15;
 		};
 		
 		unsigned int id;

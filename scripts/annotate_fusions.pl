@@ -8,9 +8,12 @@ use File::Basename;
 use Cwd qw[abs_path];
 use List::Util qw[min max];
 
+$| = 1;
+
 use lib dirname($0);
 use configdata;
 use cmdrunner;
+use gene_models;
 
 use lib dirname($0)."/../external/BioPerl-1.6.1";
 use Bio::DB::Fasta;
@@ -47,34 +50,20 @@ my $config = configdata->new();
 $config->read($config_filename);
 
 # Config values
+my $reference_fasta			= $config->get_value("reference_fasta");
+my $gene_models_filename	= $config->get_value("gene_models");
 my $genome_fasta			= $config->get_value("genome_fasta");
-my $gene_fasta				= $config->get_value("gene_fasta");
 my $cdna_fasta				= $config->get_value("cdna_fasta");
+my $exons_fasta				= $config->get_value("exons_fasta");
+my $cds_fasta				= $config->get_value("cds_fasta");
 my $rrna_fasta				= $config->get_value("rrna_fasta");
 my $est_fasta				= $config->get_value("est_fasta");
 my $est_alignments			= $config->get_value("est_alignments");
-my $exons_fasta				= $config->get_value("exons_fasta");
-my $exons_regions			= $config->get_value("exons_regions");
-my $cds_fasta				= $config->get_value("cds_fasta");
-my $utr5p_fasta				= $config->get_value("utr5p_fasta");
-my $utr3p_fasta				= $config->get_value("utr3p_fasta");
-my $tss_regions				= $config->get_value("tss_regions");
-my $tts_regions				= $config->get_value("tts_regions");
-my $intronic_fasta			= $config->get_value("intronic_fasta");
-my $upstream_fasta			= $config->get_value("upstream_fasta");
-my $downstream_fasta		= $config->get_value("downstream_fasta");
-my $gene_info_list			= $config->get_value("gene_info_list");
-my $gene_adj_list			= $config->get_value("gene_adj_list");
-my $cdna_gene_fasta			= $config->get_value("cdna_gene_fasta");
-my $cdna_gene_regions		= $config->get_value("cdna_gene_regions");
-my $cdna_regions			= $config->get_value("cdna_regions");
-my $gene_tran_list			= $config->get_value("gene_tran_list");
-my $repeats_filename		= $config->get_value("repeats_filename");
+my $repeats_regions			= $config->get_value("repeats_regions");
 my $splice_bias             = $config->get_value("splice_bias");
 my $denovo_assembly			= $config->get_value("denovo_assembly");
 my $tools_directory			= $config->get_value("tools_directory");
 my $scripts_directory		= $config->get_value("scripts_directory");
-my $blat_bin				= $config->get_value("blat_bin");
 my $samtools_bin			= $config->get_value("samtools_bin");
 my $percident_threshold		= $config->get_value("percent_identity_threshold");
 
@@ -143,43 +132,35 @@ my $runner = cmdrunner->new();
 $runner->name("annotate");
 $runner->prefix($log_prefix);
 
-# Read gene info
-my %gene_info;
-read_gene_info($gene_info_list, \%gene_info);
+my $fusionreads_genome_psl = $output_directory."/fusionreads.genome.psl";
+my $fusionreads_cdna_psl = $output_directory."/fusionreads.cdna.psl";
+my $fusionreads_rrna_psl = $output_directory."/fusionreads.rrna.psl";
+my $breakpoints_genome_psl = $output_directory."/breakpoints.genome.psl";
+my $breakpoints_genome_nointron_psl = $output_directory."/breakpoints.genome.nointron.psl";
+my $breakpoints_cdna_psl = $output_directory."/breakpoints.cdna.psl";
+my $breakpoints_est_psl = $output_directory."/breakpoints.est.psl";
+my $breakpoints_exons_psl = $output_directory."/breakpoints.exons.psl";
+my $breakpoints_cds_psl = $output_directory."/breakpoints.cds.psl";
 
-my $splitr_break_filename = $output_directory."/splitr.break";
-my $denovo_break_filename = $output_directory."/denovo.break";
-my $splitr_seq_filename = $output_directory."/splitr.seq";
-my $denovo_seq_filename = $output_directory."/denovo.seq";
-my $splitr_span_pval_filename = $output_directory."/splitr.span.pval";
-my $denovo_span_pval_filename = $output_directory."/denovo.span.pval";
+my $break_filename = $output_directory."/break";
+my $seq_filename = $output_directory."/seq";
+my $break_predict_filename = $output_directory."/break.predict";
 
-my %splitr_break;
-my %denovo_break;
-my %splitr_seq;
-my %denovo_seq;
-my %splitr_span_pval;
-my %denovo_span_pval;
+my %break;
+my %seq;
+my %break_predict;
 
-read_breaks($splitr_break_filename, \%splitr_break);
-read_breaks($denovo_break_filename, \%denovo_break);
-read_splitr_seq($splitr_seq_filename, \%splitr_seq);
-read_denovo_seq($denovo_seq_filename, \%denovo_seq);
-read_span_pval($splitr_span_pval_filename, \%splitr_span_pval);
-read_span_pval($denovo_span_pval_filename, \%denovo_span_pval);
+read_breaks($break_filename, \%break);
+read_seq($seq_filename, \%seq);
+read_break_predict($break_predict_filename, \%break_predict);
 
 # Read in the read stats
 my $read_stats = $output_directory."/concordant.read.stats";
 my %read_stat_values;
 get_stats($read_stats, \%read_stat_values);
 
-# Read in the cdna gene regions
-my %cdna_gene_reg;
-read_regions($cdna_gene_regions, \%cdna_gene_reg);
-
-# Read in the exons regions
-my %exons_reg;
-read_regions($exons_regions, \%exons_reg);
+# Read in the gene models
+my $gene_models = gene_models->new($gene_models_filename);
 
 # Read in expression
 my %expression;
@@ -188,7 +169,7 @@ read_expression($expression_filename, \%expression);
 
 # Read in repeats list
 my %repeats;
-read_repeats($repeats_filename, \%repeats);
+read_repeats($repeats_regions, \%repeats);
 
 sub get_expression
 {
@@ -206,6 +187,10 @@ my %fusion_strand1;
 my %fusion_strand2;
 my %genomic_breakpos1;
 my %genomic_breakpos2;
+my %genomic_strand1;
+my %genomic_strand2;
+my %gene_location1;
+my %gene_location2;
 my %fusion_break_predict;
 my %break_adj_entropy1;
 my %break_adj_entropy2;
@@ -242,7 +227,7 @@ sub calcentropy
 }
 
 my %clusters;
-my $clusters_sc = $output_directory."/clusters.sc.txt";
+my $clusters_sc = $output_directory."/clusters.sc";
 read_clusters($clusters_sc, \%clusters);
 
 # Calculate fusion align regions
@@ -264,73 +249,72 @@ foreach my $cluster_id (keys %clusters)
 	}
 }
 
-my $breakpoint_sequences_temp_filename = $output_directory."/breakpoint.sequences.fa.tmp";
-my $breakpoint_sequences_filename = $output_directory."/breakpoint.sequences.fa";
-
 # Find fusion breakpoint information
-# Create breakpoint sequence fasta
-open SEQ, ">".$breakpoint_sequences_temp_filename or die "Error: Unable to open file $breakpoint_sequences_temp_filename\n";
-my %cluster_ids = (%splitr_seq, %denovo_seq);
-foreach my $cluster_id (keys %cluster_ids)
+my %cluster_ids;
+foreach my $cluster_id (keys %break)
 {
-	my $ref_name1 = $splitr_break{$cluster_id}{"0"}{reference};
-	my $ref_name2 = $splitr_break{$cluster_id}{"1"}{reference};
+	my $ref_name1 = $break{$cluster_id}{"0"}{reference};
+	my $ref_name2 = $break{$cluster_id}{"1"}{reference};
 	
-	$ref_name1 =~ /(ENSG\d+)/ or die "Error: Unable to interpret $ref_name1\n"; my $gene1 = $1;
-	$ref_name2 =~ /(ENSG\d+)/ or die "Error: Unable to interpret $ref_name2\n"; my $gene2 = $1;
-
-	my $strand1 = $splitr_break{$cluster_id}{"0"}{strand};
-	my $strand2 = $splitr_break{$cluster_id}{"1"}{strand};
+	my $strand1 = $break{$cluster_id}{"0"}{strand};
+	my $strand2 = $break{$cluster_id}{"1"}{strand};
 	
-	my $genomic_strand1 = ($gene_info{$gene1}{strand} eq $strand1) ? "+" : "-";
-	my $genomic_strand2 = ($gene_info{$gene2}{strand} eq $strand2) ? "+" : "-";
-
-	$genomic_breakpos1{$cluster_id} = calc_genomic_position($splitr_break{$cluster_id}{"0"}{breakpos}, $cdna_gene_reg{$ref_name1});
-	$genomic_breakpos2{$cluster_id} = calc_genomic_position($splitr_break{$cluster_id}{"1"}{breakpos}, $cdna_gene_reg{$ref_name2});
+	my $break_pos1 = $break{$cluster_id}{"0"}{breakpos};
+	my $break_pos2 = $break{$cluster_id}{"1"}{breakpos};
 	
-	my @genomic_regions1 = calc_genomic_regions($fusion_align_region{$cluster_id}{"0"}, $cdna_gene_reg{$ref_name1});
-	my @genomic_regions2 = calc_genomic_regions($fusion_align_region{$cluster_id}{"1"}, $cdna_gene_reg{$ref_name2});
+	my $gene1 = $gene_models->calc_gene($ref_name1, $break_pos1);
+	my $gene2 = $gene_models->calc_gene($ref_name2, $break_pos2);
 	
-	my $chromosome1 = $gene_info{$gene1}{chromosome};
-	my $chromosome2 = $gene_info{$gene2}{chromosome};
-		
+	my $genomic_breakpos1 = $gene_models->calc_genomic_position($ref_name1, $break_pos1);
+	my $genomic_breakpos2 = $gene_models->calc_genomic_position($ref_name2, $break_pos2);
+	
+	my $genomic_strand1 = $gene_models->calc_genomic_strand($ref_name1, $strand1);
+	my $genomic_strand2 = $gene_models->calc_genomic_strand($ref_name2, $strand2);
+	
+	my $gene_location1 = $gene_models->calc_gene_location($gene1, $genomic_breakpos1);
+	my $gene_location2 = $gene_models->calc_gene_location($gene2, $genomic_breakpos2);
+	
+	my @genomic_regions1 = $gene_models->calc_genomic_regions($ref_name1, $fusion_align_region{$cluster_id}{"0"});
+	my @genomic_regions2 = $gene_models->calc_genomic_regions($ref_name2, $fusion_align_region{$cluster_id}{"1"});
+	
+	my $chromosome1 = $gene_models->calc_genomic_chromosome($ref_name1);
+	my $chromosome2 = $gene_models->calc_genomic_chromosome($ref_name2);
+	
 	$fusion_repeat_proportion1{$cluster_id} = get_repeat_proportion($chromosome1, \@genomic_regions1, \%repeats);
 	$fusion_repeat_proportion2{$cluster_id} = get_repeat_proportion($chromosome2, \@genomic_regions2, \%repeats);
 	
 	my $gene_strand_a = ($gene1 lt $gene2) ? $gene1.$strand1 : $gene2.$strand2;
 	my $gene_strand_b = ($gene1 lt $gene2) ? $gene2.$strand2 : $gene1.$strand1;
-	my $breakpos_a = ($gene1 lt $gene2) ? $genomic_breakpos1{$cluster_id} : $genomic_breakpos2{$cluster_id};
-	my $breakpos_b = ($gene1 lt $gene2) ? $genomic_breakpos2{$cluster_id} : $genomic_breakpos1{$cluster_id};
+	my $breakpos_a = ($gene1 lt $gene2) ? $genomic_breakpos1 : $genomic_breakpos2;
+	my $breakpos_b = ($gene1 lt $gene2) ? $genomic_breakpos2 : $genomic_breakpos1;
 
 	$fusion_splice_variants{$gene_strand_a}{$gene_strand_b}{$breakpos_a."-".$breakpos_b} = 1;
 	
 	# Select the breakpoint prediction with the highest spanning pvalue
-	my $break_sequence = "";
-	my $break_predict = "";
-	if (lc($denovo_assembly) eq "yes" and $denovo_span_pval{$cluster_id}{pvalue} > $splitr_span_pval{$cluster_id}{pvalue})
-	{
-		$break_sequence = $denovo_seq{$cluster_id}{sequence};
-		$break_predict = "denovo";
-	}
-	else
-	{
-		$break_sequence = $splitr_seq{$cluster_id}{sequence};
-		$break_predict = "splitr";
-	}
+	my $break_sequence = $seq{$cluster_id}{sequence};
+	my $break_predict = $break_predict{$cluster_id}{break_predict};
 	
 	# Skip if no breakpoint sequence was predicted
-	delete $cluster_ids{$cluster_id} and next if $break_sequence eq "";
-
+	next if $break_sequence eq "N" or $break_sequence eq "";
+	
 	# Find position of breakpoint in break sequence	
 	my $break_in_seq = index $break_sequence, "|";
-
+	
 	# Skip if we dont find the break marker
+	# TODO: fix this for denovo breakpoints
 	next if $break_in_seq < 0;
 	
 	# Remove breakpoint marker
 	$break_sequence =~ s/\|//g;
 	
-	print SEQ ">$cluster_id\n".$break_sequence."\n";
+	$genomic_breakpos1{$cluster_id} = $genomic_breakpos1;
+	$genomic_breakpos2{$cluster_id} = $genomic_breakpos2;
+	
+	$genomic_strand1{$cluster_id} = $genomic_strand1;
+	$genomic_strand2{$cluster_id} = $genomic_strand2;
+	
+	$gene_location1{$cluster_id} = $gene_location1;
+	$gene_location2{$cluster_id} = $gene_location2;
 	
 	$fusion_gene_lookup{$cluster_id}{$gene1} = 1;
 	$fusion_gene_lookup{$cluster_id}{$gene2} = 1;
@@ -355,18 +339,16 @@ foreach my $cluster_id (keys %cluster_ids)
 	$fusion_seq_length{$cluster_id} = length($break_sequence);
 	$fusion_seq1_length{$cluster_id} = $break_in_seq;
 	$fusion_seq2_length{$cluster_id} = length($break_sequence) - $break_in_seq;
+	
+	$cluster_ids{$cluster_id} = 1;
 }
 close SEQ;
-
-# Replace old file if we generated a different one
-$runner->replaceifdifferent($breakpoint_sequences_temp_filename, $breakpoint_sequences_filename);
 
 my %fragment_ids;
 my %fusion_fragments;
 my %fusion_span_count;
 
 # Find cluster fragment info
-# Create a read sequence fasta
 foreach my $cluster_id (keys %cluster_ids)
 {
 	foreach my $cluster_end (keys %{$clusters{$cluster_id}})
@@ -381,44 +363,32 @@ foreach my $cluster_id (keys %cluster_ids)
 	}
 }
 
-# Create a read sequence fasta
-my $read_sequences_temp_filename = $output_directory."/read.sequences.fa.tmp";
-my $read_sequences_filename = $output_directory."/read.sequences.fa";
-my $reads_fastq_index = $output_directory."/reads.fqi";
-my $end_1_fastq = $output_directory."/reads.1.fastq";
-my $end_2_fastq = $output_directory."/reads.2.fastq";
-write_reads_to_fasta(\%fragment_ids, $reads_fastq_index, $end_1_fastq, $end_2_fastq, $read_sequences_temp_filename);
-
-# Replace old file if we generated a different one
-$runner->replaceifdifferent($read_sequences_temp_filename, $read_sequences_filename);
-
 # Calculate break concordant counts
-my %splitr_break_concordant;
-my %denovo_break_concordant;
-calculate_break_concordant($splitr_break_filename, \%splitr_break_concordant);
-calculate_break_concordant($denovo_break_filename, \%denovo_break_concordant);
+my %break_concordant;
+calculate_break_concordant($break_filename, \%break_concordant);
 
 # Calculate interrupted
-my %splitr_interruption_info;
-my %denovo_interruption_info;
-calculate_interrupted($splitr_break_filename, \%splitr_interruption_info);
-calculate_interrupted($denovo_break_filename, \%denovo_interruption_info);
+my %interruption_info;
+calculate_interrupted($break_filename, \%interruption_info);
+
+sub calculate_splicing_index
+{
+	my $break_concordant_ref = shift;
+	my $cluster_id = shift;
+	my $cluster_end = shift;
+	
+	return "-" if not defined $break_concordant_ref->{$cluster_id} or not defined $break_concordant_ref->{$cluster_id}{$cluster_end};
+	
+	return $break_concordant_ref->{$cluster_id}{$cluster_end}{break_concordant} / $fusion_span_count{$cluster_id};
+}
 
 # Calculate splicing index
 my %fusion_splicing_index1;
 my %fusion_splicing_index2;
 foreach my $cluster_id (keys %cluster_ids)
 {
-	if ($fusion_break_predict{$cluster_id} eq "splitr")
-	{
-		$fusion_splicing_index1{$cluster_id} = $splitr_break_concordant{$cluster_id}{"0"}{break_concordant} / $fusion_span_count{$cluster_id};
-		$fusion_splicing_index2{$cluster_id} = $splitr_break_concordant{$cluster_id}{"1"}{break_concordant} / $fusion_span_count{$cluster_id};
-	}
-	elsif ($fusion_break_predict{$cluster_id} eq "denovo")
-	{
-		$fusion_splicing_index1{$cluster_id} = $denovo_break_concordant{$cluster_id}{"0"}{break_concordant} / $fusion_span_count{$cluster_id};
-		$fusion_splicing_index2{$cluster_id} = $denovo_break_concordant{$cluster_id}{"1"}{break_concordant} / $fusion_span_count{$cluster_id};
-	}
+	$fusion_splicing_index1{$cluster_id} = calculate_splicing_index(\%break_concordant, $cluster_id, "0");
+	$fusion_splicing_index2{$cluster_id} = calculate_splicing_index(\%break_concordant, $cluster_id, "1");
 }
 
 sub calculate_interrupted_index
@@ -438,73 +408,18 @@ my %fusion_interrupted_index1;
 my %fusion_interrupted_index2;
 foreach my $cluster_id (keys %cluster_ids)
 {
-	if ($fusion_break_predict{$cluster_id} eq "splitr")
-	{
-		$fusion_interrupted_index1{$cluster_id} = calculate_interrupted_index($splitr_interruption_info{$cluster_id}{"0"});
-		$fusion_interrupted_index2{$cluster_id} = calculate_interrupted_index($splitr_interruption_info{$cluster_id}{"1"});
-	}
-	elsif ($fusion_break_predict{$cluster_id} eq "denovo")
-	{
-		$fusion_interrupted_index1{$cluster_id} = calculate_interrupted_index($splitr_interruption_info{$cluster_id}{"0"});
-		$fusion_interrupted_index2{$cluster_id} = calculate_interrupted_index($splitr_interruption_info{$cluster_id}{"1"});
-	}
+	$fusion_interrupted_index1{$cluster_id} = calculate_interrupted_index($interruption_info{$cluster_id}{"0"});
+	$fusion_interrupted_index2{$cluster_id} = calculate_interrupted_index($interruption_info{$cluster_id}{"1"});
 }
-
-my %gene_tss;
-open TSS, $tss_regions or die "Error: Unable to open $tss_regions\n";
-while (<TSS>)
-{
-	chomp;
-	my @fields = split /\t/;
-	
-	my $gene_id = $fields[1];
-	my $tss_start = $fields[3];
-	my $tss_end = $fields[4];
-	
-	push @{$gene_tss{$gene_id}}, [$tss_start, $tss_end];
-}
-close TSS;
-
-my %gene_tts;
-open TTS, $tts_regions or die "Error: Unable to open $tts_regions\n";
-while (<TTS>)
-{
-	chomp;
-	my @fields = split /\t/;
-	
-	my $gene_id = $fields[1];
-	my $tts_start = $fields[3];
-	my $tts_end = $fields[4];
-	
-	push @{$gene_tts{$gene_id}}, [$tts_start, $tts_end];
-}
-close TTS;
-
-my %gene_adjacency;
-open GAJ, $gene_adj_list or die "Error: Unable to open $gene_adj_list\n";
-while (<GAJ>)
-{
-	chomp;
-	my @fields = split /\t/;
-	
-	my $gene_id1 = $fields[0];
-	my $gene_id2 = $fields[1];
-
-	$gene_adjacency{$gene_id1}{$gene_id2} = 1;
-}
-close GAJ;
 
 sub find_alignregion
 {
-	my $sequences_fasta = $_[0];
-	my $blat_out = $_[1];
-	my $align_strand = $_[2];
-	my $query_region = $_[3];
-	my $target_region = $_[4];
+	my $breakpoints_psl = shift;
+	my $align_strand = shift;
+	my $query_region = shift;
+	my $target_region = shift;
 	
-	$runner->run("$blat_bin -noHead $sequences_fasta #<1 #>1", [$breakpoint_sequences_filename], [$blat_out]);
-
-	open PSL, $blat_out or die "Error: Unable to open $blat_out\n";
+	open PSL, $breakpoints_psl or die "Error: Unable to open $breakpoints_psl\n";
 	while (<PSL>)
 	{
 		chomp;
@@ -521,9 +436,10 @@ sub find_alignregion
 		my @query_starts = split /,/, $psl_fields[19];
 		my @target_starts = split /,/, $psl_fields[20];
 	
-		$target_seq_name =~ /(ENSG\d+)/;
+		$target_seq_name =~ /([^|]*)\|([^|]*)\|?([^|]*)?/;
 		my $gene = $1;
-	
+
+print $target_seq_name."\n" if not defined $gene;	
 		next unless $fusion_gene_lookup{$cluster_id}{$gene};
 		
 		foreach my $block_index (0..$#block_sizes)
@@ -546,39 +462,6 @@ sub find_alignregion
 			push @{$query_region->{$cluster_id}{$gene}}, [$query_start, $query_end, $query_size];
 			push @{$target_region->{$cluster_id}{$gene}}, [$target_start, $target_end, $target_size, $target_seq_name];
 		}
-	}
-	close PSL;
-}
-
-sub find_overlap
-{
-	my $sequences_fasta = $_[0];
-	my $blat_out = $_[1];
-	my $overlapping = $_[2];
-
-	$runner->run("$blat_bin -noHead $sequences_fasta #<1 #>1", [$breakpoint_sequences_filename], [$blat_out]);
-
-	open PSL, $blat_out or die "Error: Unable to open $blat_out\n";
-	while (<PSL>)
-	{
-		chomp;
-		my @psl_fields = split /\t/;
-		
-		my $num_matches = $psl_fields[0];
-		my $num_target_bases_inserted = $psl_fields[7];
-		my $strand = $psl_fields[8];
-		my $cluster_id = $psl_fields[9];
-		my $breakpoint_seq_length = $psl_fields[10];
-		my $target_seq_name = $psl_fields[13];
-		my $query_starts = $psl_fields[19];
-		my $target_starts = $psl_fields[20];
-		
-		$target_seq_name =~ /(ENSG\d+)/;
-		my $gene = $1;
-		
-		next unless $fusion_gene_lookup{$cluster_id}{$gene};
-		
-		$overlapping->{$cluster_id}{$gene} = 1;
 	}
 	close PSL;
 }
@@ -622,46 +505,13 @@ my %cds_align_strand;
 my %cds_query_region;
 my %cds_target_region;
 
-my %gene_align_strand;
-my %gene_query_region;
-my %gene_target_region;
-
-my $exon_align_output = $output_directory."/exon.psl";
-my $cds_align_output = $output_directory."/cds.psl";
-my $gene_align_output = $output_directory."/gene.psl";
-
-find_alignregion($exons_fasta, $exon_align_output, \%exon_align_strand, \%exon_query_region, \%exon_target_region);
-find_alignregion($cds_fasta, $cds_align_output, \%cds_align_strand, \%cds_query_region, \%cds_target_region);
-find_alignregion($gene_fasta, $gene_align_output, \%gene_align_strand, \%gene_query_region, \%gene_target_region);
-
-my $cdna_overlap_output = $output_directory."/cdna_overlap.psl";
-my $cds_overlap_output = $output_directory."/cds_overlap.psl";
-my $utr5p_overlap_output = $output_directory."/utr5p_overlap.psl";
-my $utr3p_overlap_output = $output_directory."/utr3p_overlap.psl";
-my $intronic_overlap_output = $output_directory."/intronic_overlap.psl";
-my $upstream_overlap_output = $output_directory."/upstream_overlap.psl";
-my $downstream_overlap_output = $output_directory."/downstream_overlap.psl";
-
-my %cdna_overlap;
-my %cds_overlap;
-my %utr5p_overlap;
-my %utr3p_overlap;
-my %intronic_overlap;
-my %upstream_overlap;
-my %downstream_overlap;
-
-find_overlap($cdna_fasta, $cdna_overlap_output, \%cdna_overlap);
-find_overlap($cds_fasta, $cds_overlap_output, \%cds_overlap);
-find_overlap($utr5p_fasta, $utr5p_overlap_output, \%utr5p_overlap);
-find_overlap($utr3p_fasta, $utr3p_overlap_output, \%utr3p_overlap);
-find_overlap($intronic_fasta, $intronic_overlap_output, \%intronic_overlap);
-find_overlap($upstream_fasta, $upstream_overlap_output, \%upstream_overlap);
-find_overlap($downstream_fasta, $downstream_overlap_output, \%downstream_overlap);
+find_alignregion($breakpoints_exons_psl, \%exon_align_strand, \%exon_query_region, \%exon_target_region);
+find_alignregion($breakpoints_cds_psl, \%cds_align_strand, \%cds_query_region, \%cds_target_region);
 
 my %concordant_reads;
-find_concordant_reads($genome_fasta, $read_sequences_filename, \%concordant_reads, $genome_max_ins);
-find_concordant_reads($cdna_fasta, $read_sequences_filename, \%concordant_reads, $cdna_max_ins);
-find_anchored_concordant_reads($rrna_fasta, $read_sequences_filename, \%concordant_reads);
+find_concordant_reads($fusionreads_genome_psl, \%concordant_reads, $genome_max_ins);
+find_concordant_reads($fusionreads_cdna_psl, \%concordant_reads, $cdna_max_ins);
+find_anchored_concordant_reads($fusionreads_rrna_psl, \%concordant_reads);
 
 my %concordant_ratio;
 foreach my $cluster_id (keys %fusion_span_count)
@@ -701,13 +551,15 @@ foreach my $cluster_id (keys %clusters)
 }
 
 my %breakseqs_percident;
-find_breakseqs_percident($genome_fasta, $breakpoint_sequences_filename, \%{$breakseqs_percident{genome}}, $genome_max_ins);
-find_breakseqs_percident($cdna_fasta, $breakpoint_sequences_filename, \%{$breakseqs_percident{cdna}}, $cdna_max_ins);
-find_breakseqs_percident($est_fasta, $breakpoint_sequences_filename, \%{$breakseqs_percident{est}}, $est_max_ins);
-find_breakseqs_estislands_percident($genome_fasta, $breakpoint_sequences_filename, \%{$breakseqs_percident{estisland}});
+find_breakseqs_percident($breakpoints_genome_psl, \%{$breakseqs_percident{genome}}, $genome_max_ins);
+find_breakseqs_percident($breakpoints_cdna_psl, \%{$breakseqs_percident{cdna}}, $cdna_max_ins);
+find_breakseqs_percident($breakpoints_est_psl, \%{$breakseqs_percident{est}}, $est_max_ins);
+find_breakseqs_estislands_percident($breakpoints_genome_psl, \%{$breakseqs_percident{estisland}});
 
-my %breakpoint_matches;
-find_breakseqs_matches($cdna_gene_fasta, $breakpoint_sequences_filename, \%breakpoint_matches);
+my %max_left_end;
+my %min_right_start;
+find_breakseqs_overlap($breakpoints_genome_nointron_psl, $percident_threshold, \%max_left_end, \%min_right_start);
+find_breakseqs_overlap($breakpoints_cdna_psl, $percident_threshold, \%max_left_end, \%min_right_start);
 
 # Scale all the percent identities
 # Calculate breakpoint homologies
@@ -725,17 +577,15 @@ foreach my $cluster_id (keys %cluster_ids)
 		$breakseqs_percident{$ref_type}{$cluster_id} = $adjusted_percident;
 	}
 	
-	$breakpoint_matches{$cluster_id}{$fusion_gene1{$cluster_id}} = $fusion_seq1_length{$cluster_id} if not defined $breakpoint_matches{$cluster_id}{$fusion_gene1{$cluster_id}};
-	$breakpoint_matches{$cluster_id}{$fusion_gene2{$cluster_id}} = $fusion_seq2_length{$cluster_id} if not defined $breakpoint_matches{$cluster_id}{$fusion_gene2{$cluster_id}};
-
-	my $matches1 = $breakpoint_matches{$cluster_id}{$fusion_gene1{$cluster_id}} - $fusion_seq1_length{$cluster_id};
-	my $matches2 = $breakpoint_matches{$cluster_id}{$fusion_gene2{$cluster_id}} - $fusion_seq2_length{$cluster_id};
-	
-	$breakpoint_homology{$cluster_id} = $matches1 + $matches2;
+	$breakpoint_homology{$cluster_id} = 0;
+	if (defined $max_left_end{$cluster_id} and defined $min_right_start{$cluster_id})
+	{
+		$breakpoint_homology{$cluster_id} = max(0, $max_left_end{$cluster_id} - $min_right_start{$cluster_id} + 1);
+	}
 }
 
 my %genome_breakseqs_percident;
-find_breakseqs_percident($genome_fasta, $breakpoint_sequences_filename, \%genome_breakseqs_percident);
+find_breakseqs_percident($breakpoints_genome_psl, \%genome_breakseqs_percident);
 
 my %altsplice;
 foreach my $cluster_id (keys %cluster_ids)
@@ -757,48 +607,9 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	
 	my $ref_name1 = $fusion_ref_name1{$cluster_id};
 	my $ref_name2 = $fusion_ref_name2{$cluster_id};
-
-	my $upstream1 = "N";
-	$upstream1 = "Y" if defined $upstream_overlap{$cluster_id}{$gene1};
-
-	my $upstream2 = "N";
-	$upstream2 = "Y" if defined $upstream_overlap{$cluster_id}{$gene2};
-
-	my $exonic1 = "N";
-	$exonic1 = "Y" if defined $cdna_overlap{$cluster_id}{$gene1};
-
-	my $exonic2 = "N";
-	$exonic2 = "Y" if defined $cdna_overlap{$cluster_id}{$gene2};
-
-	my $intronic1 = "N";
-	$intronic1 = "Y" if defined $intronic_overlap{$cluster_id}{$gene1};
-
-	my $intronic2 = "N";
-	$intronic2 = "Y" if defined $intronic_overlap{$cluster_id}{$gene2};
-
-	my $downstream1 = "N";
-	$downstream1 = "Y" if defined $downstream_overlap{$cluster_id}{$gene1};
-
-	my $downstream2 = "N";
-	$downstream2 = "Y" if defined $downstream_overlap{$cluster_id}{$gene2};
-
-	my $utr5p1 = "N";
-	$utr5p1 = "Y" if defined $utr5p_overlap{$cluster_id}{$gene1};
-
-	my $utr5p2 = "N";
-	$utr5p2 = "Y" if defined $utr5p_overlap{$cluster_id}{$gene2};
-
-	my $coding1 = "N";
-	$coding1 = "Y" if defined $cds_overlap{$cluster_id}{$gene1};
-
-	my $coding2 = "N";
-	$coding2 = "Y" if defined $cds_overlap{$cluster_id}{$gene2};
-
-	my $utr3p1 = "N";
-	$utr3p1 = "Y" if defined $utr3p_overlap{$cluster_id}{$gene1};
-
-	my $utr3p2 = "N";
-	$utr3p2 = "Y" if defined $utr3p_overlap{$cluster_id}{$gene2};
+	
+	my $genome_strand1 = $genomic_strand1{$cluster_id};
+	my $genome_strand2 = $genomic_strand2{$cluster_id};
 
 	my $orf = "N";
 	foreach my $start_index1 (0..$#{$cds_align_strand{$cluster_id}{$gene1}})
@@ -816,33 +627,21 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 			next unless $strand1 eq $strand2;
 
 			my $query_phase = ($query_region1->[0] - $query_region2->[0]) % 3;
-			my $target_phase = ($target_region1->[0] - $target_region2->[0]) % 3;
+			
+			my $target_phase;
+			if ($strand1 eq "+")
+			{
+				$target_phase = ($target_region1->[0] - $target_region2->[0]) % 3;
+			}
+			else
+			{
+				$target_phase = ($target_region1->[1] - $target_region2->[1]) % 3;
+			}
 
 			$orf = "Y" if $query_phase == $target_phase;
 		}
 	}
-
-	my $utr5pexchange = "N";
-	my $utr3pexchange = "N";
-	foreach my $start_index1 (0..$#{$gene_align_strand{$cluster_id}{$gene1}})
-	{
-		my $strand1 = $gene_align_strand{$cluster_id}{$gene1}->[$start_index1];
-		my $query_region1 = $gene_query_region{$cluster_id}{$gene1}->[$start_index1];
-		my $target_region1 = $gene_target_region{$cluster_id}{$gene1}->[$start_index1];
-
-		foreach my $start_index2 (0..$#{$gene_align_strand{$cluster_id}{$gene2}})
-		{
-			my $strand2 = $gene_align_strand{$cluster_id}{$gene2}->[$start_index2];
-			my $query_region2 = $gene_query_region{$cluster_id}{$gene2}->[$start_index2];
-			my $target_region2 = $gene_target_region{$cluster_id}{$gene2}->[$start_index2];
-
-			next unless $strand1 eq $strand2;
-
-			$utr5pexchange = "Y" if $utr5p1 eq "Y" and $utr5p2 eq "Y";
-			$utr3pexchange = "Y" if $utr3p1 eq "Y" and $utr3p2 eq "Y";
-		}
-	}
-
+	
 	my $exonboundaries = "N";
 	foreach my $start_index1 (0..$#{$exon_align_strand{$cluster_id}{$gene1}})
 	{
@@ -897,8 +696,8 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 				{
 					$exonboundaries = "Y";
 					
-					$genomic_breakpos1{$cluster_id} = calc_genomic_position($query_end1_targetpos, $exons_reg{$target_name1});
-					$genomic_breakpos2{$cluster_id} = calc_genomic_position($query_start2_targetpos, $exons_reg{$target_name2});
+					$genomic_breakpos1{$cluster_id} = $gene_models->exon_to_genome($target_name1, $query_end1_targetpos);
+					$genomic_breakpos2{$cluster_id} = $gene_models->exon_to_genome($target_name2, $query_start2_targetpos);
 					
 					last;
 				}
@@ -935,8 +734,8 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 				{
 					$exonboundaries = "Y";
 					
-					$genomic_breakpos1{$cluster_id} = calc_genomic_position($query_start1_targetpos, $exons_reg{$target_name1});
-					$genomic_breakpos2{$cluster_id} = calc_genomic_position($query_end2_targetpos, $exons_reg{$target_name2});
+					$genomic_breakpos1{$cluster_id} = $gene_models->exon_to_genome($target_name1, $query_start1_targetpos);
+					$genomic_breakpos2{$cluster_id} = $gene_models->exon_to_genome($target_name2, $query_end2_targetpos);
 					
 					last;
 				}
@@ -946,11 +745,8 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 		last if $exonboundaries eq "Y";
 	}
 
-	my $genome_strand1 = ($gene_info{$gene1}{strand} eq $fusion_strand1{$cluster_id}) ? "+" : "-";
-	my $genome_strand2 = ($gene_info{$gene2}{strand} eq $fusion_strand2{$cluster_id}) ? "+" : "-";
-
-	my $splice_seq1 = get_splice_seq($gene_info{$gene1}{chromosome}, $genomic_breakpos1{$cluster_id}, $genome_strand1);
-	my $splice_seq2 = get_splice_seq($gene_info{$gene2}{chromosome}, $genomic_breakpos2{$cluster_id}, $genome_strand2);
+	my $splice_seq1 = get_splice_seq($gene_models->{genes}{$gene1}{chromosome}, $genomic_breakpos1{$cluster_id}, $genome_strand1);
+	my $splice_seq2 = get_splice_seq($gene_models->{genes}{$gene2}{chromosome}, $genomic_breakpos2{$cluster_id}, $genome_strand2);
 
 	my $splice_seqf = $splice_seq1.revcomp($splice_seq2);
 	my $splice_seqr = $splice_seq2.revcomp($splice_seq1);
@@ -964,17 +760,17 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	$fusion_splice_score{$cluster_id} = 4 - min(@splice_scores);
 
 	my $adjacent = "N";
-	$adjacent = "Y" if defined $gene_adjacency{$gene1}{$gene2};
+	$adjacent = "Y" if defined $gene_models->{adjacent_gene}{$gene1}{$gene2};
 
 	my $interchromosomal = "N";
-	$interchromosomal = "Y" if $gene_info{$gene1}{chromosome} ne $gene_info{$gene2}{chromosome};
+	$interchromosomal = "Y" if $gene_models->{genes}{$gene1}{chromosome} ne $gene_models->{genes}{$gene2}{chromosome};
 
 	my $inversion = "N";
 	$inversion = "Y" if $interchromosomal eq "N" and $genome_strand1 eq $genome_strand2;
 
 	my $eversion = "N";
-	$eversion = "Y" if $interchromosomal eq "N" and $gene_info{$gene1}{start} < $gene_info{$gene2}{start} and $genome_strand1 eq "-" and $genome_strand2 eq "+";
-	$eversion = "Y" if $interchromosomal eq "N" and $gene_info{$gene1}{start} > $gene_info{$gene2}{start} and $genome_strand1 eq "+" and $genome_strand2 eq "-";
+	$eversion = "Y" if $interchromosomal eq "N" and $gene_models->{genes}{$gene1}{region}->[0] < $gene_models->{genes}{$gene2}{region}->[0] and $genome_strand1 eq "-" and $genome_strand2 eq "+";
+	$eversion = "Y" if $interchromosomal eq "N" and $gene_models->{genes}{$gene1}{region}->[0] > $gene_models->{genes}{$gene2}{region}->[0] and $genome_strand1 eq "+" and $genome_strand2 eq "-";
 	
 	my $deletion = "N";
 	$deletion = "Y" if $interchromosomal eq "N" and $inversion eq "N" and $eversion eq "N";
@@ -995,18 +791,18 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\tlibrary_name\t".$library_name."\n";
 
 	print $cluster_id."\tgene1\t".$gene1."\n";
-	print $cluster_id."\tgene_name1\t".$gene_info{$gene1}{name}."\n";
-	print $cluster_id."\tgene_chromosome1\t".$gene_info{$gene1}{chromosome}."\n";
-	print $cluster_id."\tgene_strand1\t".$gene_info{$gene1}{strand}."\n";
-	print $cluster_id."\tgene_start1\t".$gene_info{$gene1}{start}."\n";
-	print $cluster_id."\tgene_end1\t".$gene_info{$gene1}{end}."\n";
+	print $cluster_id."\tgene_name1\t".$gene_models->{genes}{$gene1}{name}."\n";
+	print $cluster_id."\tgene_chromosome1\t".$gene_models->{genes}{$gene1}{chromosome}."\n";
+	print $cluster_id."\tgene_strand1\t".$gene_models->{genes}{$gene1}{strand}."\n";
+	print $cluster_id."\tgene_start1\t".$gene_models->{genes}{$gene1}{region}->[0]."\n";
+	print $cluster_id."\tgene_end1\t".$gene_models->{genes}{$gene1}{region}->[1]."\n";
 
 	print $cluster_id."\tgene2\t".$gene2."\n";
-	print $cluster_id."\tgene_name2\t".$gene_info{$gene2}{name}."\n";
-	print $cluster_id."\tgene_chromosome2\t".$gene_info{$gene2}{chromosome}."\n";
-	print $cluster_id."\tgene_strand2\t".$gene_info{$gene2}{strand}."\n";
-	print $cluster_id."\tgene_start2\t".$gene_info{$gene2}{start}."\n";
-	print $cluster_id."\tgene_end2\t".$gene_info{$gene2}{end}."\n";
+	print $cluster_id."\tgene_name2\t".$gene_models->{genes}{$gene2}{name}."\n";
+	print $cluster_id."\tgene_chromosome2\t".$gene_models->{genes}{$gene2}{chromosome}."\n";
+	print $cluster_id."\tgene_strand2\t".$gene_models->{genes}{$gene2}{strand}."\n";
+	print $cluster_id."\tgene_start2\t".$gene_models->{genes}{$gene2}{region}->[0]."\n";
+	print $cluster_id."\tgene_end2\t".$gene_models->{genes}{$gene2}{region}->[1]."\n";
 	
 	print $cluster_id."\tgene_align_strand1\t".$fusion_strand1{$cluster_id}."\n";
 	print $cluster_id."\tgene_align_strand2\t".$fusion_strand2{$cluster_id}."\n";
@@ -1025,23 +821,9 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\texpression1\t".get_expression($gene1)."\n";
 	print $cluster_id."\texpression2\t".get_expression($gene2)."\n";
 	
-	print $cluster_id."\tupstream1\t".$upstream1."\n";
-	print $cluster_id."\tupstream2\t".$upstream2."\n";
-	print $cluster_id."\texonic1\t".$exonic1."\n";
-	print $cluster_id."\texonic2\t".$exonic2."\n";
-	print $cluster_id."\tintronic1\t".$intronic1."\n";
-	print $cluster_id."\tintronic2\t".$intronic2."\n";
-	print $cluster_id."\tdownstream1\t".$downstream1."\n";
-	print $cluster_id."\tdownstream2\t".$downstream2."\n";
-	print $cluster_id."\tutr5p1\t".$utr5p1."\n";
-	print $cluster_id."\tutr5p2\t".$utr5p2."\n";
-	print $cluster_id."\tcoding1\t".$coding1."\n";
-	print $cluster_id."\tcoding2\t".$coding2."\n";
-	print $cluster_id."\tutr3p1\t".$utr3p1."\n";
-	print $cluster_id."\tutr3p2\t".$utr3p2."\n";
+	print $cluster_id."\tgene_location1\t".$gene_location1{$cluster_id}."\n";
+	print $cluster_id."\tgene_location2\t".$gene_location2{$cluster_id}."\n";
 	print $cluster_id."\torf\t".$orf."\n";
-	print $cluster_id."\tutr5pexchange\t".$utr5pexchange."\n";
-	print $cluster_id."\tutr3pexchange\t".$utr3pexchange."\n";
 	print $cluster_id."\texonboundaries\t".$exonboundaries."\n";
 	print $cluster_id."\tadjacent\t".$adjacent."\n";
 	print $cluster_id."\tinterchromosomal\t".$interchromosomal."\n";
@@ -1074,7 +856,7 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\tnum_splice_variants\t".$num_splice_variants."\n";
 }
 
-sub read_splitr_seq
+sub read_seq
 {
 	my $seqs_filename = shift;
 	my $seqs_hash_ref = shift;
@@ -1088,30 +870,6 @@ sub read_splitr_seq
 		my $cluster_id = $fields[0];
 		
 		$seqs_hash_ref->{$cluster_id}{sequence} = $fields[1];
-		$seqs_hash_ref->{$cluster_id}{inter_length} = $fields[2];
-		$seqs_hash_ref->{$cluster_id}{split_count} = $fields[3];
-		$seqs_hash_ref->{$cluster_id}{split_pos_average} = $fields[4];
-		$seqs_hash_ref->{$cluster_id}{split_min_average} = $fields[5];
-	}
-	close SEQ;
-}
-
-sub read_denovo_seq
-{
-	my $seqs_filename = shift;
-	my $seqs_hash_ref = shift;
-	
-	open SEQ, $seqs_filename or die "Error: Unable to find $seqs_filename: $!\n";
-	while (<SEQ>)
-	{
-		chomp;
-		my @fields = split /\t/;
-		
-		my $cluster_id = $fields[0];
-		
-		$seqs_hash_ref->{$cluster_id}{sequence} = $fields[1];
-		$seqs_hash_ref->{$cluster_id}{inter_length} = $fields[2];
-		$seqs_hash_ref->{$cluster_id}{min_count} = $fields[3];
 	}
 	close SEQ;
 }
@@ -1140,22 +898,22 @@ sub read_breaks
 	close BR;
 }
 
-sub read_span_pval
+sub read_break_predict
 {
-	my $span_pval_filename = shift;
-	my $span_pval_hash_ref = shift;
+	my $break_predict_filename = shift;
+	my $break_predict_hash_ref = shift;
 	
-	open SPP, $span_pval_filename or die "Error: Unable to find $span_pval_filename: $!\n";
-	while (<SPP>)
+	open BP, $break_predict_filename or die "Error: Unable to find $break_predict_filename: $!\n";
+	while (<BP>)
 	{
 		chomp;
 		my @fields = split /\t/;
 		
 		my $cluster_id = $fields[0];
 		
-		$span_pval_hash_ref->{$cluster_id}{pvalue} = $fields[2];
+		$break_predict_hash_ref->{$cluster_id}{break_predict} = $fields[1];
 	}
-	close SPP;
+	close BP;
 }
 
 sub read_clusters
@@ -1189,18 +947,13 @@ sub read_clusters
 
 sub find_concordant_reads
 {
-	my $reference_fasta = shift;
-	my $reads_fasta = shift;
+	my $fusionreads_psl = shift;
 	my $concordant_ref = shift;
 	my $max_insert_size = shift;
 	
-	my $reads_psl = $reads_fasta.".".basename($reference_fasta).".psl";
-
-	$runner->run("$blat_bin -noHead $reference_fasta #<1 #>1", [$reads_fasta], [$reads_psl]);
-	
 	my %read_align;
 		
-	open PSL, $reads_psl or die "Error: Unable to open $reads_psl\n";
+	open PSL, $fusionreads_psl or die "Error: Unable to open $fusionreads_psl\n";
 	while (<PSL>)
 	{
 		chomp;
@@ -1252,81 +1005,12 @@ sub find_concordant_reads
 	}
 }
 
-sub find_multimapped_reads
-{
-	my $reference_fasta = shift;
-	my $reads_fasta = shift;
-	my $multimap_ref = shift;
-	
-	my $reads_psl = $reads_fasta.".".basename($reference_fasta).".psl";
-
-	$runner->run("$blat_bin -noHead $reference_fasta #<1 #>1", [$reads_fasta], [$reads_psl]);
-	
-	my %read_align;
-		
-	open PSL, $reads_psl or die "Error: Unable to open $reads_psl\n";
-	while (<PSL>)
-	{
-		chomp;
-		my @psl_fields = split /\t/;
-		
-		my $matches = $psl_fields[0];
-		my $read_id = $psl_fields[9];
-		my $qsize = $psl_fields[10];
-		my $align_chr = $psl_fields[13];
-		my $align_start = $psl_fields[15];
-		my $align_end = $psl_fields[16];
-		my $align_strand = $psl_fields[8];
-	
-		$read_id =~ /(.*)\/([12])/;
-		my $fragment_id = $1;
-		my $read_end = $2;
-
-		my $percent_identity = $matches / $qsize;
-		next if $percent_identity < $percident_threshold;
-
-		push @{$read_align{$fragment_id}{$read_end}}, [$align_chr,$align_strand,$align_start,$align_end];
-	}
-	close PSL;
-
-	foreach my $fragment_id (keys %read_align)
-	{
-		foreach my $read_end (keys %{$read_align{$fragment_id}})
-		{
-			$multimap_ref->{$fragment_id}{$read_end} = scalar @{$read_align{$fragment_id}{$read_end}};
-		}
-	}
-}
-
-sub alignoverlap
-{
-	my $aligninfo1 = shift;
-	my $aligninfo2 = shift;
-
-	if ($aligninfo1->[0] ne $aligninfo2->[0])
-	{
-		return 0;
-	}
-
-	if ($aligninfo1->[2] > $aligninfo2->[3] or $aligninfo2->[2] > $aligninfo1->[3])
-	{
-		return 0;
-	}
-
-	return 1;
-}
-
 sub find_anchored_concordant_reads
 {
-	my $reference_fasta = shift;
-	my $reads_fasta = shift;
+	my $fusionreads_psl = shift;
 	my $concordant_ref = shift;
-
-	my $reads_psl = $reads_fasta.".".basename($reference_fasta).".psl";
-
-	$runner->run("$blat_bin -noHead $reference_fasta #<1 #>1", [$reads_fasta], [$reads_psl]);
-		
-	open PSL, $reads_psl or die "Error: Unable to open $reads_psl\n";
+	
+	open PSL, $fusionreads_psl or die "Error: Unable to open $fusionreads_psl\n";
 	while (<PSL>)
 	{
 		chomp;
@@ -1350,15 +1034,10 @@ sub find_anchored_concordant_reads
 
 sub find_breakseqs_percident
 {
-	my $reference_fasta = shift;
-	my $breakpoints_fasta = shift;
+	my $breakpoints_psl = shift;
 	my $max_percident_ref = shift;
 	my $max_ins = shift;
-
-	my $breakpoints_psl = $breakpoints_fasta.".".basename($reference_fasta).".psl";
 	
-	$runner->run("$blat_bin -noHead $reference_fasta #<1 #>1", [$breakpoints_fasta], [$breakpoints_psl]);
-
 	open PSL, $breakpoints_psl or die "Error: Unable to open $breakpoints_psl\n";
 	while (<PSL>)
 	{
@@ -1380,16 +1059,13 @@ sub find_breakseqs_percident
 	close PSL;
 }
 
-sub find_breakseqs_matches
+sub find_breakseqs_overlap
 {
-	my $reference_fasta = shift;
-	my $breakpoints_fasta = shift;
-	my $max_matches_ref = shift;
-
-	my $breakpoints_psl = $breakpoints_fasta.".".basename($reference_fasta).".psl";
+	my $breakpoints_psl = shift;
+	my $min_percident = shift;
+	my $max_left_end_ref = shift;
+	my $min_right_start_ref = shift;
 	
-	$runner->run("$blat_bin -noHead -maxIntron=0 $reference_fasta #<1 #>1", [$breakpoints_fasta], [$breakpoints_psl]);
-
 	open PSL, $breakpoints_psl or die "Error: Unable to open $breakpoints_psl\n";
 	while (<PSL>)
 	{
@@ -1398,32 +1074,44 @@ sub find_breakseqs_matches
 	
 		my $num_matches = $psl_fields[0];
 		my $num_target_bases_inserted = $psl_fields[7];
+		my $strand = $psl_fields[8];
 		my $cluster_id = $psl_fields[9];
-		my $breakpoint_seq_length = $psl_fields[10];
+		my $query_size = $psl_fields[10];
+		my $query_start = $psl_fields[11] + 1;
+		my $query_end = $psl_fields[12];
 		my $target_seq_name = $psl_fields[13];
-
-		$target_seq_name =~ /(ENSG\d+)/;
-		my $gene = $1;
-
-		next unless $fusion_gene_lookup{$cluster_id}{$gene};
-
-		$max_matches_ref->{$cluster_id}{$gene} = 0 if not defined $max_matches_ref->{$cluster_id}{$gene};
-		$max_matches_ref->{$cluster_id}{$gene} = max($max_matches_ref->{$cluster_id}{$gene}, $num_matches);
+		my $target_size = $psl_fields[14];
+		my $target_start = $psl_fields[15] + 1;
+		my $target_end = $psl_fields[16];
+		my @block_sizes = split /,/, $psl_fields[18];
+		my @block_query_starts = split /,/, $psl_fields[19];
+		my @block_target_starts = split /,/, $psl_fields[20];
+		
+		my $percident = $num_matches / ($query_end - $query_start + 1);
+		
+		next if $percident < $min_percident;
+		
+		if ($query_start == 1)
+		{
+			$max_left_end_ref->{$cluster_id} = $query_end if not defined $max_left_end_ref->{$cluster_id};
+			$max_left_end_ref->{$cluster_id} = max($max_left_end_ref->{$cluster_id}, $query_end);
+		}
+		
+		if ($query_end == $query_size)
+		{
+			$min_right_start_ref->{$cluster_id} = $query_start if not defined $min_right_start_ref->{$cluster_id};
+			$min_right_start_ref->{$cluster_id} = min($min_right_start_ref->{$cluster_id}, $query_start);
+		}
 	}
-	close PSL;
 }
 
 sub find_breakseqs_estislands_percident
 {
-	my $genome_fasta = shift;
-	my $breakpoints_fasta = shift;
+	my $genome_breakpoints_psl = shift;
 	my $max_percident_ref = shift;
 	
-	my $genome_psl = $breakpoints_fasta.".".basename($genome_fasta).".psl";
-	my $estislands_psl = $breakpoints_fasta.".".basename($genome_fasta).".estisl.psl";
-	
-	$runner->run("$blat_bin -noHead $genome_fasta #<1 #>1", [$breakpoints_fasta], [$genome_psl]);
-	$runner->run("$estislandsbin -b #<1 -e $est_alignments -o #>1", [$genome_psl], [$estislands_psl]);
+	my $estislands_psl = $genome_breakpoints_psl.".estisl.psl";	
+	$runner->run("$estislandsbin -b #<1 -e $est_alignments -o #>1", [$genome_breakpoints_psl], [$estislands_psl]);
 	
 	open PSL, $estislands_psl or die "Error: Unable to open $estislands_psl\n";
 	while (<PSL>)
@@ -1485,79 +1173,6 @@ sub read_expression
 		$expression_ref->{$ensgene}{expression} = $fields[1];
 	}
 	close EXPR;
-}
-
-sub read_gene_info
-{
-	my $gene_info_list = shift;
-	my $gene_info_ref = shift;
-	
-	# Read in gene information
-	open GI, $gene_info_list or die "Error: Unable to open $gene_info_list: $!\n";
-	while (<GI>)
-	{
-		chomp;
-		my @fields = split /\t/;
-	
-		my $ensgene = $fields[0];
-
-		$gene_info_ref->{$ensgene}{name} = $fields[1];
-		$gene_info_ref->{$ensgene}{chromosome} = $fields[2];
-		$gene_info_ref->{$ensgene}{strand} = $fields[3];
-		$gene_info_ref->{$ensgene}{start} = $fields[4];
-		$gene_info_ref->{$ensgene}{end} = $fields[5];
-	}
-	close GI;
-}
-
-sub read_gene_transcript
-{
-	my $gene_tran_filename = shift;
-	my $gene_tran_ref = shift;
-	
-	# Read in gene transcript mapping
-	open GT, $gene_tran_filename or die "Error: Unable to open $gene_tran_filename: $!\n";
-	while (<GT>)
-	{
-		chomp;
-		my @fields = split /\t/;
-		
-		my $ensgene = $fields[0];
-		my $enstran = $fields[1];
-		
-		push @{$gene_tran_ref->{$ensgene}}, $enstran;
-	}
-	close GT;
-}
-
-sub read_regions
-{
-	my $regions_filename = shift;
-	my $regions_hash_ref = shift;
-
-	open REG, $regions_filename or die;
-	while (<REG>)
-	{
-		chomp;
-		my @fields = split /\t/;
-		
-		my $gene = $fields[0];
-		my $chromosome = $fields[1];
-		my $strand = $fields[2];
-	
-		my @exons;
-		my $fieldindex = 4;
-		while ($fieldindex <= $#fields)
-		{
-			push @exons, [$fields[$fieldindex-1],$fields[$fieldindex]];
-			$fieldindex += 2;
-		}
-		
-		$regions_hash_ref->{$gene}{chromosome} = $chromosome;
-		$regions_hash_ref->{$gene}{strand} = $strand;
-		$regions_hash_ref->{$gene}{exons} = [@exons];
-	}
-	close REG;
 }
 
 sub calculate_break_concordant
@@ -1646,177 +1261,6 @@ sub merge_regions
 	push @merged, [$merged_start, $merged_end];
 
 	return @merged;
-}
-
-# Find position in genome given a position and the strand and exons of the transcript
-sub calc_genomic_position
-{
-	my $position = shift;
-	my $transcript_ref = shift;
-	
-	my $strand = $transcript_ref->{strand};
-	my $exons = $transcript_ref->{exons};
-	
-	if ($strand eq "-")
-	{
-		$position = regions_length(@{$exons}) - $position + 1;
-	}
-	
-	if ($position < 1)
-	{
-		return $exons->[0]->[0] + $position - 1;
-	}
-	
-	my $local_offset = 0;
-	foreach my $exon (@{$exons})
-	{
-		my $exonsize = $exon->[1] - $exon->[0] + 1;
-			
-		if ($position <= $local_offset + $exonsize)
-		{
-			return $position - $local_offset - 1 + $exon->[0];
-		}
-				
-		$local_offset += $exonsize;
-	}
-	
-	return $position - $local_offset + $exons->[$#{$exons}]->[1];
-}
-
-# Find position in a transcript given a genomic position and strand and exons of the transcript
-# This version returns the position of the beginning of the next exon if the genomic position is intronic
-sub calc_transcript_position
-{
-	my $position = shift;
-	my $transcript_ref = shift;
-
-	my $strand = $transcript_ref->{strand};
-	my $exons = $transcript_ref->{exons};
-	
-	my $local_offset = 0;
-	my $transcript_position;
-	foreach my $exon (@{$exons})
-	{
-		my $exonsize = $exon->[1] - $exon->[0] + 1;
-
-		if ($position <= $exon->[1])
-		{
-			if ($position < $exon->[0])
-			{
-				$transcript_position = $local_offset + 1;
-				last;
-			}
-			else
-			{
-				$transcript_position = $local_offset + $position - $exon->[0] + 1;
-				last;
-			}
-		}
-				
-		$local_offset += $exonsize;
-	}
-
-	$transcript_position = regions_length(@{$exons}) if not defined $transcript_position;
-	
-	if ($strand eq "-")
-	{
-		$transcript_position = regions_length(@{$exons}) - $transcript_position + 1;
-	}
-	
-	return $transcript_position;
-}
-
-# Find genomic regions given a region and the strand and exons of the transcript
-sub calc_genomic_regions
-{
-	my $region = shift;
-	my $transcript_ref = shift;
-
-	my $strand = $transcript_ref->{strand};
-	my $exons = $transcript_ref->{exons};
-
-	if ($strand eq "-")
-	{
-		$region = [regions_length(@{$exons}) - $region->[1] + 1, regions_length(@{$exons}) - $region->[0] + 1];
-	}
-
-	my @genomic;
-	my $local_offset = 0;
-	foreach my $exon (@{$exons})
-	{
-		my $exonsize = $exon->[1] - $exon->[0] + 1;
-
-		my $local_start = $region->[0] - $local_offset;
-		my $local_end = $region->[1] - $local_offset;
-
-		my $overlap_start = max(1,$local_start) + $exon->[0] - 1;
-		my $overlap_end = min($exonsize,$local_end) + $exon->[0] - 1;
-
-		if ($overlap_start <= $overlap_end)
-		{
-			push @genomic, [$overlap_start,$overlap_end];
-		}
-
-		$local_offset += $exonsize;
-	}
-
-	return @genomic;
-}
-
-sub write_reads_to_fasta
-{
-	my $fragments_ref = shift;
-	my $fastq_index_filename = shift;
-	my $end_1_fastq_filename = shift;
-	my $end_2_fastq_filename = shift;
-	my $fasta_filename = shift;
-	
-	open FQI, $fastq_index_filename or die "Error: Unable to open $fastq_index_filename\n";
-	binmode(FQI);
-	
-	open FA, ">".$fasta_filename or die "Error: Unable to open $fasta_filename\n";
-	
-	foreach my $read_end ("1","2")
-	{
-		my $fastq_filename = ($read_end eq "1") ? $end_1_fastq_filename : $end_2_fastq_filename;
-		open FQ, $fastq_filename or die "Error: Unable to open $fastq_filename\n";
-		
-		my $read_end_index = ($read_end eq "1") ? 0 : 1;
-		foreach my $fragment_index (sort {$a <=> $b} keys %{$fragments_ref})
-		{
-			# Seek to position in the index
-			my $fragment_index_file_pos = $fragment_index * 2 * 8 + $read_end_index * 8;
-			seek FQI, $fragment_index_file_pos, 0;
-			
-			# Read from index
-			my $fragment_file_pos_bytes;
-			read FQI, $fragment_file_pos_bytes, 8;
-			my $fragment_file_pos = unpack "q", $fragment_file_pos_bytes;
-			
-			# Seek to position in fastq
-			seek FQ, $fragment_file_pos, 0;
-			
-			# Read fastq entry
-			my $read_id = <FQ>;
-			my $sequence = <FQ>;
-			my $comment = <FQ>;
-			my $quality = <FQ>;
-			
-			chomp($read_id);
-			chomp($sequence);
-			
-			$read_id =~ s/\@// or die "Error: Unable to retrieve correct index for $fragment_index/$read_end\n";
-			$read_id = $fragment_index."/".$read_end or die "Error: Unable to retrieve correct index for $fragment_index/$read_end\n";
-			
-			print FA ">".$read_id."\n";
-			print FA $sequence."\n";
-		}
-		
-		close FQ;
-	}
-	
-	close FQI;
-	close FA;
 }
 
 sub overlapsize

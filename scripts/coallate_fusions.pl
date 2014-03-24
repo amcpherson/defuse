@@ -63,10 +63,10 @@ while (<CID>)
 }
 close CID;
 
-# Read in cluster file
+# Read in cluster sam file
 my %clusters;
-my $clusters_filename = $output_directory."/clusters.sc.txt";
-read_clusters($clusters_filename, \%clusters);
+my $clusters_sam = $output_directory."/clusters.sc";
+read_sam_clusters($clusters_sam, \%clusters);
 
 # Find cluster spanning read count and strands
 my %fusion_span_count;
@@ -84,7 +84,7 @@ foreach my $cluster_id (keys %clusters)
 
 # Read in annotations file
 my %annotations;
-my $annotations_filename = $output_directory."/annotations.txt";
+my $annotations_filename = $output_directory."/annotations";
 my $mapping_stats_filename = $output_directory."/mapping.stats";
 read_annotations($annotations_filename, \%annotations);
 read_annotations($mapping_stats_filename, \%annotations);
@@ -177,7 +177,7 @@ foreach my $cluster_id (keys %cluster_ids)
 	print "\n";
 }
 
-sub read_clusters
+sub read_sam_clusters
 {
 	my $clusters_filename = shift;
 	my $clusters_hash_ref = shift;
@@ -219,7 +219,7 @@ sub read_span_pval
 		
 		my $cluster_id = $fields[0];
 		
-		$span_pval_hash_ref->{$cluster_id}{pvalue} = $fields[2];
+		$span_pval_hash_ref->{$cluster_id}{pvalue} = $fields[1];
 	}
 	close SPP;
 }

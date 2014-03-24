@@ -149,7 +149,7 @@ close RES;
 close SEQ;
 
 # Replace old file if we generated a different one
-$runner->replaceifdifferent($breaks_temp_filename, $breaks_filename);
+cmdrunner::replaceifdifferent($breaks_temp_filename, $breaks_filename);
 
 # Iterate through all libraries and calculate interrupted for each
 foreach my $library_name (@libraries)

@@ -12,10 +12,9 @@ open CLU, $clusters_filename or die "Error: Unable to open $clusters_filename: $
 while (<CLU>)
 {
 	chomp;
-	my ($cluster_id, $fragment_index, $align_index_1, $align_index_2) = split /\t/;
+	my ($cluster_id, $cluster_end, $fragment_index, $align_index) = split /\t/;
 	
-	push @{$align_index_clusters{$align_index_1}}, $cluster_id;
-	push @{$align_index_clusters{$align_index_2}}, $cluster_id;
+	push @{$align_index_clusters{$align_index}}, [$cluster_id,$cluster_end];
 }
 close CLU;
 
@@ -24,9 +23,9 @@ while (<>)
 {
 	if (defined $align_index_clusters{$current_align_index})
 	{
-		foreach my $cluster_id (@{$align_index_clusters{$current_align_index}})
+		foreach my $cluster (@{$align_index_clusters{$current_align_index}})
 		{
-			print $cluster_id."\t".$_;
+			print $cluster->[0]."\t".$cluster->[1]."\t".$_;
 		}
 	}
 	

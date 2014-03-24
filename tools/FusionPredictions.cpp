@@ -158,10 +158,10 @@ void FusionPredictions::InitializeClusterBreaks()
 			const string& transcript = Alignments::ReferenceNames.Get(refStrand.referenceIndex);
 			
 			// Find gene for this transcript
-			const string& gene = mExonRegions.GetTranscriptGeneName(transcript);
+			const string& gene = mExonRegions.GetTranscriptGene(transcript);
 			
 			// Find all transcripts of the same gene
-			const StringVec& geneTranscripts = mExonRegions.GetGeneTranscriptNames(gene);
+			const StringVec& geneTranscripts = mExonRegions.GetGeneTranscripts(gene);
 			
 			// Iterate through all transcripts of this gene
 			for (StringVecConstIter geneTranscriptIter = geneTranscripts.begin(); geneTranscriptIter != geneTranscripts.end(); geneTranscriptIter++)

@@ -56,7 +56,6 @@ my $cdna_regions			= $config->get_value("cdna_regions");
 my $gene_tran_list			= $config->get_value("gene_tran_list");
 my $splice_bias             = $config->get_value("splice_bias");
 my $samtools_bin			= $config->get_value("samtools_bin");
-my $rscript_bin				= $config->get_value("rscript_bin");
 my $scripts_directory		= $config->get_value("scripts_directory");
 
 my $expression_rscript = $scripts_directory."/expression_plot.R";
@@ -67,7 +66,7 @@ my $fusion_breakstrand;
 if (defined $fusion_id)
 {
 	# Results filename for fusion breakpoint position
-	my $results_filename = $output_directory."/results.txt";
+	my $results_filename = $output_directory."/results.tsv";
 
 	my $first_line = 1;
 	my %fi;
@@ -211,12 +210,12 @@ if (defined $fusion_breakpos)
 		$exonic_fusion_breakstrand = "-1";
 	}
 
-	my $rscript_result = system "$rscript_bin $expression_rscript $expression_tmp $expression_pdf $exonic_fusion_breakpos $exonic_fusion_breakstrand";
+	my $rscript_result = system "Rscript $expression_rscript $expression_tmp $expression_pdf $exonic_fusion_breakpos $exonic_fusion_breakstrand";
 	die "Error: Rscript failed\n" if $rscript_result != 0;
 }
 else
 {
-	my $rscript_result = system "$rscript_bin $expression_rscript $expression_tmp $expression_pdf";
+	my $rscript_result = system "Rscript $expression_rscript $expression_tmp $expression_pdf";
 	die "Error: Rscript failed\n" if $rscript_result != 0;
 }
 
@@ -230,7 +229,7 @@ sub get_coverage
 	my $transcript = shift;
 	my $coverage = shift;
 	
-	open PU, "$samtools_bin view -b $bam_filename '$transcript' | $samtools_bin pileup -c - |" or die "Error: Unable to get pileup for $transcript in $bam_filename: $!\n";
+	open PU, "$samtools_bin view -b $bam_filename '$transcript' | samtools pileup -c - |" or die "Error: Unable to get pileup for $transcript in $bam_filename: $!\n";
 	while (<PU>)
 	{
 		my @pileup_fields = split /\t/;

@@ -89,7 +89,7 @@ int main(int argc, char* argv[])
 	reference.Open(referenceFasta);
 	
 	ifstream exonRegionsFile(exonRegionsFilename.c_str());
-	if (!exonRegionsFile.good() || !exonRegions.ReadExonRegions(exonRegionsFile))
+	if (!exonRegionsFile.good() || !exonRegions.Read(exonRegionsFile))
 	{
 		cerr << "Error: Unable to read exon regions file " << exonRegionsFilename << endl;
 		exit(1);
@@ -104,7 +104,7 @@ int main(int argc, char* argv[])
 
 	for (LocationVecMapConstIter pairIter = alignRegionPairs.begin(); pairIter != alignRegionPairs.end(); pairIter++)
 	{
-		int id = lexical_cast<int>(pairIter->first);
+		int id = pairIter->first;
 		const LocationVec& alignRegionPair = pairIter->second;
 
 		SplitAlignment::SplitAlignmentMap splitAlignments;

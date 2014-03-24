@@ -83,6 +83,7 @@ bool SplitAlignment::FindCandidates(const LocationVec& alignPair, const Alignmen
 				int remainderStart = alignStart;
 				int remainderEnd = mSplitAlignSeqStart[clusterEnd] - 1;
 				int remainderLength = remainderEnd - remainderStart + 1;
+				
 				reference.Get(alignRefName, refSeqStrand, remainderStart, remainderLength, mSplitRemainderSeq[clusterEnd]);
 			}
 		}
@@ -98,32 +99,62 @@ bool SplitAlignment::FindCandidates(const LocationVec& alignPair, const Alignmen
 			}
 		}
 		
-		// Find gene for this transcript
-		const string& gene = exonRegions.GetTranscriptGeneName(alignRefName);
-		
-		// Find all transcripts of the same gene
-		const StringVec& geneTranscripts = exonRegions.GetGeneTranscriptNames(gene);
-		
-		// Iterate through all transcripts of this gene
-		for (StringVecConstIter geneTranscriptIter = geneTranscripts.begin(); geneTranscriptIter != geneTranscripts.end(); geneTranscriptIter++)
+		string chromosome;
+		int genomeAlignStrand;
+		int genomeBreakRegionStart;
+		string alignGene;
+		string alignTranscript;
+		if (ParseTranscriptID(alignRefName, alignGene, alignTranscript) && exonRegions.IsTranscript(alignTranscript))
 		{
-			const string& remapTranscript = *geneTranscriptIter;
+			// Remap break region start to the genome
+			bool remapResult = exonRegions.RemapTranscriptToGenome(alignTranscript, alignStrand, breakRegionStart, chromosome, genomeAlignStrand, genomeBreakRegionStart);
+			DebugCheck(remapResult);
+		}
+		else
+		{
+			chromosome = alignRefName;
+			genomeAlignStrand = alignStrand;
+			genomeBreakRegionStart = breakRegionStart;
+		}
+		
+		// Find min and max range of mates
+		int mateMin = minFragmentLength - breakRegionLength - maxReadLength + 1;
+		int mateMax = maxFragmentLength - minReadLength;
+		
+		// Find start and end of mate region in the genome
+		Region genomeMateRegion;
+		if (genomeAlignStrand == PlusStrand)
+		{
+			genomeMateRegion.start = genomeBreakRegionStart - mateMax;
+			genomeMateRegion.end = genomeBreakRegionStart - mateMin;
+		}
+		else
+		{
+			genomeMateRegion.start = genomeBreakRegionStart + mateMin;
+			genomeMateRegion.end = genomeBreakRegionStart + mateMax;
+		}
+		
+		AddAnchoredReads(discordant, anchored, chromosome, genomeAlignStrand, revCompReads, genomeMateRegion.start, genomeMateRegion.end);
+		
+		// Find overlapping genes
+		StringVec transcripts;
+		exonRegions.GetRegionTranscripts(chromosome, genomeMateRegion, transcripts);
 			
-			// Remap break region start to this transcript if possible
-			int remappedBreakRegionStart;
-			if (!exonRegions.RemapTranscriptToTranscript(alignRefName, breakRegionStart, remapTranscript, remappedBreakRegionStart))
-			{
-				continue;
-			}
+		for (StringVecConstIter transcriptIter = transcripts.begin(); transcriptIter != transcripts.end(); transcriptIter++)
+		{
+			const string& remapGene = exonRegions.GetTranscriptGene(*transcriptIter);
+			const string& remapTranscript = *transcriptIter;
 			
-			DebugCheck(remapTranscript != alignRefName || breakRegionStart == remappedBreakRegionStart);					
+			string remapTranscriptID = remapGene + "|" + remapTranscript;
 			
-			// Calculate the anchored mate alignment region in this transcript
 			int mateRegionStart;
 			int mateRegionEnd;
-			CalculateSplitMateRegion(minReadLength, maxReadLength, minFragmentLength, maxFragmentLength, remappedBreakRegionStart, breakRegionLength, alignStrand, mateRegionStart, mateRegionEnd);
-
-			AddAnchoredReads(discordant, anchored, remapTranscript, alignStrand, revCompReads, mateRegionStart, mateRegionEnd);
+			int remapAlignStrand;
+			if (exonRegions.RemapThroughTranscript(remapTranscript, genomeBreakRegionStart, 1-genomeAlignStrand, mateMin, mateMax, remapAlignStrand, mateRegionStart, mateRegionEnd))
+			{
+				remapAlignStrand = 1-remapAlignStrand;
+				AddAnchoredReads(discordant, anchored, remapTranscriptID, remapAlignStrand, revCompReads, mateRegionStart, mateRegionEnd);
+			}
 		}
 	}
 	
@@ -561,4 +592,5 @@ void SplitAlignment::CalculateSplitMateRegion(int minReadLength, int maxReadLeng
 		mateRegionEnd = breakStart + maxFragmentLength - minReadLength;
 	}
 }
+
 

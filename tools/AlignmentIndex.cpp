@@ -1,5 +1,5 @@
 /*
- *  AlignmentIndex.h
+ *  AlignmentIndex.cpp
  *
  *  Created by Andrew McPherson on 02/09/10.
  *
@@ -99,6 +99,8 @@ int FetchCallback(const bam1_t* b, void* data)
 		
 		fetchData->alignments.push_back(compactAlignment);
 	}
+	
+	return 0;
 }
 
 void AlignmentIndex::Find(const string& reference, int strand, int start, int end, NameIndex& referenceNames, CompAlignVec& alignments) const

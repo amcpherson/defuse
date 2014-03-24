@@ -2,6 +2,8 @@
 
 use strict;
 use warnings FATAL => 'all';
+use FileCache;
+no strict 'refs';
 
 my $usage = "Usage: $0 split_catalog candidate_reads > candidate_catalog\n";
 
@@ -13,36 +15,57 @@ die $usage if not defined $candidate_reads_filename;
 # Read in split catalog
 my @split_catalog = read_split_catalog($split_catalog_filename);
 
-# Iterate over splits
+# Open files for writing
+# Create binning for fragment indices
+my $bin_size = 100000;
+my %split_bins;
+my @split_candidates_filenames;
 foreach my $split_info (@split_catalog)
 {
-	my $split_prefix = $split_info->[0];
-	my $start_fragment_index = $split_info->[1];
-	my $end_fragment_index = $split_info->[2];
+        my $split_prefix = $split_info->[0];
+        my $start_fragment_index = $split_info->[1];
+        my $end_fragment_index = $split_info->[2];
+
+        my $split_candidates_filename = $split_prefix.".candidate.reads";
 	
-	my $split_candidates_filename = $split_prefix.".candidate.reads";
+	cacheout $split_candidates_filename;
 	
-	open SPL, ">".$split_candidates_filename or die "Error: Unable to open $split_candidates_filename: $!\n";
-	open CAN, $candidate_reads_filename or die "Error: Unable to open $candidate_reads_filename: $!\n";
-	while (<CAN>)
+	my $start_bin = int($start_fragment_index / $bin_size);
+	my $end_bin = int($end_fragment_index / $bin_size);
+
+	foreach my $bin ($start_bin..$end_bin)
 	{
-		my $line = $_;
+		push @{$split_bins{$bin}}, [$start_fragment_index, $end_fragment_index, $split_candidates_filename];
+	}
 
-		chomp;
-		my @fields = split /\t/;
+	push @split_candidates_filenames, $split_candidates_filename."\n";
+}
 
-		my $fragment_index = $fields[1];
+# Output each line to the appropriate file
+open CAN, $candidate_reads_filename or die "Error: Unable to open $candidate_reads_filename: $!\n";
+while (<CAN>)
+{
+	my $line = $_;
 
-		if ($fragment_index >= $start_fragment_index and $fragment_index <= $end_fragment_index)
+	chomp;
+	my @fields = split /\t/;
+
+	my $fragment_index = $fields[1];
+	my $bin = int($fragment_index / $bin_size);
+
+	foreach my $split_info (@{$split_bins{$bin}})
+	{
+		if ($fragment_index >= $split_info->[0] and $fragment_index <= $split_info->[1])
 		{
-			print SPL $line;
+			my $filename = $split_info->[2];
+			print $filename $line;
 		}
 	}
-	close CAN;
-	close SPL;
-	
-	print $split_candidates_filename."\n";
 }
+close CAN;
+
+# Output the list of split canadidate filenames
+print @split_candidates_filenames;
 
 sub read_split_catalog
 {

@@ -61,10 +61,6 @@ $config->read($config_filename);
 # Config
 my $scripts_directory = $config->get_value("scripts_directory");
 
-# Script paths
-my $filter_fastq_garbage_script = "$scripts_directory/filter_paired_fastq_garbage.pl";
-my $index_fastq_script = "$scripts_directory/index_paired_fastq.pl";
-
 $source_directory = abs_path($source_directory);
 
 -e $source_directory or die "Error: Source directory $source_directory does not exist.\n";

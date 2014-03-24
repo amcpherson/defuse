@@ -39,42 +39,31 @@ my $config = configdata->new();
 $config->read($config_filename);
 
 # Filenames for reference files
-my $gene_models			= $config->get_value("gene_models");
-my $genome_fasta		= $config->get_value("genome_fasta");
-my $intron_regions		= $config->get_value("intron_regions");
-my $intronic_fasta		= $config->get_value("intronic_fasta");
-my $exons_fasta			= $config->get_value("exons_fasta");
-my $exons_regions       = $config->get_value("exons_regions");
-my $cds_fasta			= $config->get_value("cds_fasta");
-my $rrna_fasta			= $config->get_value("rrna_fasta");
-my $utr5p_fasta			= $config->get_value("utr5p_fasta");
-my $utr3p_fasta			= $config->get_value("utr3p_fasta");
-my $cdna_regions		= $config->get_value("cdna_regions");
-my $cdna_fasta			= $config->get_value("cdna_fasta");
-my $cdna_ext_fasta		= $config->get_value("cdna_ext_fasta");
-my $cdna_ext_regions	= $config->get_value("cdna_ext_regions");
-my $gene_regions		= $config->get_value("gene_regions");
-my $gene_fasta			= $config->get_value("gene_fasta");
-my $ig_gene_list		= $config->get_value("ig_gene_list");
-my $utr_extend			= $config->get_value("utr_extend");
-my $cdna_utr_extend     = $config->get_value("cdna_utr_extend");
-my $rrna_extend         = $config->get_value("rrna_extend");
-my $cdna_gene_fasta		= $config->get_value("cdna_gene_fasta");
-my $cdna_gene_regions   = $config->get_value("cdna_gene_regions");
-my $tss_regions			= $config->get_value("tss_regions");
-my $tts_regions			= $config->get_value("tts_regions");
-my $upstream_fasta		= $config->get_value("upstream_fasta");
-my $downstream_fasta	= $config->get_value("downstream_fasta");
-my %gene_sources		= $config->get_hash("gene_sources");
-my %chromosomes			= $config->get_hash("chromosomes");
-my %ig_gene_sources		= $config->get_hash("ig_gene_sources");
-my %rrna_gene_sources	= $config->get_hash("rrna_gene_sources");
-my $gene_info_list		= $config->get_value("gene_info_list");
-my $gene_adj_list		= $config->get_value("gene_adj_list");
-my $gene_tran_list      = $config->get_value("gene_tran_list");
-my @prefilter_fastas	= $config->get_list("prefilter");
-my $bowtie_build_bin	= $config->get_value("bowtie_build_bin");
-my $samtools_bin		= $config->get_value("samtools_bin");
+my $gene_models			        = $config->get_value("gene_models");
+my $genome_fasta                = $config->get_value("genome_fasta");
+my $chromosome_prefix           = $config->get_value("chromosome_prefix");
+my $exons_fasta					= $config->get_value("exons_fasta");
+my $cds_fasta			        = $config->get_value("cds_fasta");
+my $rrna_fasta			        = $config->get_value("rrna_fasta");
+my $cdna_regions		        = $config->get_value("cdna_regions");
+my $cdna_fasta			        = $config->get_value("cdna_fasta");
+my $est_fasta			        = $config->get_value("est_fasta");
+my $est_split_catalog           = $config->get_value("est_split_catalog");
+my $ig_gene_list		        = $config->get_value("ig_gene_list");
+my $reference_fasta             = $config->get_value("reference_fasta");
+my $repeats_filename            = $config->get_value("repeats_filename");
+my $repeats_regions             = $config->get_value("repeats_regions");
+my %gene_sources		        = $config->get_hash("gene_sources");
+my %chromosomes			        = $config->get_hash("chromosomes");
+my %ig_gene_sources             = $config->get_hash("ig_gene_sources");
+my %rrna_gene_sources	        = $config->get_hash("rrna_gene_sources");
+my @prefilter_fastas	        = $config->get_list("prefilter");
+my $bowtie_build_bin	        = $config->get_value("bowtie_build_bin");
+my $samtools_bin		        = $config->get_value("samtools_bin");
+my $fatotwobit_bin				= $config->get_value("fatotwobit_bin");
+my $scripts_directory			= $config->get_value("scripts_directory");
+
+my $split_fasta_script = $scripts_directory."/split_fasta.pl";
 
 sub verify_file_exists
 {
@@ -101,7 +90,7 @@ $runner->name("defuse");
 $runner->prefix($log_prefix);
 
 # Create an indexable genome
-my $genome_db = Bio::DB::Fasta->new($genome_fasta);
+my $dna_db = Bio::DB::Fasta->new($genome_fasta);
 
 # Merge overlapping regions
 sub merge_regions
@@ -162,7 +151,10 @@ sub region_gaps
 	{
 		if (defined $gap_start)
 		{
-			push @gaps, [$gap_start, $region->[0] - 1];
+			if ($gap_start <= $region->[0] - 1)
+			{
+				push @gaps, [$gap_start, $region->[0] - 1];
+			}
 		}
 
 		$gap_start = $region->[1] + 1;
@@ -188,8 +180,8 @@ sub regions_length
 # Check for overlap between regions
 sub overlap
 {
-	my $region1 = $_[0];
-	my $region2 = $_[1];
+	my $region1 = shift;
+	my $region2 = shift;
 	
 	if ($region1->[1] < $region2->[0] or $region1->[0] > $region2->[1])
 	{
@@ -204,8 +196,8 @@ sub overlap
 # Expand to the largest region containing both regions
 sub expand
 {
-	my $region1 = $_[0];
-	my $region2 = $_[1];
+	my $region1 = shift;
+	my $region2 = shift;
 	
 	my $expanded_start = min($region1->[0], $region2->[0]);
 	my $expanded_end = max($region1->[1], $region2->[1]);
@@ -221,13 +213,10 @@ my %rrna_genes;
 my %rrna_transcripts;
 
 my %gene_name;
-my %gene_displayid;
 my %gene_transcripts;
 my %gene_chromosome;
 my %gene_strand;
-my %gene_extend;
 
-my %transcript_displayid;
 my %transcript_gene;
 my %transcript_chromosome;
 my %transcript_strand;
@@ -297,13 +286,8 @@ while (<GFF>)
 	$rrna_genes{$gene_id} = 1 if $rrna_gene_sources{$source};
 	$rrna_transcripts{$transcript_id} = 1 if $rrna_gene_sources{$source};
 
-	# Set gene extension dependent on source
-	$gene_extend{$gene_id} = $utr_extend if $gene_sources{$source};
-	$gene_extend{$gene_id} = $rrna_extend if $rrna_gene_sources{$source};
-
 	# Store gene info
 	$gene_name{$gene_id} = $gene_name;
-	$gene_displayid{$gene_id} = $gene_id;
 	$gene_transcripts{$gene_id}{$transcript_id} = 1;
 	$gene_chromosome{$gene_id} = $chromosome;
 	$gene_strand{$gene_id} = $strand;
@@ -311,7 +295,6 @@ while (<GFF>)
 	$chromosome_genes{$chromosome}{$gene_id} = 1;
 
 	# Store transcript info
-	$transcript_displayid{$transcript_id} = $gene_id."|".$transcript_id;
 	$transcript_gene{$transcript_id} = $gene_id;
 	$transcript_chromosome{$transcript_id} = $chromosome;
 	$transcript_strand{$transcript_id} = $strand;
@@ -332,271 +315,37 @@ foreach my $transcript_id (keys %transcript_exon)
 	$transcript_exon{$transcript_id} = [sort { $a->[0] <=> $b->[0] } (@{$transcript_exon{$transcript_id}})];
 }
 
-# Create extended cdna
-my %transcript_extend_exons;
-foreach my $transcript_id (keys %transcript_exon)
-{
-	my @extend_exons;
-	foreach my $exon (@{$transcript_exon{$transcript_id}})
-	{
-		push @extend_exons, [$exon->[0],$exon->[1]];
-	}
-
-	$extend_exons[0]->[0] -= $cdna_utr_extend;
-	$extend_exons[$#extend_exons]->[1] += $cdna_utr_extend;
-
-	$transcript_extend_exons{$transcript_id} = [@extend_exons];
-}
-
 # Sort cds by start position
 foreach my $transcript_id (keys %transcript_cds)
 {
 	$transcript_cds{$transcript_id} = [sort { $a->[0] <=> $b->[0] } (@{$transcript_cds{$transcript_id}})];
 }
 
-# Calculate extended gene regions
-my %gene_region;
-my %upstream_region;
-my %downstream_region;
-foreach my $gene_id (keys %gene_transcripts)
-{
-	my $strand = $gene_strand{$gene_id};
-	
-	my $start_min;
-	my $end_max;
-	foreach my $transcript_id (keys %{$gene_transcripts{$gene_id}})
-	{
-		my @exons = @{$transcript_exon{$transcript_id}};
-
-		$start_min = $exons[0]->[0] if not defined $start_min;
-		$end_max = $exons[$#exons]->[1] if not defined $end_max;
-
-		$start_min = min($start_min, $exons[0]->[0]);
-		$end_max = max($end_max, $exons[$#exons]->[1]);
-	}
-
-	my $gene_start = $start_min - $gene_extend{$gene_id};
-	my $gene_end = $end_max + $gene_extend{$gene_id};
-
-	push @{$gene_region{$gene_id}}, [$gene_start, $gene_end];
-	
-	if ($strand eq "+")
-	{
-		push @{$upstream_region{$gene_id}}, [$gene_start, $start_min - 1];
-		push @{$downstream_region{$gene_id}}, [$end_max + 1, $gene_end];
-	}
-	elsif ($strand eq "-")
-	{
-		push @{$upstream_region{$gene_id}}, [$end_max + 1, $gene_end];
-		push @{$downstream_region{$gene_id}}, [$gene_start, $start_min - 1];
-	}
-}
-
-# Calculate adjacent candidate genes
-my %gene_adjacency;
-foreach my $chromosome (keys %chromosomes)
-{
-	my @chromosome_candidate_genes;
-	foreach my $gene_id (keys %{$chromosome_genes{$chromosome}})
-	{
-		push @chromosome_candidate_genes, $gene_id if defined $candidate_genes{$gene_id};
-	}
-
-	my @genes_sorted = sort { $gene_region{$a}->[0]->[0] <=> $gene_region{$b}->[0]->[0] } (@chromosome_candidate_genes);
-
-	foreach my $gene_index1 (0..$#genes_sorted)
-	{
-		my $gene_id1 = $genes_sorted[$gene_index1];
-		my $gene_region1 = $gene_region{$gene_id1}->[0];
-
-		my @neighbours;
-		push @neighbours, $gene_id1;
-
-		my $neighbourhood = $gene_region1;
-		my $bridged_gaps = 0;
-
-		foreach my $gene_index2 ($gene_index1 + 1..$#genes_sorted)
-		{
-			my $gene_id2 = $genes_sorted[$gene_index2];
-			my $gene_region2 = $gene_region{$gene_id2}->[0];
-
-			if (not overlap($neighbourhood,$gene_region2))
-			{
-				$bridged_gaps++;
-			}
-
-			last if $bridged_gaps == 2;
-
-			$neighbourhood = expand($neighbourhood,$gene_region2);
-
-			push @neighbours, $gene_id2;
-		}
-
-		foreach my $neighbour1 (@neighbours)
-		{
-			foreach my $neighbour2 (@neighbours)
-			{
-				next if $neighbour1 eq $neighbour2;
-				$gene_adjacency{$neighbour1}{$neighbour2} = 1;
-			}
-		}
-	}
-}
-
-# Calculating gene region context transcription start site list
-my %transcript_gene_tss;
-foreach my $transcript_id (keys %transcript_tss)
-{
-	my $gene_id = $transcript_gene{$transcript_id};
-	my $gene_seq_start = $gene_region{$gene_id}->[0]->[0];
-	my $gene_seq_end = $gene_region{$gene_id}->[0]->[1];
-
-	my $chromosome = $transcript_chromosome{$transcript_id};
-	my $strand = $transcript_strand{$transcript_id};
-	
-	my $tss_start = $transcript_tss{$transcript_id}->[0] - $gene_seq_start + 1;
-	my $tss_end = $transcript_tss{$transcript_id}->[1] - $gene_seq_start + 1;
-	if ($strand eq "-")
-	{
-		$tss_start = $gene_seq_end - $transcript_tss{$transcript_id}->[1] + 1;
-		$tss_end = $gene_seq_end - $transcript_tss{$transcript_id}->[0] + 1;
-	}
-	
-	push @{$transcript_gene_tss{$transcript_id}}, [$tss_start, $tss_end];
-}
-
-# Calculating gene region context transcription termination site list
-my %transcript_gene_tts;
-foreach my $transcript_id (keys %transcript_tts)
-{
-	my $gene_id = $transcript_gene{$transcript_id};
-	my $gene_seq_start = $gene_region{$gene_id}->[0]->[0];
-	my $gene_seq_end = $gene_region{$gene_id}->[0]->[1];
-	
-	my $chromosome = $transcript_chromosome{$transcript_id};
-	my $strand = $transcript_strand{$transcript_id};
-	
-	my $tts_start = $transcript_tts{$transcript_id}->[0] - $gene_seq_start + 1;
-	my $tts_end = $transcript_tts{$transcript_id}->[1] - $gene_seq_start + 1;
-	if ($strand eq "-")
-	{
-		$tts_start = $gene_seq_end - $transcript_tts{$transcript_id}->[1] + 1;
-		$tts_end = $gene_seq_end - $transcript_tts{$transcript_id}->[0] + 1;
-	}
-	
-	push @{$transcript_gene_tts{$transcript_id}}, [$tts_start, $tts_end];
-}
-
-# Calculate 3 prime and 5 prime utrs
-my %transcript_utr5p;
-my %transcript_utr3p;
-foreach my $transcript_id (keys %transcript_gene)
-{
-	next if not defined $transcript_cds{$transcript_id};
-
-	my @cdss = @{$transcript_cds{$transcript_id}};
-	my @exons = @{$transcript_exon{$transcript_id}};
-	my $strand = $transcript_strand{$transcript_id};
-
-	my $coding_start = $cdss[0]->[0];
-	my $coding_end = $cdss[$#cdss]->[1];
-
-	foreach my $exon (@exons)
-	{
-		if ($exon->[0] < $coding_start)
-		{
-			my $utr_exon_start = $exon->[0];
-			my $utr_exon_end = min($exon->[1], $coding_start - 1);
-
-			if ($strand eq "+")
-			{
-				push @{$transcript_utr5p{$transcript_id}}, [$utr_exon_start,$utr_exon_end];
-			}
-			else
-			{
-				push @{$transcript_utr3p{$transcript_id}}, [$utr_exon_start,$utr_exon_end];
-			}
-		}
-		elsif ($exon->[1] > $coding_end)
-		{
-			my $utr_exon_start = max($exon->[0], $coding_end + 1);
-			my $utr_exon_end = $exon->[1];
-
-			if ($strand eq "+")
-			{
-				push @{$transcript_utr3p{$transcript_id}}, [$utr_exon_start,$utr_exon_end];
-			}
-			else
-			{
-				push @{$transcript_utr5p{$transcript_id}}, [$utr_exon_start,$utr_exon_end];
-			}
-		}
-	}
-}
-
-# Calculate introns
-my %transcript_introns;
-foreach my $transcript_id (keys %transcript_gene)
-{
-	my @exons = @{$transcript_exon{$transcript_id}};
-
-	# Create introns
-	my @introns = region_gaps(@exons);
-
-	$transcript_introns{$transcript_id} = [@introns];
-}
-
-# Calculate exons and intronic regions
-my %gene_exons;
-my %gene_intronic;
-foreach my $gene_id (keys %gene_transcripts)
-{
-	my @exons;
-
-	foreach my $transcript_id (keys %{$gene_transcripts{$gene_id}})
-	{
-		push @exons, @{$transcript_exon{$transcript_id}};
-	}
-
-	# Sort exons by start
-	@exons = sort { $a->[0] <=> $b->[0] } (@exons);
-
-	# Remove duplicate exons
-	@exons = remove_duplicates(@exons);
-
-	# Create exonic regions
-	my @exonic = merge_regions(@exons);
-
-	# Create intronic regions
-	my @intronic = region_gaps(@exonic);
-
-	$gene_exons{$gene_id} = [@exons];
-	$gene_intronic{$gene_id} = [@intronic];
-}
-
 sub output_spliced_sequences
 {
-	my $filename = $_[0];
-	my $ids = $_[1];
-	my $names = $_[2];
-	my $chromosomes = $_[3];
-	my $strands = $_[4];
-	my $regions = $_[5];
+	my $filename = shift;
+	my $transcripts = shift;
+	my $genes = shift;
+	my $chromosomes = shift;
+	my $strands = shift;
+	my $regions = shift;
 
 	my $seqio = Bio::SeqIO->new('-file' => ">$filename", '-format' => 'fasta');
 
-	foreach my $id (keys %{$ids})
+	foreach my $transcript (keys %{$transcripts})
 	{
-		next if not defined $regions->{$id};
-
-		my $seq_name = $names->{$id};
-		my $chromosome = $chromosomes->{$id};
-		my $strand = $strands->{$id};
-
+		next if not defined $regions->{$transcript};
+		
+		my $gene = $genes->{$transcript};
+		my $chromosome = $chromosomes->{$transcript};
+		my $strand = $strands->{$transcript};
+		
+		my $seq_name = $gene."|".$transcript;
+		
 		my $seq = "";
-		foreach my $region (@{$regions->{$id}})
+		foreach my $region (@{$regions->{$transcript}})
 		{
-			$seq = $seq.$genome_db->seq($chromosome, $region->[0], $region->[1]);
+			$seq = $seq.$dna_db->seq($chromosome, $region->[0], $region->[1]);
 		}
 	
 		my $seqobj = Bio::Seq->new(-seq => $seq, -id => $seq_name);
@@ -607,30 +356,31 @@ sub output_spliced_sequences
 
 sub output_spliced_regions
 {
-	my $filename = $_[0];
-	my $ids = $_[1];
-	my $names = $_[2];
-	my $chromosomes = $_[3];
-	my $strands = $_[4];
-	my $regions = $_[5];
+	my $filename = shift;
+	my $transcripts = shift;
+	my $genes = shift;
+	my $chromosomes = shift;
+	my $strands = shift;
+	my $regions = shift;
 
 	open REG, ">".$filename or die "Error: Unable to write to $filename\n";
 
-	foreach my $id (keys %{$ids})
+	foreach my $transcript (keys %{$transcripts})
 	{
-		next if not defined $regions->{$id};
-
-		my $seq_name = $names->{$id};
-		my $chromosome = $chromosomes->{$id};
-		my $strand = $strands->{$id};
+		next if not defined $regions->{$transcript};
+		
+		my $gene = $genes->{$transcript};
+		my $chromosome = $chromosomes->{$transcript};
+		my $strand = $strands->{$transcript};
 
 		$strand = "+" if not defined $strand;
 
-		print REG $seq_name."\t";
+		print REG $gene."\t";
+		print REG $transcript."\t";
 		print REG $chromosome."\t";
 		print REG $strand."\t";
 
-		foreach my $region (@{$regions->{$id}})
+		foreach my $region (@{$regions->{$transcript}})
 		{
 			print REG $region->[0]."\t";
 			print REG $region->[1]."\t";
@@ -644,27 +394,29 @@ sub output_spliced_regions
 
 sub output_unspliced_sequences
 {
-	my $filename = $_[0];
-	my $ids = $_[1];
-	my $names = $_[2];
-	my $chromosomes = $_[3];
-	my $strands = $_[4];
-	my $regions = $_[5];
+	my $filename = shift;
+	my $transcripts = shift;
+	my $genes = shift;
+	my $chromosomes = shift;
+	my $strands = shift;
+	my $regions = shift;
 
 	my $seqio = Bio::SeqIO->new('-file' => ">$filename", '-format' => 'fasta');
 
-	foreach my $id (keys %{$ids})
+	foreach my $transcript (keys %{$transcripts})
 	{
-		next if not defined $regions->{$id};
+		next if not defined $regions->{$transcript};
 
 		my $region_num = 0;
-		foreach my $region (@{$regions->{$id}})
+		foreach my $region (@{$regions->{$transcript}})
 		{
-			my $seq_name = $names->{$id}."|".$region_num;
-			my $chromosome = $chromosomes->{$id};
-			my $strand = $strands->{$id};
-
-			my $seq = $genome_db->seq($chromosome, $region->[0], $region->[1]);
+			my $gene = $genes->{$transcript};
+			my $chromosome = $chromosomes->{$transcript};
+			my $strand = $strands->{$transcript};
+			
+			my $seq_name = $gene."|".$transcript."|".$region_num;
+			
+			my $seq = $dna_db->seq($chromosome, $region->[0], $region->[1]);
 			my $seqobj = Bio::Seq->new(-seq => $seq, -id => $seq_name);
 			$seqobj = $seqobj->revcom() if defined $strand and $strand eq "-";
 			$seqio->write_seq($seqobj);
@@ -674,175 +426,124 @@ sub output_unspliced_sequences
 	}
 }
 
-sub output_unspliced_regions
+if (not cmdrunner::uptodate([$genome_fasta,$gene_models], [$exons_fasta]))
 {
-	my $filename = $_[0];
-	my $ids = $_[1];
-	my $names = $_[2];
-	my $chromosomes = $_[3];
-	my $strands = $_[4];
-	my $regions = $_[5];
+	print "Writing exon sequences\n";
+	output_unspliced_sequences($exons_fasta, \%candidate_transcripts, \%transcript_gene, \%transcript_chromosome, \%transcript_strand, \%transcript_exon);
+}
 
-	open REG, ">".$filename or die "Error: Unable to write to $filename\n";
-
-	foreach my $id (keys %{$ids})
+if (not cmdrunner::uptodate([$genome_fasta,$gene_models], [$cds_fasta]))
+{
+	print "Writing cds sequences\n";
+	output_spliced_sequences($cds_fasta, \%candidate_transcripts, \%transcript_gene, \%transcript_chromosome, \%transcript_strand, \%transcript_cds);
+}
+	
+if (not cmdrunner::uptodate([$genome_fasta,$gene_models], [$cdna_fasta,$cdna_regions]))
+{
+	print "Writing cdna sequences and regions\n";
+	output_spliced_sequences($cdna_fasta, \%candidate_transcripts, \%transcript_gene, \%transcript_chromosome, \%transcript_strand, \%transcript_exon);
+	output_spliced_regions($cdna_regions, \%candidate_transcripts, \%transcript_gene, \%transcript_chromosome, \%transcript_strand, \%transcript_exon);
+}
+	
+if (not cmdrunner::uptodate([$genome_fasta,$gene_models], [$ig_gene_list]))
+{
+	print "Writing ig gene list\n";
+	open IGL, ">".$ig_gene_list or die "Error: Unable to write to $ig_gene_list\n";
+	foreach my $gene_id (keys %ig_genes)
 	{
-		next if not defined $regions->{$id};
-
-		my $region_num = 0;
-		foreach my $region (@{$regions->{$id}})
-		{
-			my $name = $names->{$id}."|".$region_num;
-			my $chromosome = $chromosomes->{$id};
-			my $strand = $strands->{$id};
-
-			$strand = "+" if not defined $strand;
-
-			print REG $name."\t";
-			print REG $chromosome."\t";
-			print REG $strand."\t";
-			print REG $region->[0]."\t";
-			print REG $region->[1]."\n";
-
-			$region_num++;
-		}
+		print IGL $gene_id."\n";
 	}
-
-	close REG;
+	close IGL;
 }
 
-print "Writing exon sequences\n";
-output_unspliced_sequences($exons_fasta, \%candidate_genes, \%gene_displayid, \%gene_chromosome, \%gene_strand, \%gene_exons);
-output_unspliced_regions($exons_regions, \%candidate_genes, \%gene_displayid, \%gene_chromosome, \%gene_strand, \%gene_exons);
-
-# Output cds sequences
-print "Writing cds sequences\n";
-output_spliced_sequences($cds_fasta, \%candidate_transcripts, \%transcript_displayid, \%transcript_chromosome, \%transcript_strand, \%transcript_cds);
-
-# Output utr5p sequences
-print "Writing 5 prime utr sequences\n";
-output_spliced_sequences($utr5p_fasta, \%candidate_transcripts, \%transcript_displayid, \%transcript_chromosome, \%transcript_strand, \%transcript_utr5p);
-
-# Output utr3p sequences
-print "Writing 3 prime utr sequences\n";
-output_spliced_sequences($utr3p_fasta, \%candidate_transcripts, \%transcript_displayid, \%transcript_chromosome, \%transcript_strand, \%transcript_utr3p);
-
-# Output cdna sequences and regions
-print "Writing cdna sequences and regions\n";
-output_spliced_sequences($cdna_fasta, \%candidate_transcripts, \%transcript_displayid, \%transcript_chromosome, \%transcript_strand, \%transcript_exon);
-output_spliced_regions($cdna_regions, \%candidate_transcripts, \%transcript_displayid, \%transcript_chromosome, \%transcript_strand, \%transcript_exon);
-
-# Output extended cdna sequences and regions
-print "Writing extended cdna sequences and regions\n";
-output_spliced_sequences($cdna_ext_fasta, \%candidate_transcripts, \%transcript_displayid, \%transcript_chromosome, \%transcript_strand, \%transcript_extend_exons);
-output_spliced_regions($cdna_ext_regions, \%candidate_transcripts, \%transcript_displayid, \%transcript_chromosome, \%transcript_strand, \%transcript_extend_exons);
-
-# Output gene sequences and regions
-print "Writing gene sequences and regions\n";
-output_spliced_sequences($gene_fasta, \%candidate_genes, \%gene_displayid, \%gene_chromosome, \%gene_strand, \%gene_region);
-output_spliced_regions($gene_regions, \%candidate_genes, \%gene_displayid, \%gene_chromosome, \%gene_strand, \%gene_region);
-
-# Output intronic sequences
-print "Writing intronic sequences\n";
-output_unspliced_sequences($intronic_fasta, \%candidate_genes, \%gene_displayid, \%gene_chromosome, \%gene_strand, \%gene_intronic);
-
-# Output intron regions
-print "Writing intron regions\n";
-output_unspliced_regions($intron_regions, \%candidate_transcripts, \%transcript_displayid, \%transcript_chromosome, \%transcript_strand, \%transcript_introns);
-
-# Output upstream and downstream sequences
-print "Writing upstream and downstream sequences\n";
-output_spliced_sequences($upstream_fasta, \%candidate_genes, \%gene_displayid, \%gene_chromosome, \%gene_strand, \%upstream_region);
-output_spliced_sequences($downstream_fasta, \%candidate_genes, \%gene_displayid, \%gene_chromosome, \%gene_strand, \%downstream_region);
-
-# Output transcription start site regions
-print "Writing transcription start site list\n";
-output_unspliced_regions($tss_regions, \%candidate_transcripts, \%transcript_displayid, \%transcript_gene, {}, \%transcript_gene_tss);
-
-# Output transcription termination site regions
-print "Writing transcription termination site list\n";
-output_unspliced_regions($tts_regions, \%candidate_transcripts, \%transcript_displayid, \%transcript_gene, {}, \%transcript_gene_tts);
-
-# Output gene transcript list
-print "Writing gene transcript list\n";
-open GT, ">".$gene_tran_list or die "Error: Unable to write to $gene_tran_list\n";
-foreach my $transcript_id (keys %candidate_transcripts)
+if (not cmdrunner::uptodate([$genome_fasta,$gene_models], [$reference_fasta]))
 {
-	my $transcript_length = regions_length(@{$transcript_exon{$transcript_id}});
-	print GT $transcript_gene{$transcript_id}."\t".$transcript_displayid{$transcript_id}."\t".$transcript_length."\n";
+	print "Writing dna and cdna sequences\n";
+	$runner->run("cat $genome_fasta $cdna_fasta > $reference_fasta", [], []);
 }
-close GT;
 
-# Output ig gene list
-print "Writing ig gene list\n";
-open IGL, ">".$ig_gene_list or die "Error: Unable to write to $ig_gene_list\n";
-foreach my $gene_id (keys %ig_genes)
+if (not cmdrunner::uptodate([$genome_fasta,$gene_models], [$rrna_fasta]))
 {
-	print IGL $gene_id."\n";
+	print "Writing rRNA gene sequences\n";
+	output_spliced_sequences($rrna_fasta, \%rrna_transcripts, \%transcript_gene, \%transcript_chromosome, \%transcript_strand, \%transcript_exon);
 }
-close IGL;
 
-# Create concatenated cdna genes reference
-print "Writing cdna and gene sequences\n";
-$runner->run("cat $cdna_ext_fasta $gene_fasta > $cdna_gene_fasta", [], []);
-$runner->run("cat $cdna_ext_regions $gene_regions > $cdna_gene_regions", [], []);
-
-# Formatting genome sequence
-my $temp_genome = $genome_fasta.".tmp";
-my $genome_in = Bio::SeqIO->new(-format => "fasta", -file => $genome_fasta);
-my $genome_out = Bio::SeqIO->new(-format => "fasta", -file => ">".$temp_genome);
-while (my $seq = $genome_in->next_seq())
-{
-	$seq->description("");
-	$genome_out->write_seq($seq);
-}
-rename $temp_genome, $genome_fasta;
-
-# Output gene info list
-print "Writing gene info\n";
-open GIN, ">".$gene_info_list or die "Error: Unable to write to $gene_info_list\n";
-foreach my $gene_id (keys %gene_name)
-{
-	print GIN $gene_id."\t";
-	print GIN $gene_name{$gene_id}."\t";
-	print GIN $gene_chromosome{$gene_id}."\t";
-	print GIN $gene_strand{$gene_id}."\t";
-	print GIN $gene_region{$gene_id}->[0]->[0]."\t";
-	print GIN $gene_region{$gene_id}->[0]->[1]."\n";
-}
-close GIN;
-
-# Output gene adjacency list
-open GAJ, ">".$gene_adj_list or die "Error: Unable to write to $gene_adj_list\n";
-foreach my $gene_id1 (keys %gene_adjacency)
-{
-	foreach my $gene_id2 (keys %{$gene_adjacency{$gene_id1}})
-	{
-		print GAJ $gene_id1."\t";
-		print GAJ $gene_id2."\n";
-	}
-}
-close GAJ;
-
-# Output rrna gene sequences
-print "Writing rRNA gene sequences\n";
-output_spliced_sequences($rrna_fasta, \%rrna_genes, \%gene_displayid, \%gene_chromosome, \%gene_strand, \%gene_region);
-
-# Make bowtie indices
 print "Creating bowtie indices\n";
-$runner->run("$bowtie_build_bin $cdna_fasta $cdna_fasta", [], []);
-$runner->run("$bowtie_build_bin $cdna_gene_fasta $cdna_gene_fasta", [], []);
-$runner->run("$bowtie_build_bin $rrna_fasta $rrna_fasta", [], []);
+$runner->run("$bowtie_build_bin $cdna_fasta $cdna_fasta", [$cdna_fasta], [$cdna_fasta.".1.ebwt"]);
+$runner->run("$bowtie_build_bin $genome_fasta $genome_fasta", [$genome_fasta], [$genome_fasta.".1.ebwt"]);
+$runner->run("$bowtie_build_bin $rrna_fasta $rrna_fasta", [$rrna_fasta], [$rrna_fasta.".1.ebwt"]);
 foreach my $prefilter_fasta (@prefilter_fastas)
 {
-	$runner->run("$bowtie_build_bin $prefilter_fasta $prefilter_fasta", [], []);
+	$runner->run("$bowtie_build_bin $prefilter_fasta $prefilter_fasta", [$prefilter_fasta], [$prefilter_fasta.".1.ebwt"]);
 }
 
-# Make samtools faidx files
 print "Creating samtools fasta indices\n";
-$runner->run("$samtools_bin faidx $cdna_fasta", [], []);
-$runner->run("$samtools_bin faidx $cdna_gene_fasta", [], []);
+$runner->run("$samtools_bin faidx $cdna_fasta", [$cdna_fasta], [$cdna_fasta.".fai"]);
+$runner->run("$samtools_bin faidx $reference_fasta", [$reference_fasta], [$reference_fasta.".fai"]);
 
+print "Splitting est file\n";
+if (not cmdrunner::uptodate([$est_fasta], [$est_split_catalog]))
+{
+	unlink(<$est_fasta.split.*.fa>);
+	unlink(<$est_fasta.split.*.fa.2bit>);
+	$runner->run("$split_fasta_script #<1 1000000 $est_fasta > #>1", [$est_fasta], [$est_split_catalog]);
+}
+my @est_split_filenames = `cat $est_split_catalog`;
+chomp(@est_split_filenames);
 
+print "Splitting genome file\n";
+my $genome_in = Bio::SeqIO->new(-format => "fasta", -file => $genome_fasta);
+while (my $seq = $genome_in->next_seq())
+{
+	my $chromosome_fasta = $chromosome_prefix.".".$seq->id().".fa";
+	if (not cmdrunner::uptodate([$genome_fasta], [$chromosome_fasta]))
+	{
+		my $chromosome_out = Bio::SeqIO->new(-format => "fasta", -file => ">".$chromosome_fasta);
+		$chromosome_out->write_seq($seq);
+		$chromosome_out->close();
+	}
+}
+$genome_in->close();
 
+print "Creating 2bit files\n";
+$runner->run("$fatotwobit_bin #<1 #>1", [$genome_fasta], [$genome_fasta.".2bit"]);
+$runner->run("$fatotwobit_bin #<1 #>1", [$cdna_fasta], [$cdna_fasta.".2bit"]);
+$runner->run("$fatotwobit_bin #<1 #>1", [$rrna_fasta], [$rrna_fasta.".2bit"]);
+$runner->run("$fatotwobit_bin #<1 #>1", [$cds_fasta], [$cds_fasta.".2bit"]);
+$runner->run("$fatotwobit_bin #<1 #>1", [$exons_fasta], [$exons_fasta.".2bit"]);
+foreach my $est_split_filename (@est_split_filenames)
+{
+	$runner->run("$fatotwobit_bin #<1 #>1", [$est_split_filename], [$est_split_filename.".2bit"]);
+}
+foreach my $chromosome (keys %chromosomes)
+{
+	my $chromosome_fasta = $chromosome_prefix.".".$chromosome.".fa";
+	$runner->run("$fatotwobit_bin #<1 #>1", [$chromosome_fasta], [$chromosome_fasta.".2bit"]);
+}
+
+if (not cmdrunner::uptodate([$repeats_filename], [$repeats_regions]))
+{
+	print "Converting repeats\n";
+	open REP, $repeats_filename or die "Error: Unable to open $repeats_filename: $!\n";
+	open RER, ">".$repeats_regions or die "Error: Unable to open $repeats_regions: $!\n";
+	while (<REP>)
+	{
+		chomp;
+		next if /^#/;
+		
+		my @fields = split /\t/;
+		
+		my $chr = $fields[5];
+		my $start = $fields[6];
+		my $end = $fields[7];
+		my $type = $fields[11];
+		
+		$chr =~ s/chr//;
+		$start++;
+		
+		print RER $chr."\t".$start."\t".$end."\t".$type."\n";
+	}
+	close REP;
+	close RER;
+}
 

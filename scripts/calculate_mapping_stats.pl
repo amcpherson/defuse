@@ -12,6 +12,7 @@ $| = 1;
 
 use lib dirname($0);
 use configdata;
+use gene_models;
 
 my @usage;
 push @usage, "Usage: ".basename($0)." [options]\n";
@@ -41,12 +42,15 @@ $config->read($config_filename);
 
 # Config values
 my $samtools_bin = $config->get_value("samtools_bin");
-my $cdna_gene_regions = $config->get_value("cdna_gene_regions");
+my $gene_models_filename = $config->get_value("gene_models");
 
 my $bin_spacing = 200000;
 
-my $clusters_sc_filename = $output_directory."/clusters.sc.txt";
-my $discordant_bam = $output_directory."/discordant.aligned.bam";
+# Read in the gene models
+my $gene_models = gene_models->new($gene_models_filename);
+
+my $clusters_sc_filename = $output_directory."/clusters.sc";
+my $discordant_bam = $output_directory."/spanning.bam";
 
 my %solution_clusters;
 read_solution_clusters($clusters_sc_filename, \%solution_clusters);
@@ -99,10 +103,6 @@ sub count_alignments
 	my $bam_filename = shift;
 	my $cluster_reads_hash_ref = shift;
 	
-	# Read in the cdna regions
-	my %cdna_gene;
-	read_regions($cdna_gene_regions, \%cdna_gene);
-	
 	my %genome_positions;
 	open SAM, "$samtools_bin view $bam_filename |" or die "Error: Unable to view $bam_filename with samtools: $!\n";
 	while (<SAM>)
@@ -124,15 +124,16 @@ sub count_alignments
 		my $start = $pos;
 		my $end = $pos + length($seq) - 1;
 		
-		my $genome_start = calc_genomic_position($start, $cdna_gene{$rname});
-		my $genome_end = calc_genomic_position($end, $cdna_gene{$rname});
+		my $chromosome = $gene_models->calc_genomic_chromosome($rname);
+		my $genome_start = $gene_models->calc_genomic_position($rname, $start);
+		my $genome_end = $gene_models->calc_genomic_position($rname, $end);
 		
 		if ($genome_start > $genome_end)
 		{
 			($genome_start,$genome_end) = ($genome_end,$genome_start);
 		}
 		
-		push @{$genome_positions{$read_id}}, [$cdna_gene{$rname}{chromosome},$genome_start,$genome_end];
+		push @{$genome_positions{$read_id}}, [$chromosome,$genome_start,$genome_end];
 	}
 	close SAM;
 	
@@ -290,35 +291,5 @@ sub overlap
 	{
 		return 1;
 	}
-}
-
-sub read_regions
-{
-	my $regions_filename = shift;
-	my $regions_hash_ref = shift;
-
-	open REG, $regions_filename or die;
-	while (<REG>)
-	{
-		chomp;
-		my @fields = split /\t/;
-		
-		my $gene = $fields[0];
-		my $chromosome = $fields[1];
-		my $strand = $fields[2];
-	
-		my @exons;
-		my $fieldindex = 4;
-		while ($fieldindex <= $#fields)
-		{
-			push @exons, [$fields[$fieldindex-1],$fields[$fieldindex]];
-			$fieldindex += 2;
-		}
-		
-		$regions_hash_ref->{$gene}{chromosome} = $chromosome;
-		$regions_hash_ref->{$gene}{strand} = $strand;
-		$regions_hash_ref->{$gene}{exons} = [@exons];
-	}
-	close REG;
 }
 

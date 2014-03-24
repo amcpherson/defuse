@@ -22,28 +22,29 @@ using namespace boost;
 class ExonRegions
 {
 public:
-	bool ReadExonRegions(istream& in);
-	bool ReadGeneTranscripts(istream& in);
+	bool Read(istream& in);
 	
-	const StringVec& GetGeneNames() const;
+	const StringVec& GetGenes() const;
 	int GetTranscriptLength(const string& transcript) const;
 	
-	const string& GetTranscriptGeneName(const string& transcript) const;
-	const StringVec& GetGeneTranscriptNames(const string& gene) const;
+	const string& GetTranscriptGene(const string& transcript) const;
+	const StringVec& GetGeneTranscripts(const string& gene) const;
+	void GetRegionTranscripts(const string& chromosome, const Region& region, StringVec& genes) const;
 	
 	bool IsTranscript(const string& transcript) const;
-	bool RemapTranscriptToGenome(const string& transcript, int position, int& remapped) const;
-	bool RemapTranscriptToGene(const string& transcript, int position, string& gene, int& remapped) const;
+	bool RemapTranscriptToGenome(const string& transcript, int strand, int position, string& remapChromosome, int& remapStrand, int& remapPosition) const;
 	bool RemapGenomeToTranscript(const string& transcript, int position, int& remapped) const;
 	bool RemapGenomeToTranscripts(const string& gene, int position, StringVec& transcripts, IntegerVec& remapped) const;
-	bool RemapTranscriptToTranscript(const string& transcript, int position, const string& remapTranscript, int& remapped) const;
 	bool TrimTranscriptRegion(const string& transcript, Region& region) const;
-	bool RemapTranscriptToGene(const string& transcript, Region& region, RegionVec& remapped) const;
+	bool RemapThroughTranscript(const string& transcript, int position, int strand, int extendMin, int extendMax, int& remapStrand, int& start, int& end) const;
 	
 private:
+	void TransformExons(RegionVec& exons) const;
 	bool FindOverlap(const Region& region1, const Region& region2, Region& overlap) const;
 	void MergeRegions(const RegionVec& regions, RegionVec& merged) const;
 	int RegionsLength(const RegionVec& regions) const;
+	
+	static int mBinLength;
 	
 	StringVec mGenes;
 	unordered_map<string,string> mChromosome;
@@ -52,6 +53,10 @@ private:
 	unordered_map<string,int> mLength;
 	unordered_map<string,StringVec> mGeneTranscripts;
 	unordered_map<string,string> mTranscriptGene;
+	unordered_map<string,RegionVec> mExonsStr[2];
+	unordered_map<string,Region> mTranscriptRegion;
+	unordered_map<string,unordered_map<int,StringVec> > mTranscriptLookup;
 };
 
 #endif
+

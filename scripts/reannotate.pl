@@ -143,28 +143,28 @@ my $runner = cmdrunner->new();
 $runner->name("reannotate");
 $runner->prefix($log_prefix);
 $runner->maxparallel($max_parallel);
-$runner->submitter($submitter_type);
 
 print "Annotating fusions\n";
-my $splitr_span_pval = $output_directory."/splitr.span.pval";
-my $denovo_span_pval = $output_directory."/denovo.span.pval";
-my $splitr_split_pval = $output_directory."/splitr.split.pval";
-my $clusters_sc_sam = $output_directory."/clusters.sc.sam";
-my $annotations_filename = $output_directory."/annotations.txt";
+my $break = $output_directory."/break";
+my $seq = $output_directory."/seq";
+my $span_pval = $output_directory."/span.pval";
+my $break_predict = $output_directory."/break.predict";
+my $clusters_sc = $output_directory."/clusters.sc";
+my $annotations_filename = $output_directory."/annotations";
 my $mapping_stats_filename = $output_directory."/mapping.stats";
-$runner->run("$annotate_fusions_script -c $config_filename -o $output_directory -n $library_name > #>1", [$splitr_span_pval,$denovo_span_pval,$splitr_split_pval], [$annotations_filename]);
-$runner->run("$calc_map_stats_script -c $config_filename -o $output_directory > #>1", [$clusters_sc_sam], [$mapping_stats_filename]);
+$runner->run("$annotate_fusions_script -c $config_filename -o $output_directory -n $library_name > #>1", [$span_pval,$break,$seq,$break_predict,$clusters_sc], [$annotations_filename]);
+$runner->run("$calc_map_stats_script -c $config_filename -o $output_directory > #>1", [$clusters_sc], [$mapping_stats_filename]);
 
 print "Coallating fusions\n";
-my $results_filename = $output_directory."/results.txt";
-$runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$annotations_filename], [$results_filename]);
+my $results_filename = $output_directory."/results.tsv";
+$runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$annotations_filename,$mapping_stats_filename], [$results_filename]);
 
 print "Running adaboost classifier\n";
-my $results_classify = $output_directory."/results.classify.txt";
+my $results_classify = $output_directory."/results.classify.tsv";
 $runner->run("$adaboost_rscript $positive_controls #<1 #>1", [$results_filename], [$results_classify]);
 
 print "Filtering fusions\n";
-my $filtered_results_filename = $output_directory."/results.filtered.txt";
+my $filtered_results_filename = $output_directory."/results.filtered.tsv";
 $runner->run("$filter_script probability '> $probability_threshold' < #<1 > #>1", [$results_classify], [$filtered_results_filename]);
 
 print "Success\n";

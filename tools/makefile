@@ -53,20 +53,21 @@ connectivity : \
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
 
-remapsplices: \
-		./Common.o\
-		./CompactBreakRegion.o\
-		./DebugCheck.o\
-		./ExonRegions.o\
-		./remapsplices.o\
-		$(BAMDIR)/$(BAMLIB)\
-		$(ZDIR)/$(ZLIB)
-
 overlapclusters : \
 		./Common.o\
 		./CompactBreakRegion.o\
 		./DebugCheck.o\
 		./overlapclusters.o\
+		$(BAMDIR)/$(BAMLIB)\
+		$(ZDIR)/$(ZLIB)
+
+clustermatepairs_stdin : \
+		./Common.o\
+		./DebugCheck.o\
+		./MatePairEM.o\
+		./asa136.o\
+		./asa241.o\
+		./clustermatepairs_stdin.o\
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
 
@@ -78,6 +79,18 @@ clustermatepairs : \
 		./asa241.o\
 		./clustermatepairs.o\
 		./FragmentAlignmentsIterator.o\
+		$(BAMDIR)/$(BAMLIB)\
+		$(ZDIR)/$(ZLIB)
+
+maximalvalidclusters : \
+		./Common.o\
+		./DebugCheck.o\
+		./MatePairEM.o\
+		./asa136.o\
+		./asa241.o\
+		./maximalvalidclusters.o\
+		./FragmentAlignmentsIterator.o\
+		./AlignmentIndex.o\
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
 
@@ -177,7 +190,13 @@ estislands : \
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
 
-tools : connectivity remapsplices overlapclusters setcover splitseq denovoseq calccov estislands findcandidatereads dosplitalign evalsplitalign clustermatepairs
+localalign : \
+		./localalign.o\
+		./SimpleAligner.o\
+		./DebugCheck.o\
+		./Common.o
+
+tools : clustermatepairs connectivity overlapclusters maximalvalidclusters setcover calccov estislands findcandidatereads dosplitalign evalsplitalign localalign
 	
 
 clean : 

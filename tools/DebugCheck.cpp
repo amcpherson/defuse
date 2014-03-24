@@ -10,8 +10,10 @@
 #include "DebugCheck.h"
 
 #include <iostream>
+#include <stdlib.h>
 
 void DebugCheckFailure(const char* expr, const char* file, int line)
 {
 	std::cout << "Error: " << expr << " failed on line: " << line << " of " << file << std::endl;
+	exit(1);
 }

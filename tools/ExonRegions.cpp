@@ -16,12 +16,14 @@
 using namespace std;
 using namespace boost;
 
-bool ExonRegions::ReadExonRegions(istream& in)
+int ExonRegions::mBinLength = 100000;
+
+bool ExonRegions::Read(istream& in)
 {
 	string line;
 	int lineNumber = 0;
 	
-	unordered_set<string> uniqueGeneNames;
+	unordered_set<string> uniqueGenes;
 	
 	while (getline(in, line))
 	{
@@ -35,18 +37,18 @@ bool ExonRegions::ReadExonRegions(istream& in)
 		vector<string> exonRegionsFields;
 		split(exonRegionsFields, line, is_any_of("\t"));
 		
-		if (exonRegionsFields.size() < 5)
+		if (exonRegionsFields.size() < 6)
 		{
 			continue;
 		}
 		
-		string reference = exonRegionsFields[0];
-		string chromosome = exonRegionsFields[1];
-		string strand = exonRegionsFields[2];
+		string gene = exonRegionsFields[0];
+		string transcript = exonRegionsFields[1];
+		string chromosome = exonRegionsFields[2];
+		string strand = exonRegionsFields[3];
 		
 		RegionVec exons;
-		
-		for (int fieldIndex = 4; fieldIndex < exonRegionsFields.size(); fieldIndex += 2)
+		for (int fieldIndex = 5; fieldIndex < exonRegionsFields.size(); fieldIndex += 2)
 		{
 			Region exon;
 			exon.start = lexical_cast<int>(exonRegionsFields[fieldIndex - 1]);
@@ -54,9 +56,6 @@ bool ExonRegions::ReadExonRegions(istream& in)
 			
 			exons.push_back(exon);
 		}
-		
-		string::size_type geneEnd = reference.find_first_of('|');
-		string geneName = reference.substr(0, geneEnd);
 		
 		int strandEnum;
 		if (strand == "+")
@@ -75,66 +74,82 @@ bool ExonRegions::ReadExonRegions(istream& in)
 		
 		int exonsLength = RegionsLength(exons);
 		
-		mChromosome[reference] = chromosome;
-		mStrand[reference] = strandEnum;
-		mExons[reference] = exons;
-		mLength[reference] = exonsLength;
+		mChromosome[transcript] = chromosome;
+		mStrand[transcript] = strandEnum;
+		mExons[transcript] = exons;
+		mLength[transcript] = exonsLength;
 		
-		uniqueGeneNames.insert(geneName);
-		mGeneTranscripts[geneName].push_back(reference);
-		mTranscriptGene[reference] = geneName;
-	}
-	
-	mGenes = StringVec(uniqueGeneNames.begin(), uniqueGeneNames.end());
-
-	return true;
-}
-
-bool ExonRegions::ReadGeneTranscripts(istream& in)
-{
-	mGeneTranscripts.clear();
-	mTranscriptGene.clear();
-
-	unordered_set<string> uniqueGeneNames;
-
-	string line;
-	int lineNumber = 0;
-	
-	while (getline(in, line))
-	{
-		lineNumber++;
-		
-		if (line.length() == 0)
-		{
-			continue;
-		}
-		
-		vector<string> geneTranscriptFields;
-		split(geneTranscriptFields, line, is_any_of("\t"));
-		
-		if (geneTranscriptFields.size() < 3)
-		{
-			continue;
-		}
-		
-		string gene = geneTranscriptFields[0];
-		string transcript = geneTranscriptFields[1];
-		int length = lexical_cast<int>(geneTranscriptFields[2]);
-		
-		uniqueGeneNames.insert(gene);
+		uniqueGenes.insert(gene);
 		mGeneTranscripts[gene].push_back(transcript);
 		mTranscriptGene[transcript] = gene;
-		mLength[transcript] = length;
+		
+		mExonsStr[PlusStrand][transcript] = exons;
+		mExonsStr[MinusStrand][transcript] = exons;
+		TransformExons(mExonsStr[MinusStrand][transcript]);
+		
+		mTranscriptRegion[transcript].start = mExons[transcript].front().start;
+		mTranscriptRegion[transcript].end = mExons[transcript].back().end;
+		
+		int startBin = mTranscriptRegion[transcript].start / mBinLength;
+		int endBin = mTranscriptRegion[transcript].end / mBinLength;		
+		for (int bin = startBin; bin <= endBin; bin++)
+		{
+			mTranscriptLookup[chromosome][bin].push_back(transcript);
+		}
 	}
 	
-	mGenes = StringVec(uniqueGeneNames.begin(), uniqueGeneNames.end());
-	
+	mGenes = StringVec(uniqueGenes.begin(), uniqueGenes.end());
+
 	return true;
 }
 
-const StringVec& ExonRegions::GetGeneNames() const
+void ExonRegions::TransformExons(RegionVec& exons) const
+{
+	for (RegionVecIter exonIter = exons.begin(); exonIter != exons.end(); exonIter++)
+	{
+		exonIter->start = -exonIter->start;
+		exonIter->end = -exonIter->end;
+		swap(exonIter->start, exonIter->end);
+	}
+	
+	reverse(exons.begin(), exons.end());
+}
+
+const StringVec& ExonRegions::GetGenes() const
 {
 	return mGenes;
+}
+
+void ExonRegions::GetRegionTranscripts(const string& chromosome, const Region& region, StringVec& transcripts) const
+{
+	if (mTranscriptLookup.find(chromosome) == mTranscriptLookup.end())
+	{
+		cerr << "Error: Data mismatch, invalid chromosome " << chromosome << endl;
+		exit(1);
+	}
+	
+	unordered_set<string> uniqueTranscripts;
+	
+	int startBin = region.start / mBinLength;
+	int endBin = region.end / mBinLength;		
+	for (int bin = startBin; bin <= endBin; bin++)
+	{
+		unordered_map<int,StringVec>::const_iterator lookupIter = mTranscriptLookup.find(chromosome)->second.find(bin);
+		if (lookupIter == mTranscriptLookup.find(chromosome)->second.end())
+		{
+			continue;
+		}
+		
+		for (StringVecConstIter transcriptIter = lookupIter->second.begin(); transcriptIter != lookupIter->second.end(); transcriptIter++)
+		{
+			if (Overlap(mTranscriptRegion.find(*transcriptIter)->second,region))
+			{
+				uniqueTranscripts.insert(*transcriptIter);
+			}
+		}
+	}
+	
+	transcripts.insert(transcripts.end(), uniqueTranscripts.begin(), uniqueTranscripts.end());
 }
 
 int ExonRegions::GetTranscriptLength(const string& transcript) const
@@ -148,22 +163,22 @@ int ExonRegions::GetTranscriptLength(const string& transcript) const
 	return mLength.find(transcript)->second;
 }
 
-const string& ExonRegions::GetTranscriptGeneName(const string& transcript) const
+const string& ExonRegions::GetTranscriptGene(const string& transcript) const
 {
 	if (mTranscriptGene.find(transcript) == mTranscriptGene.end())
 	{
-		cerr << "Error: Data mismatch, unable to find gene name for transcript " << transcript << endl;
+		cerr << "Error: Data mismatch, unable to find gene for transcript " << transcript << endl;
 		exit(1);
 	}
 	
 	return mTranscriptGene.find(transcript)->second;
 }
 
-const StringVec& ExonRegions::GetGeneTranscriptNames(const string& gene) const
+const StringVec& ExonRegions::GetGeneTranscripts(const string& gene) const
 {
 	if (mGeneTranscripts.find(gene) == mGeneTranscripts.end())
 	{
-		cerr << "Error: Data mismatch, unable to find transcript names for gene " << gene << endl;
+		cerr << "Error: Data mismatch, unable to find transcripts for gene " << gene << endl;
 		exit(1);
 	}
 
@@ -232,7 +247,7 @@ int ExonRegions::RegionsLength(const RegionVec& regions) const
 	return length;
 }
 
-bool ExonRegions::RemapTranscriptToGenome(const string& transcript, int position, int& remapped) const
+bool ExonRegions::RemapTranscriptToGenome(const string& transcript, int strand, int position, string& remapChromosome, int& remapStrand, int& remapPosition) const
 {
 	if (mExons.find(transcript) == mExons.end() || mExons.find(transcript)->second.size() == 0)
 	{
@@ -244,13 +259,16 @@ bool ExonRegions::RemapTranscriptToGenome(const string& transcript, int position
 	int transcriptLength = mLength.find(transcript)->second;
 	int transcriptStrand = mStrand.find(transcript)->second;
 	
+	remapChromosome = mChromosome.find(transcript)->second;
+	remapStrand = (transcriptStrand == strand) ? PlusStrand : MinusStrand;
+	
 	// Strand remapping of transcript position
 	if (transcriptStrand == MinusStrand)
 	{
 		position = transcriptLength - position + 1;
 	}
 	
-	remapped = -1;
+	remapPosition = -1;
 	int localOffset = 0;
 	for (RegionVecConstIter exonIter = transcriptExons.begin(); exonIter != transcriptExons.end(); exonIter++)
 	{
@@ -264,59 +282,14 @@ bool ExonRegions::RemapTranscriptToGenome(const string& transcript, int position
 		// Test if the position is within or before this exon
 		if (position <= localExon.end)
 		{
-			remapped = position - localExon.start + exonIter->start;
+			remapPosition = position - localExon.start + exonIter->start;
 			return true;
 		}
 		
 		localOffset += exonLength;
 	}
 
-	remapped = position - transcriptLength + transcriptExons.back().end;
-	return true;
-}
-
-bool ExonRegions::RemapTranscriptToGene(const string& transcript, int position, string& gene, int& remapped) const
-{
-	int genomeRemapped;
-	if (!RemapTranscriptToGenome(transcript, position, genomeRemapped))
-	{
-		return false;
-	}
-	
-	gene = GetTranscriptGeneName(transcript);
-	if (gene == "" || mExons.find(gene) == mExons.end())
-	{
-		return false;
-	}
-	
-	int geneStrand = mStrand.find(gene)->second;
-	
-	if (mExons.find(gene) == mExons.end())
-	{
-		return false;
-	}
-	
-	const RegionVec& geneRegions = mExons.find(gene)->second;
-	
-	if (geneRegions.size() != 1)
-	{
-		return false;
-	}
-	
-	if (geneStrand == PlusStrand)
-	{
-		remapped = genomeRemapped - geneRegions[0].start + 1;
-	}
-	else if (geneStrand == MinusStrand)
-	{
-		remapped = geneRegions[0].end - genomeRemapped + 1;
-	}
-	else
-	{		
-		return false;
-	}
-
-	
+	remapPosition = position - transcriptLength + transcriptExons.back().end;
 	return true;
 }
 
@@ -355,10 +328,154 @@ bool ExonRegions::RemapGenomeToTranscript(const string& transcript, int position
 	
 	return false;
 }
+/*
+bool ExonRegions::RemapThroughTranscript(const string& transcript, int position, int strand, int min, int max, int& start, int& end) const
+{
+	if (mExons.find(transcript) == mExons.end() || mExons.find(transcript)->second.size() == 0)
+	{
+		cerr << "Error: Data mismatch, unable to find transcript " << transcript << endl;
+		exit(1);
+	}
+	
+	const RegionVec& transcriptExons = mExons.find(transcript)->second;
+	int transcriptLength = mLength.find(transcript)->second;
+	int transcriptStrand = mStrand.find(transcript)->second;
+	
+	if (position < transcriptExons.front().start && strand == PlusStrand)
+	{
+		start = min - transcriptExons.front().start + position;
+		end = max - transcriptExons.front().start + position;
+	}
+	else if (position > transcriptExons.back().end && strand == MinusStrand)
+	{
+		start = transcriptLength + position - transcriptExons.back().end - max;
+		end = transcriptLength + position - transcriptExons.back().end - min;
+	}
+	else
+	{
+		int localOffset = 0;
+		RegionVecConstIter lastExonIter = transcriptExons.end();
+		for (RegionVecConstIter exonIter = transcriptExons.begin(); exonIter != transcriptExons.end(); exonIter++)
+		{
+			int exonLength = exonIter->end - exonIter->start + 1;
+			
+			if (position < exonIter->start && lastExonIter != transcriptExons.end())
+			{
+				if (strand == PlusStrand)
+				{
+					start = localOffset + min - exonIter->start + position;
+					end = localOffset + max - exonIter->start + position;
+				}
+				else
+				{
+					start = localOffset + position - lastExonIter->end - max;
+					end = localOffset + position - lastExonIter->end - min;
+				}
+			}
+			else if (position >= exonIter->start && position <= exonIter->end)
+			{
+				int remapped = position - exonIter->start + localOffset + 1;
+				
+				if (strand == PlusStrand)
+				{
+					start = remapped + min;
+					end = remapped + max;
+				}
+				else
+				{
+					start = remapped - max;
+					end = remapped - min;
+				}
+			}
+			
+			lastExonIter = exonIter;
+			localOffset += exonLength;
+		}
+	}
+	
+	if (end < 1 || start > transcriptLength)
+	{
+		return false;
+	}
+
+	// Strand remapping of remapped position
+	if (transcriptStrand == MinusStrand)
+	{
+		start = transcriptLength - start + 1;
+		end = transcriptLength - end + 1;
+		swap(start,end);
+	}
+	
+	return true;
+}
+*/
+
+bool ExonRegions::RemapThroughTranscript(const string& transcript, int position, int strand, int extendMin, int extendMax, int& remapStrand, int& start, int& end) const
+{
+	if (mExons.find(transcript) == mExons.end() || mExons.find(transcript)->second.size() == 0)
+	{
+		cerr << "Error: Data mismatch, unable to find transcript " << transcript << endl;
+		exit(1);
+	}
+	
+	const RegionVec& transcriptExons = mExonsStr[strand].find(transcript)->second;
+	int transcriptLength = mLength.find(transcript)->second;
+	int transcriptStrand = mStrand.find(transcript)->second;
+	
+	remapStrand = (strand == transcriptStrand) ? PlusStrand : MinusStrand;
+	
+	// Transform into strand space
+	int strandPosition = (strand == PlusStrand) ? position : -position;
+	
+	if (strandPosition > transcriptExons.back().end)
+	{
+		return false;
+	}
+	
+	int localOffset = 0;
+	for (RegionVecConstIter exonIter = transcriptExons.begin(); exonIter != transcriptExons.end(); exonIter++)
+	{
+		int exonLength = exonIter->end - exonIter->start + 1;
+		
+		if (strandPosition <= exonIter->end)
+		{
+			int exonRelativeStart = strandPosition - exonIter->start + extendMin + 1;
+			int exonRelativeEnd = strandPosition - exonIter->start + extendMax + 1;
+			
+			if (exonRelativeEnd < 1)
+			{
+				return false;
+			}
+			
+			start = max(1,exonRelativeStart) + localOffset;
+			end = max(1,exonRelativeEnd) + localOffset;
+			
+			break;
+		}
+		
+		localOffset += exonLength;
+	}
+	
+	// Check the region is in the transcript boundaries
+	if (end < 1 || start > transcriptLength)
+	{
+		return false;
+	}
+	
+	// Strand remapping of remapped position
+	if (strand != transcriptStrand)
+	{
+		start = transcriptLength - start + 1;
+		end = transcriptLength - end + 1;
+		swap(start,end);
+	}
+	
+	return true;
+}
 
 bool ExonRegions::RemapGenomeToTranscripts(const string& gene, int position, StringVec& transcripts, IntegerVec& remapped) const
 {
-	transcripts = GetGeneTranscriptNames(gene);
+	transcripts = GetGeneTranscripts(gene);
 	
 	for (StringVecConstIter transcriptNameIter = transcripts.begin(); transcriptNameIter != transcripts.end(); transcriptNameIter++)
 	{
@@ -370,22 +487,6 @@ bool ExonRegions::RemapGenomeToTranscripts(const string& gene, int position, Str
 			transcripts.push_back(transcript);
 			remapped.push_back(transcriptRemapped);
 		}
-	}
-	
-	return true;
-}
-
-bool ExonRegions::RemapTranscriptToTranscript(const string& transcript, int position, const string& remapTranscript, int& remapped) const
-{
-	int genomeRemapped;
-	if (!RemapTranscriptToGenome(transcript, position, genomeRemapped))
-	{
-		return false;
-	}
-
-	if (!RemapGenomeToTranscript(remapTranscript, genomeRemapped, remapped))
-	{
-		return false;
 	}
 	
 	return true;
@@ -406,96 +507,4 @@ bool ExonRegions::TrimTranscriptRegion(const string& transcript, Region& region)
 	
 	return true;
 }
-
-bool ExonRegions::RemapTranscriptToGene(const string& transcript, Region& region, RegionVec& remapped) const
-{
-	if (mExons.find(transcript) == mExons.end() || mExons.find(transcript)->second.size() == 0)
-	{
-		cerr << "Error: Data mismatch, unable to find transcript " << transcript << endl;
-		exit(1);
-	}
-	
-	const RegionVec& transcriptExons = mExons.find(transcript)->second;
-	int transcriptLength = mLength.find(transcript)->second;
-	int transcriptStrand = mStrand.find(transcript)->second;
-
-	const string& gene = GetTranscriptGeneName(transcript);
-	if (gene == "" || mExons.find(gene) == mExons.end())
-	{
-		cerr << "Error: Data mismatch, unable to find gene for transcript " << transcript << endl;
-		exit(1);
-	}
-	
-	int geneLength = mLength.find(gene)->second;
-	int geneStrand = mStrand.find(gene)->second;
-	
-	if (mExons.find(gene) == mExons.end() || mExons.find(gene)->second.size() == 0)
-	{
-		cerr << "Error: Data mismatch, unable to find region for gene " << gene << endl;
-		exit(1);
-	}
-	
-	const RegionVec& geneExons = mExons.find(gene)->second;
-
-	// Strand remapping of start and end
-	if (transcriptStrand == MinusStrand)
-	{
-		region.start = transcriptLength - region.start + 1;
-		region.end = transcriptLength - region.end + 1;
-	}	
-	
-	// Remap transcript regions to genome
-	RegionVec genomeRegions;
-	int localOffset = 0;
-	for (RegionVecConstIter exonIter = transcriptExons.begin(); exonIter != transcriptExons.end(); exonIter++)
-	{
-		int exonLength = exonIter->end - exonIter->start + 1;
-		
-		// Local position of current exon
-		Region localExon;
-		localExon.start = localOffset + 1;
-		localExon.end = localOffset + exonLength;
-		
-		// Test for overlap between current exon and region
-		Region overlap;
-		if (FindOverlap(region, localExon, overlap))
-		{
-			// Calculate projection of region from this exon onto the genome
-			Region genomeRegion;
-			genomeRegion.start = exonIter->start + overlap.start - localOffset - 1;
-			genomeRegion.end = exonIter->start + overlap.end - localOffset - 1;
-			
-			genomeRegions.push_back(genomeRegion);
-		}
-		
-		localOffset += exonLength;
-	}
-	
-	// Remap genome regions to gene
-	remapped.clear();
-	for (RegionVecConstIter genomeRegionIter = genomeRegions.begin(); genomeRegionIter != genomeRegions.end(); genomeRegionIter++)
-	{
-		Region geneRegion;
-		geneRegion.start = genomeRegionIter->start - geneExons[0].start + 1;
-		geneRegion.end = genomeRegionIter->end - geneExons[0].start + 1;
-		
-		// Strand remapping of start and end
-		if (geneStrand == MinusStrand)
-		{
-			geneRegion.start = geneLength - geneRegion.start + 1;
-			geneRegion.end = geneLength - geneRegion.end + 1;
-		}
-		
-		remapped.push_back(geneRegion);
-	}
-	
-	// Strand remapping, reverse exons
-	if (transcriptStrand == MinusStrand)
-	{
-		reverse(remapped.begin(), remapped.end());
-	}
-	
-	return true;
-}
-
 

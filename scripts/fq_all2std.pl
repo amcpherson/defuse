@@ -177,7 +177,7 @@ sub export2std {
   while (<>) {
 	chomp;
 	my @t = split("\t", $_);
-	if ($t[21] eq 'Y') {
+#	if ($t[21] eq 'Y') {
 	  my $x = (defined($t[7]) && ($t[7] == 1 || $t[7] == 2))? "/$t[7]" : '';
 	  $t[0] =~ s/^SLXA-//; $t[0] =~ s/_Human//i; $t[0] =~ s/_PhiX//i; $t[0] =~ s/_R1//;
 	  my $rn_head = ($t[0] =~ /(^[A-Z]+\d+_\d+)/)? $1 : ($t[1]? "$t[0]_$t[1]" : $t[0]);
@@ -186,7 +186,7 @@ sub export2std {
 	  my $qual = '';
 	  $qual .= $conv_table[ord($_)] for (@s);
 	  print "+\n$qual\n";
-	}
+#	}
   }
 }
 

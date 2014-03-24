@@ -109,10 +109,10 @@ bool FusionSequence::Calculate(const LocationVec& alignPair, string& sequence, i
 		mReference.Get(alignRefName, refSeqStrand, mDeNovoAlignSeqPos[clusterEnd].start, mDeNovoAlignSeqPos[clusterEnd].end, mDeNovoAlignSeq[clusterEnd]);
 				
 		// Find gene for this transcript
-		const string& gene = mExonRegions.GetTranscriptGeneName(alignRefName);
+		const string& gene = mExonRegions.GetTranscriptGene(alignRefName);
 		
 		// Find all transcripts of the same gene
-		const StringVec& geneTranscripts = mExonRegions.GetGeneTranscriptNames(gene);
+		const StringVec& geneTranscripts = mExonRegions.GetGeneTranscripts(gene);
 		
 		// Iterate through all transcripts of this gene
 		for (StringVecConstIter geneTranscriptIter = geneTranscripts.begin(); geneTranscriptIter != geneTranscripts.end(); geneTranscriptIter++)

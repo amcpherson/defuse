@@ -72,7 +72,7 @@ int main(int argc, char* argv[])
 	
 	ExonRegions geneTranscripts;
 	ifstream geneTranscriptsFile(geneTranscriptsFilename.c_str());
-	if (!geneTranscriptsFile.good() || !geneTranscripts.ReadGeneTranscripts(geneTranscriptsFile))
+	if (!geneTranscriptsFile.good() || !geneTranscripts.Read(geneTranscriptsFile))
 	{
 		cerr << "Error: Unable to gene transcripts file " << geneTranscriptsFilename << endl;
 		exit(1);
@@ -99,12 +99,14 @@ int main(int argc, char* argv[])
 	double splitMinCount = 0.0;
 	
 	// Iterate through a list of acceptable unspliced transcripts
-	const StringVec& geneNames = geneTranscripts.GetGeneNames();
-	for (StringVecConstIter geneIter = geneNames.begin(); geneIter != geneNames.end(); geneIter++)
+	const StringVec& genes = geneTranscripts.GetGenes();
+	for (StringVecConstIter geneIter = genes.begin(); geneIter != genes.end(); geneIter++)
 	{
-		if (geneTranscripts.GetGeneTranscriptNames(*geneIter).size() == 1)
+		if (geneTranscripts.GetGeneTranscripts(*geneIter).size() == 1)
 		{
-			const string& transcript = geneTranscripts.GetGeneTranscriptNames(*geneIter)[0];
+			const string& transcript = geneTranscripts.GetGeneTranscripts(*geneIter)[0];
+			
+			string transcriptID = *geneIter + "|" + transcript;
 
 			int length = geneTranscripts.GetTranscriptLength(transcript);
 			int numMarkers = length * covSampleDensity;
@@ -113,7 +115,7 @@ int main(int argc, char* argv[])
 				int position = rand() % length + 1;
 				
 				CompAlignTable spanning;
-				FindSpanning(concordant, transcript, position, maxFragmentLength, spanning);
+				FindSpanning(concordant, transcriptID, position, maxFragmentLength, spanning);
 				
 				// Require at least 2 spanning
 				if (spanning.size() >= 2)
@@ -129,7 +131,7 @@ int main(int argc, char* argv[])
 				}
 								
 				CompAlignVec split;
-				FindSplit(concordant, transcript, position, splitMinAnchor, split);
+				FindSplit(concordant, transcriptID, position, splitMinAnchor, split);
 				
 				// Require at least 2 split
 				if (split.size() >= 2)

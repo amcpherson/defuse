@@ -254,6 +254,7 @@ void MatePairCombinatorial::DoClustering(const MatePairVec& matePairs, IntegerTa
 	
 	IntegerTable breakRegionClusters1;
 	CreateOverlapClusters(breakRegions1, breakRegionClusters1);
+cout << breakRegionClusters1.size() << endl;
 		
 	IntegerTable breakRegionClusters2;
 	for (IntegerTableConstIter clusterIter = breakRegionClusters1.begin(); clusterIter != breakRegionClusters1.end(); clusterIter++)
@@ -263,8 +264,10 @@ void MatePairCombinatorial::DoClustering(const MatePairVec& matePairs, IntegerTa
 		
 		CreateOverlapClusters(clusterBreakRegions2, breakRegionClusters2);
 	}
+cout << breakRegionClusters2.size() << endl;
 	
 	RemoveRedundant(breakRegionClusters2);
+cout << breakRegionClusters2.size() << endl;
 	
 	IntegerTable lengthRangeClusters;
 	for (IntegerTableConstIter clusterIter = breakRegionClusters2.begin(); clusterIter != breakRegionClusters2.end(); clusterIter++)
@@ -275,7 +278,9 @@ void MatePairCombinatorial::DoClustering(const MatePairVec& matePairs, IntegerTa
 		CreateOverlapClusters(clusterLengthRange, lengthRangeClusters);
 	}
 	
+cout << lengthRangeClusters.size() << endl;
 	RemoveRedundant(lengthRangeClusters);
+cout << lengthRangeClusters.size() << endl;
 	
 	clusters.insert(clusters.end(), lengthRangeClusters.begin(), lengthRangeClusters.end());	
 }

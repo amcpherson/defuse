@@ -133,7 +133,7 @@ sub create_job_bash_script
 	print SCR "source ~/.bashrc\n";
 	print SCR "fi\n";
 	print SCR "echo -e Running on \$HOSTNAME\n";
-	print SCR $job_cmd."\n";
+	print SCR "time ".$job_cmd."\n";
 	print SCR "echo -e Return codes: \${PIPESTATUS[*]}\n";
 	close SCR;
 }
@@ -379,60 +379,6 @@ sub waitfiles
 	return 0;
 }
 
-sub uptodate
-{
-	my $self = shift;
-	my $inargs = shift;
-	my $outargs = shift;
-	my $remarks = shift;
-
-	# Optional argument
-	$remarks = [] if not defined $remarks;
-
-	# Reset remarks list
-	@{$remarks} = ();
-
-	# Check the arguments
-	die "Error: Non-empty array ref expected for inargs argument to uptodate\n" if ref($inargs) ne 'ARRAY' or scalar @{$inargs} == 0;
-	die "Error: Non-empty array ref expected for outargs argument to uptodate\n" if ref($outargs) ne 'ARRAY' or scalar @{$outargs} == 0;
-
-	# Find modification times of inputs
-	# Check all inputs exist
-	my @intimes;
-	foreach my $arg (@{$inargs})
-	{
-		die "Error: Input $arg not found\n" if not -e $arg;
-
-		my $modtime = 0;
-		$modtime = stat($arg)->mtime;
-		push @intimes, $modtime;
-	}
-	
-	# Find modification times of outputs
-	my @outtimes;
-	foreach my $arg (@{$outargs})
-	{
-		my $modtime = 0;
-		$modtime = stat($arg)->mtime if -e $arg;
-		push @outtimes, $modtime;
-
-		if ($modtime == 0)
-		{
-			push @{$remarks}, $arg." missing";
-		}
-		elsif (scalar @intimes > 0 and $modtime < max(@intimes))
-		{
-			push @{$remarks}, $arg." out of date";
-		}
-	}
-
-	# Return 1 if up to date
-	return 1 if max(@intimes) <= min(@outtimes) and min(@outtimes) != 0;
-	
-	# Return 0 if not up to date or missing
-	return 0;
-}
-
 sub runrequired
 {
 	my $self = shift;
@@ -460,7 +406,7 @@ sub runrequired
 	return 1 if scalar @{$inargs} == 0 or scalar @{$outargs} == 0;
 
 	# Otherwise, run commands if something is not up to date
-	return 1 if not $self->uptodate($inargs,$outargs,$remarks);
+	return 1 if not cmdrunner::uptodate($inargs,$outargs,$remarks);
 
 	return 0;
 }
@@ -684,7 +630,7 @@ sub prun
 
 				# Check outputs are up to date
 				my @remarks = ();
-				if (scalar @{$in_args} > 0 and scalar @outgenerated > 0 and not $self->uptodate($in_args,\@outgenerated,\@remarks))
+				if (scalar @{$in_args} > 0 and scalar @outgenerated > 0 and not cmdrunner::uptodate($in_args,\@outgenerated,\@remarks))
 				{
 					print join "\n", ("Job did not update output files:", @remarks, "");
 					exit(1);
@@ -879,9 +825,61 @@ sub finalizejob
 	return 0;
 }
 
+sub uptodate
+{
+	my $inargs = shift;
+	my $outargs = shift;
+	my $remarks = shift;
+
+	# Optional argument
+	$remarks = [] if not defined $remarks;
+
+	# Reset remarks list
+	@{$remarks} = ();
+
+	# Check the arguments
+	die "Error: Non-empty array ref expected for inargs argument to uptodate\n" if ref($inargs) ne 'ARRAY' or scalar @{$inargs} == 0;
+	die "Error: Non-empty array ref expected for outargs argument to uptodate\n" if ref($outargs) ne 'ARRAY' or scalar @{$outargs} == 0;
+
+	# Find modification times of inputs
+	# Check all inputs exist
+	my @intimes;
+	foreach my $arg (@{$inargs})
+	{
+		die "Error: Input $arg not found\n" if not -e $arg;
+
+		my $modtime = 0;
+		$modtime = stat($arg)->mtime;
+		push @intimes, $modtime;
+	}
+	
+	# Find modification times of outputs
+	my @outtimes;
+	foreach my $arg (@{$outargs})
+	{
+		my $modtime = 0;
+		$modtime = stat($arg)->mtime if -e $arg;
+		push @outtimes, $modtime;
+
+		if ($modtime == 0)
+		{
+			push @{$remarks}, $arg." missing";
+		}
+		elsif (scalar @intimes > 0 and $modtime < max(@intimes))
+		{
+			push @{$remarks}, $arg." out of date";
+		}
+	}
+
+	# Return 1 if up to date
+	return 1 if max(@intimes) <= min(@outtimes) and min(@outtimes) != 0;
+	
+	# Return 0 if not up to date or missing
+	return 0;
+}
+
 sub replaceifdifferent
 {
-	my $self = shift;
 	my $new_filename = shift;
 	my $prev_filename = shift;
 	

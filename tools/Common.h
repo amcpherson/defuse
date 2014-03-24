@@ -213,4 +213,6 @@ int FindMaxElement(const IntegerTable& clusters);
 
 void CheckFile(const ios& file, const string& filename);
 
+bool ParseTranscriptID(const string& transcriptID, string& gene, string& transcript);
+
 #endif

@@ -10,6 +10,7 @@ use List::Util qw[min max];
 
 use lib dirname($0);
 use configdata;
+use gene_models;
 
 my @usage;
 push @usage, "Usage: ".basename($0)." [options]\n";
@@ -18,13 +19,11 @@ push @usage, "  -h, --help      Displays this information\n";
 push @usage, "  -c, --config    Configuration Filename\n";
 push @usage, "  -o, --output    Output Directory\n";
 push @usage, "  -b, --breaks    Breaks filename\n";
-push @usage, "  -g, --genspce   Breaks in Genomic Space\n";
 
 my $help;
 my $config_filename;
 my $output_directory;
 my $breaks_filename;
-my $genomic_space;
 
 GetOptions
 (
@@ -32,7 +31,6 @@ GetOptions
 	'config=s'    => \$config_filename,
 	'output=s'    => \$output_directory,
 	'breaks=s'    => \$breaks_filename,
-	'genspce'     => \$genomic_space,
 );
 
 not defined $help or usage() and exit;
@@ -45,9 +43,7 @@ my $config = configdata->new();
 $config->read($config_filename);
 
 # Config values
-my $cdna_gene_regions		= $config->get_value("cdna_gene_regions");
-my $cdna_regions			= $config->get_value("cdna_regions");
-my $gene_tran_list			= $config->get_value("gene_tran_list");
+my $gene_models_filename	= $config->get_value("gene_models");
 my $splice_bias             = $config->get_value("splice_bias");
 my $samtools_bin			= $config->get_value("samtools_bin");
 
@@ -62,80 +58,59 @@ get_stats($read_stats, \%read_stat_values);
 # Approximate max fragment length
 my $max_fragment_length = int($read_stat_values{"fraglength_mean"} + 3 * $read_stat_values{"fraglength_stddev"});
 
-# Read in the gene transcripts
-my %gene_transcripts;
-read_gene_transcript($gene_tran_list, \%gene_transcripts);
-
-# Read in the cdna regions
-my %cdna;
-read_regions($cdna_regions, \%cdna);
-
-# Read in the cdna gene regions
-my %cdna_gene;
-read_regions($cdna_gene_regions, \%cdna_gene);
+# Read in the gene models
+my $gene_models = gene_models->new($gene_models_filename);
 
 # Read the breakpoints file
 my %breaks;
 read_breaks($breaks_filename, \%breaks);
 
 my %transcript_fusion_position;
-my %fusion_gene_exons_before_size;
-my %fusion_gene_exons_after_size;
+my %fusion_gene;
+my %fusion_strand;
+my %exons_before_size;
+my %exons_after_size;
 foreach my $cluster_id (keys %breaks)
 {
 	foreach my $cluster_end ("0","1")
 	{
 		my $reference = $breaks{$cluster_id}{$cluster_end}{reference};
 		my $strand = $breaks{$cluster_id}{$cluster_end}{strand};
-		my $position = $breaks{$cluster_id}{$cluster_end}{breakpos};
+		my $breakpos = $breaks{$cluster_id}{$cluster_end}{breakpos};
 		
-		$reference =~ /(ENSG\d+)/;
-		my $gene = $1;
+		my $gene_id = $gene_models->calc_gene($reference, $breakpos);
+		my $gene_location = $gene_models->calc_gene_location($gene_id, $breakpos);
 		
-		# Breakpoint positions can be defined in either genomic or transcriptome space
+		next if $gene_location eq "upstream" or $gene_location eq "downstream";
+		
+		$fusion_gene{$cluster_id}{$cluster_end} = $gene_id;
+		$fusion_strand{$cluster_id}{$cluster_end} = $gene_models->{genes}{$gene_id}{strand};
+		
+		# Find the genomic position of the break with bias
 		my $breakpos_genomic;
-		if (defined $genomic_space)
+		if ($strand eq "+")
 		{
-			# The genomic position of the break is given
-			$breakpos_genomic = $position;
-			
-			# Translate breakpoint strand to transcriptome space
-			if ($cdna_gene{$reference}{strand} eq $strand)
-			{
-				$strand = "+";
-			}
-			else
-			{
-				$strand = "-";
-			}
+			$breakpos_genomic = $gene_models->calc_genomic_position($reference, $breakpos - $splice_bias) + $splice_bias;
 		}
-		else
+		elsif ($strand eq "-")
 		{
-			# Find the genomic position of the break with bias
-			if ($strand eq "+")
-			{
-				$breakpos_genomic = calc_genomic_position($position - $splice_bias, $cdna_gene{$reference}) + $splice_bias;
-			}
-			elsif ($strand eq "-")
-			{
-				$breakpos_genomic = calc_genomic_position($position + $splice_bias, $cdna_gene{$reference}) - $splice_bias;
-			}
+			$breakpos_genomic = $gene_models->calc_genomic_position($reference, $breakpos + $splice_bias) - $splice_bias;
 		}
 			
 		# Find exons that occur before and after the break
 		# Find position of break in each cdna
 		my @exonsbefore;
 		my @exonsafter;
-		foreach my $transcript (@{$gene_transcripts{$gene}})
+		foreach my $transcript_id (keys %{$gene_models->{genes}{$gene_id}{transcripts}})
 		{
-			my @exons = @{$cdna{$transcript}{exons}};
+			my @exons = @{$gene_models->{transcripts}{$transcript_id}{exons}};
 			
 			# Find position of break in cdna space
-			my $breakpos_transcript = calc_transcript_position($breakpos_genomic, $cdna{$transcript});
+			my $breakpos_transcript = $gene_models->calc_transcript_position($transcript_id, $breakpos_genomic);
 			die if not defined $breakpos_transcript or $breakpos_transcript < 0;
 				
 			# Add the cdna pos for this transcript and fusion
-			$transcript_fusion_position{$transcript}{$cluster_id} = $breakpos_transcript;
+			$transcript_fusion_position{$transcript_id}{$cluster_id}{$cluster_end} = $breakpos_transcript;
 	
 			# Find exons before and after
 			foreach my $exon (@exons)
@@ -161,28 +136,23 @@ foreach my $cluster_id (keys %breaks)
 		$exons_before_size = regions_length(merge_regions(@exonsbefore)) if scalar @exonsbefore > 0;
 		$exons_after_size = regions_length(merge_regions(@exonsafter)) if scalar @exonsafter > 0;
 		
-		if ($cdna_gene{$reference}{strand} eq "-")
+		if ($gene_models->{genes}{$gene_id}{strand} eq "-")
 		{
 			($exons_before_size,$exons_after_size) = ($exons_after_size,$exons_before_size);
 		}
-		elsif ($cdna_gene{$reference}{strand} ne "+")
-		{
-			die;
-		}
 		
-		$fusion_gene_exons_before_size{$cluster_id}{$gene} = $exons_before_size;
-		$fusion_gene_exons_after_size{$cluster_id}{$gene} = $exons_after_size;
+		$exons_before_size{$cluster_id}{$cluster_end} = $exons_before_size;
+		$exons_after_size{$cluster_id}{$cluster_end} = $exons_after_size;
 	}
 }
 
-my %fusion_gene_counts_before;
-my %fusion_gene_counts_after;
-foreach my $transcript (keys %transcript_fusion_position)
+my %counts_before;
+my %counts_after;
+foreach my $transcript_id (keys %transcript_fusion_position)
 {
-	$transcript =~ /(ENSG\d+)/;
-	my $gene = $1;
-
-	open TA, "$samtools_bin view $cdna_bam_filename '$transcript' |" or die "Error: Unable to run samtools on $cdna_bam_filename: $!\n";
+	my $gene_id = $gene_models->{transcripts}{$transcript_id}{gene};
+	
+	open TA, "$samtools_bin view $cdna_bam_filename '$transcript_id' |" or die "Error: Unable to run samtools on $cdna_bam_filename: $!\n";
 	while (<TA>)
 	{
 		my @sam_fields = split /\t/;
@@ -191,27 +161,30 @@ foreach my $transcript (keys %transcript_fusion_position)
 		my $pos = $sam_fields[3];
 		my $seq = $sam_fields[9];
 			
-		$transcript eq $rname or die "Error: samtools retrieived alignments to $rname when alignments to $transcript were requested\n";
+		$transcript_id eq $rname or die "Error: samtools retrieived alignments to $rname when alignments to $transcript_id were requested\n";
 			
 		my $start = $pos;
 		my $end = $pos + length($seq) - 1;
 
-		foreach my $cluster_id (keys %{$transcript_fusion_position{$transcript}})
+		foreach my $cluster_id (keys %{$transcript_fusion_position{$transcript_id}})
 		{
-			my $fusion_cdnapos = $transcript_fusion_position{$transcript}{$cluster_id};
-
-			if ($end < $fusion_cdnapos)
+			foreach my $cluster_end (keys %{$transcript_fusion_position{$transcript_id}{$cluster_id}})
 			{
-				$fusion_gene_counts_before{$cluster_id}{$gene} += length($seq);
-			}
-			elsif ($start > $fusion_cdnapos)
-			{
-				$fusion_gene_counts_after{$cluster_id}{$gene} += length($seq);
-			}
-			else
-			{
-				$fusion_gene_counts_before{$cluster_id}{$gene} += $fusion_cdnapos - $start;
-				$fusion_gene_counts_after{$cluster_id}{$gene} += $end - $fusion_cdnapos;				
+				my $fusion_cdnapos = $transcript_fusion_position{$transcript_id}{$cluster_id}{$cluster_end};
+	
+				if ($end < $fusion_cdnapos)
+				{
+					$counts_before{$cluster_id}{$cluster_end} += length($seq);
+				}
+				elsif ($start > $fusion_cdnapos)
+				{
+					$counts_after{$cluster_id}{$cluster_end} += length($seq);
+				}
+				else
+				{
+					$counts_before{$cluster_id}{$cluster_end} += $fusion_cdnapos - $start;
+					$counts_after{$cluster_id}{$cluster_end} += $end - $fusion_cdnapos;				
+				}
 			}
 		}
 	}
@@ -222,18 +195,16 @@ foreach my $cluster_id (keys %breaks)
 {
 	foreach my $cluster_end (keys %{$breaks{$cluster_id}})
 	{
-		my $reference = $breaks{$cluster_id}{$cluster_end}{reference};
-		my $strand = $breaks{$cluster_id}{$cluster_end}{strand};
-		my $position = $breaks{$cluster_id}{$cluster_end}{breakpos};
+		my $gene_id = $fusion_gene{$cluster_id}{$cluster_end};
+		my $strand = $fusion_strand{$cluster_id}{$cluster_end};
 		
-		$reference =~ /(ENSG\d+)/;
-		my $gene = $1;
+		next if not defined $gene_id;
 
-		my $count_before = $fusion_gene_counts_before{$cluster_id}{$gene};
-		my $count_after = $fusion_gene_counts_after{$cluster_id}{$gene};
+		my $count_before = $counts_before{$cluster_id}{$cluster_end};
+		my $count_after = $counts_after{$cluster_id}{$cluster_end};
 		
-		my $size_before = $fusion_gene_exons_before_size{$cluster_id}{$gene};
-		my $size_after = $fusion_gene_exons_after_size{$cluster_id}{$gene};
+		my $size_before = $exons_before_size{$cluster_id}{$cluster_end};
+		my $size_after = $exons_after_size{$cluster_id}{$cluster_end};
 		
 		if ($strand eq "-")
 		{
@@ -244,7 +215,7 @@ foreach my $cluster_id (keys %breaks)
 		$count_before = 0 if not defined $count_before;
 		$count_after = 0 if not defined $count_after;
 		
-		print $cluster_id."\t".$cluster_end."\t".$gene."\t".$size_before."\t".$size_after."\t".$count_before."\t".$count_after."\n";
+		print $cluster_id."\t".$cluster_end."\t".$gene_id."\t".$size_before."\t".$size_after."\t".$count_before."\t".$count_after."\n";
 	}
 }
 
@@ -270,56 +241,6 @@ sub read_breaks
 		$breaks_hash_ref->{$cluster_id}{$cluster_end}{breakpos} = $breakpos;
 	}
 	close BR;
-}
-
-sub read_gene_transcript
-{
-	my $gene_tran_filename = shift;
-	my $gene_tran_ref = shift;
-	
-	# Read in gene transcript mapping
-	open GT, $gene_tran_filename or die "Error: Unable to open $gene_tran_filename: $!\n";
-	while (<GT>)
-	{
-		chomp;
-		my @fields = split /\t/;
-		
-		my $ensgene = $fields[0];
-		my $enstran = $fields[1];
-		
-		push @{$gene_tran_ref->{$ensgene}}, $enstran;
-	}
-	close GT;
-}
-
-sub read_regions
-{
-	my $regions_filename = shift;
-	my $regions_hash_ref = shift;
-
-	open REG, $regions_filename or die;
-	while (<REG>)
-	{
-		chomp;
-		my @fields = split /\t/;
-		
-		my $gene = $fields[0];
-		my $chromosome = $fields[1];
-		my $strand = $fields[2];
-	
-		my @exons;
-		my $fieldindex = 4;
-		while ($fieldindex <= $#fields)
-		{
-			push @exons, [$fields[$fieldindex-1],$fields[$fieldindex]];
-			$fieldindex += 2;
-		}
-		
-		$regions_hash_ref->{$gene}{chromosome} = $chromosome;
-		$regions_hash_ref->{$gene}{strand} = $strand;
-		$regions_hash_ref->{$gene}{exons} = [@exons];
-	}
-	close REG;
 }
 
 sub get_stats
@@ -393,83 +314,4 @@ sub merge_regions
 
 	return @merged;
 }
-
-# Find position in genome given a position and the strand and exons of the transcript
-sub calc_genomic_position
-{
-	my $position = shift;
-	my $transcript_ref = shift;
-	
-	my $strand = $transcript_ref->{strand};
-	my $exons = $transcript_ref->{exons};
-	
-	if ($strand eq "-")
-	{
-		$position = regions_length(@{$exons}) - $position + 1;
-	}
-	
-	if ($position < 1)
-	{
-		return $exons->[0]->[0] + $position - 1;
-	}
-	
-	my $local_offset = 0;
-	foreach my $exon (@{$exons})
-	{
-		my $exonsize = $exon->[1] - $exon->[0] + 1;
-			
-		if ($position <= $local_offset + $exonsize)
-		{
-			return $position - $local_offset - 1 + $exon->[0];
-		}
-				
-		$local_offset += $exonsize;
-	}
-	
-	return $position - $local_offset + $exons->[$#{$exons}]->[1];
-}
-
-# Find position in a transcript given a genomic position and strand and exons of the transcript
-# This version returns the position of the beginning of the next exon if the genomic position is intronic
-sub calc_transcript_position
-{
-	my $position = shift;
-	my $transcript_ref = shift;
-
-	my $strand = $transcript_ref->{strand};
-	my $exons = $transcript_ref->{exons};
-	
-	my $local_offset = 0;
-	my $transcript_position;
-	foreach my $exon (@{$exons})
-	{
-		my $exonsize = $exon->[1] - $exon->[0] + 1;
-
-		if ($position <= $exon->[1])
-		{
-			if ($position < $exon->[0])
-			{
-				$transcript_position = $local_offset + 1;
-				last;
-			}
-			else
-			{
-				$transcript_position = $local_offset + $position - $exon->[0] + 1;
-				last;
-			}
-		}
-				
-		$local_offset += $exonsize;
-	}
-
-	$transcript_position = regions_length(@{$exons}) if not defined $transcript_position;
-	
-	if ($strand eq "-")
-	{
-		$transcript_position = regions_length(@{$exons}) - $transcript_position + 1;
-	}
-	
-	return $transcript_position;
-}
-
 

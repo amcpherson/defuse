@@ -11,8 +11,12 @@
 
 #include <iostream>
 #include <fstream>
+#include <boost/lexical_cast.hpp>
+#include <boost/algorithm/string.hpp>
+
 
 using namespace std;
+using namespace boost;
 
 
 int OtherStrand(int strand)
@@ -108,5 +112,21 @@ void CheckFile(const ios& file, const string& filename)
 		cerr << "Error: Unable to open " << filename << endl;
 		exit(1);
 	}	
+}
+
+bool ParseTranscriptID(const string& transcriptID, string& gene, string& transcript)
+{
+	StringVec idFields;
+	split(idFields, transcriptID, is_any_of("|"));
+
+	if (idFields.size() < 2)
+	{
+		return false;
+	}
+
+	gene = idFields[0];
+	transcript = idFields[1];
+
+	return true;
 }
 

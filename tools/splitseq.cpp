@@ -118,7 +118,7 @@ int main(int argc, char* argv[])
 	reference.Open(referenceFasta);
 	
 	ifstream exonRegionsFile(exonRegionsFilename.c_str());
-	if (!exonRegionsFile.good() || !exonRegions.ReadExonRegions(exonRegionsFile))
+	if (!exonRegionsFile.good() || !exonRegions.Read(exonRegionsFile))
 	{
 		cerr << "Error: Unable to read exon regions file " << exonRegionsFilename << endl;
 		exit(1);

@@ -58,12 +58,15 @@ my $config = configdata->new();
 $config->read($config_filename);
 
 # Config values
-my $cdna_gene_fasta          = $config->get_value("cdna_gene_fasta_cluster");
-my $cdna_fasta               = $config->get_value("cdna_fasta_cluster");
+my $gene_models              = $config->get_value("gene_models");
+my $cdna_fasta               = $config->get_value("cdna_fasta");
+my $genome_fasta             = $config->get_value("genome_fasta");
+my $reference_fasta          = $config->get_value("reference_fasta");
 my $rrna_fasta               = $config->get_value("rrna_fasta");
 my $ig_gene_list             = $config->get_value("ig_gene_list");
 my $max_insert_size          = $config->get_value("max_insert_size");
 my $discord_read_trim        = $config->get_value("discord_read_trim");
+my $dna_concordant_length    = $config->get_value("dna_concordant_length");
 my $scripts_directory        = $config->get_value("scripts_directory");
 my $bowtie_bin               = $config->get_value("bowtie_bin");
 my $samtools_bin             = $config->get_value("samtools_bin");
@@ -94,13 +97,13 @@ sub verify_directory_exists
 
 # Samtools fasta indices required
 my $cdna_fasta_index = $cdna_fasta.".fai";
-my $cdna_gene_fasta_index = $cdna_gene_fasta.".fai";
+my $reference_fasta_index = $reference_fasta.".fai";
 
 # Ensure required files exist
 verify_file_exists($cdna_fasta);
 verify_file_exists($cdna_fasta_index);
-verify_file_exists($cdna_gene_fasta);
-verify_file_exists($cdna_gene_fasta_index);
+verify_file_exists($reference_fasta);
+verify_file_exists($reference_fasta_index);
 verify_file_exists($ig_gene_list);
 
 # Ensure required directories exist
@@ -112,15 +115,19 @@ my $align_pair_bin = "$bowtie_bin $bowtie_quals --sam-nosq -S --mm -t -X $max_in
 my $align_single_bin = "$bowtie_bin $bowtie_quals --sam-nosq -S --mm -t -k 100 -m 100";
 my $sort_cmd = "sort";
 
+my $filter_fastq_script = "$scripts_directory/filter_fastq.pl";
 my $filter_sam_readids_script = "$scripts_directory/filter_sam_readids.pl";
 my $filter_sam_genes_script = "$scripts_directory/filter_sam_genes.pl";
 my $read_stats_script = "$scripts_directory/read_stats.pl";
 my $expression_script = "$scripts_directory/calculate_expression_simple.pl";
-my $find_concordant_ensembl_script = "$scripts_directory/find_concordant_ensembl.pl";
+my $find_concordant_gene_script = "$scripts_directory/find_concordant_gene.pl";
+my $find_concordant_region_script = "$scripts_directory/find_concordant_region.pl";
 my $sam_readids_script = "$scripts_directory/sam_readids.pl";
 my $filter_sam_concordant_script = "$scripts_directory/filter_sam_concordant.pl";
 my $filter_sam_mapped_script = "$scripts_directory/filter_sam_mapped.pl";
 my $trim_fastq_script = "$scripts_directory/trim_fastq.pl";
+my $intersect_script = "$scripts_directory/intersect.pl";
+my $disjoint_script = "$scripts_directory/disjoint.pl";
 
 my $local_prefix = abs_path($local_directory)."/".$library_name.".".$job_name;
 
@@ -187,12 +194,21 @@ my $reads_end_2_fastq = $job_prefix.".2.fastq";
 my $read_stats = $job_prefix.".concordant.read.stats";
 my $expression = $job_prefix.".expression.txt";
 my $cdna_pair_bam = $job_prefix.".cdna.pair.bam";
-my $discordant_aligned_bam = $job_prefix.".discordant.aligned.bam";
-my $discordant_unaligned_bam = $job_prefix.".discordant.unaligned.bam";
+my $spanning_bam = $job_prefix.".spanning.bam";
+my $spanning_byread_bam = $job_prefix.".spanning.byread.bam";
+my $anchored_bam = $job_prefix.".anchored.bam";
 
 print "Finding concordant alignments to cdna\n";
 my $cdna_pair_sam = get_local_filename("cdna.pair.sam");
+my $cdna_concordant_readids = get_local_filename("cdna.concordant.readids");
 $runner->run("$align_pair_bin $cdna_fasta -1 #<1 -2 #<2 #>1", [$reads_end_1_fastq, $reads_end_2_fastq], [$cdna_pair_sam]);
+$runner->run("$filter_sam_concordant_script < #<1 | $sam_readids_script > #>1", [$cdna_pair_sam], [$cdna_concordant_readids]);
+
+print "Finding concordant alignments to dna\n";
+my $dna_pair_sam = get_local_filename("dna.pair.sam");
+my $dna_concordant_readids = get_local_filename("dna.concordant.readids");
+$runner->run("$align_pair_bin $genome_fasta -1 #<1 -2 #<2 #>1", [$reads_end_1_fastq, $reads_end_2_fastq], [$dna_pair_sam]);
+$runner->run("$filter_sam_concordant_script < #<1 | $sam_readids_script > #>1", [$dna_pair_sam], [$dna_concordant_readids]);
 
 print "Calculating read statistics\n";
 $runner->run("$read_stats_script < #<1 > #>1", [$cdna_pair_sam], [$read_stats]);
@@ -200,113 +216,113 @@ $runner->run("$read_stats_script < #<1 > #>1", [$cdna_pair_sam], [$read_stats]);
 print "Calculating expression\n";
 $runner->run("$expression_script < #<1 > #>1", [$cdna_pair_sam], [$expression]);
 
-if (not $runner->uptodate([$reads_end_1_fastq, $reads_end_2_fastq], [$discordant_aligned_bam, $discordant_unaligned_bam]))
+my $pair_concordant_readids = get_local_filename("pair.concordant.readids");
+$runner->run("cat #<1 #<2 > #>1", [$cdna_concordant_readids,$dna_concordant_readids], [$pair_concordant_readids]);
+
+if (not cmdrunner::uptodate([$reads_end_1_fastq, $reads_end_2_fastq], [$spanning_bam, $spanning_byread_bam, $anchored_bam]))
 {
-	print "Trimming reads\n";
+	print "Trimming and filtering reads\n";
 	my $trim_reads_end_1_fastq = get_local_filename("trim.1.fastq");
 	my $trim_reads_end_2_fastq = get_local_filename("trim.2.fastq");
-	$runner->run("$trim_fastq_script $discord_read_trim < #<1 > #>1", [$reads_end_1_fastq], [$trim_reads_end_1_fastq]);
-	$runner->run("$trim_fastq_script $discord_read_trim < #<1 > #>1", [$reads_end_2_fastq], [$trim_reads_end_2_fastq]);
+	$runner->run("$trim_fastq_script $discord_read_trim < #<1 | $filter_fastq_script -i #<2 > #>1", [$reads_end_1_fastq,$pair_concordant_readids], [$trim_reads_end_1_fastq]);
+	$runner->run("$trim_fastq_script $discord_read_trim < #<1 | $filter_fastq_script -i #<2 > #>1", [$reads_end_2_fastq,$pair_concordant_readids], [$trim_reads_end_2_fastq]);
 	
-	print "Finding alignable reads\n";
+	print "Finding all cdna alignments\n";
 	my $cdna_end_1_sam = get_local_filename("cdna.end.1.sam");
 	my $cdna_end_2_sam = get_local_filename("cdna.end.2.sam");
-	$runner->run("$align_single_bin $cdna_gene_fasta #<1 #>1", [$trim_reads_end_1_fastq], [$cdna_end_1_sam]);
-	$runner->run("$align_single_bin $cdna_gene_fasta #<1 #>1", [$trim_reads_end_2_fastq], [$cdna_end_2_sam]);
+	$runner->run("$align_single_bin $cdna_fasta #<1 #>1", [$trim_reads_end_1_fastq], [$cdna_end_1_sam]);
+	$runner->run("$align_single_bin $cdna_fasta #<1 #>1", [$trim_reads_end_2_fastq], [$cdna_end_2_sam]);
 	
-	my $concordant_readids = get_local_filename("concordant.readids");
+	print "Finding all dna alignments\n";
+	my $dna_end_1_sam = get_local_filename("dna.end.1.sam");
+	my $dna_end_2_sam = get_local_filename("dna.end.2.sam");
+	$runner->run("$align_single_bin $genome_fasta #<1 #>1", [$trim_reads_end_1_fastq], [$dna_end_1_sam]);
+	$runner->run("$align_single_bin $genome_fasta #<1 #>1", [$trim_reads_end_2_fastq], [$dna_end_2_sam]);
+	
+	my @concordant_readids;
+	
+	print "Finding same gene concordant read ids for cdna\n";
+	my $gene_concordant_readids = get_local_filename("gene.concordant.readids");
+	$runner->run("cat #<A | $find_concordant_gene_script $gene_models > #>1", [$dna_end_1_sam, $dna_end_2_sam,$cdna_end_1_sam, $cdna_end_2_sam], [$gene_concordant_readids]);
+	push @concordant_readids, $gene_concordant_readids;
+	
+	print "Finding same region concordant read ids for dna\n";
+	my $region_concordant_readids = get_local_filename("region.concordant.readids");
+	$runner->run("cat #<A | $find_concordant_region_script $gene_models $dna_concordant_length > #>1", [$dna_end_1_sam, $dna_end_2_sam,$cdna_end_1_sam, $cdna_end_2_sam], [$region_concordant_readids]);
+	push @concordant_readids, $region_concordant_readids;
 
-	if (not -e $concordant_readids)
-	{
-		print "Finding same gene concordant read ids for cdna\n";
-		my $cdna_concordant_readids = get_local_filename("cdna.concordant.readids");
-		$runner->run("$find_concordant_ensembl_script #<1 #<2 | $sort_cmd > #>1", [$cdna_end_1_sam, $cdna_end_2_sam], [$cdna_concordant_readids]);
+	print "Finding alignments to rRNA\n";
+	my $rrna_end_1_sam = get_local_filename("rrna.end.1.sam");
+	my $rrna_end_2_sam = get_local_filename("rrna.end.2.sam");
+	$runner->run("$align_single_bin $rrna_fasta #<1 #>1", [$reads_end_1_fastq], [$rrna_end_1_sam]);
+	$runner->run("$align_single_bin $rrna_fasta #<1 #>1", [$reads_end_2_fastq], [$rrna_end_2_sam]);
 
-		print "Finding concordant read ids for cdna\n";	
-		my $cdna_pair_readids = get_local_filename("cdna.pair.readids");
-		$runner->run("$filter_sam_concordant_script < #<1 | $sam_readids_script | $sort_cmd -u > #>1", [$cdna_pair_sam], [$cdna_pair_readids]);
-
-		print "Finding alignments to rRNA\n";
-		my $rrna_end_1_sam = get_local_filename("rrna.end.1.sam");
-		my $rrna_end_2_sam = get_local_filename("rrna.end.2.sam");
-		$runner->run("$align_single_bin $rrna_fasta #<1 #>1", [$reads_end_1_fastq], [$rrna_end_1_sam]);
-		$runner->run("$align_single_bin $rrna_fasta #<1 #>1", [$reads_end_2_fastq], [$rrna_end_2_sam]);
-
-		print "Finding rrna anchored concordant read ids\n";
-		my $rrna_end_1_readids = get_local_filename("rrna.end.1.readids");
-		my $rrna_end_2_readids = get_local_filename("rrna.end.2.readids");
-		$runner->run("$filter_sam_mapped_script < #<1 | $sam_readids_script | $sort_cmd -u > #>1", [$rrna_end_1_sam], [$rrna_end_1_readids]);
-		$runner->run("$filter_sam_mapped_script < #<1 | $sam_readids_script | $sort_cmd -u > #>1", [$rrna_end_2_sam], [$rrna_end_2_readids]);
+	print "Finding rrna anchored concordant read ids\n";
+	my $rrna_end_1_readids = get_local_filename("rrna.end.1.readids");
+	my $rrna_end_2_readids = get_local_filename("rrna.end.2.readids");
+	$runner->run("$filter_sam_mapped_script < #<1 | $sam_readids_script > #>1", [$rrna_end_1_sam], [$rrna_end_1_readids]);
+	$runner->run("$filter_sam_mapped_script < #<1 | $sam_readids_script > #>1", [$rrna_end_2_sam], [$rrna_end_2_readids]);
+	push @concordant_readids, $rrna_end_1_readids;
+	push @concordant_readids, $rrna_end_2_readids;
 		
-		my @all_prefilter_pair_readids;
-		my $prefilter_out_num = 1;
-		foreach my $prefilter_fasta (@prefilter_fastas)
-		{
-			print "Finding concordant alignments to prefilter fasta $prefilter_fasta\n";
-			my $prefilter_pair_sam = get_local_filename("prefilter.".$prefilter_out_num.".pair.sam");
-			my $prefilter_pair_readids = get_local_filename("prefilter.".$prefilter_out_num.".pair.readids");
-			$runner->run("$align_pair_bin $prefilter_fasta -1 #<1 -2 #<2 #>1", [$reads_end_1_fastq, $reads_end_2_fastq], [$prefilter_pair_sam]);
-			$runner->run("$filter_sam_concordant_script < #<1 | $sam_readids_script | $sort_cmd -u > #>1", [$prefilter_pair_sam], [$prefilter_pair_readids]);
-			
-			push @all_prefilter_pair_readids, $prefilter_pair_readids;
-			$prefilter_out_num++;
-			
-			if (lc($remove_job_temp_files) eq "yes")
-			{
-				unlink $prefilter_pair_sam;
-			}
-		}
-
-		print "Excluding IG rearrangements\n";
-		my $cdna_end_1_ig_readids = get_local_filename("cdna.ig.end.1.readids");
-		my $cdna_end_2_ig_readids = get_local_filename("cdna.ig.end.2.readids");
-		my $ig_readids = get_local_filename("ig.readids");
-		$runner->run("$filter_sam_mapped_script < #<1 | $filter_sam_genes_script $ig_gene_list | $sam_readids_script | uniq | $sort_cmd -u > #>1", [$cdna_end_1_sam], [$cdna_end_1_ig_readids]);
-		$runner->run("$filter_sam_mapped_script < #<1 | $filter_sam_genes_script $ig_gene_list | $sam_readids_script | uniq | $sort_cmd -u > #>1", [$cdna_end_2_sam], [$cdna_end_2_ig_readids]);
-		$runner->run("join #<1 #<2 > #>1", [$cdna_end_1_ig_readids, $cdna_end_2_ig_readids], [$ig_readids]);
-	
-		print "Coallating concordant read ids\n";
-		$runner->run("$sort_cmd -u -m #<A > #>1", [$cdna_concordant_readids, $rrna_end_1_readids, $rrna_end_2_readids, $cdna_pair_readids, $ig_readids, @all_prefilter_pair_readids], [$concordant_readids]);
+	my $prefilter_out_num = 1;
+	foreach my $prefilter_fasta (@prefilter_fastas)
+	{
+		print "Finding concordant alignments to prefilter fasta $prefilter_fasta\n";
+		my $prefilter_pair_sam = get_local_filename("prefilter.".$prefilter_out_num.".pair.sam");
+		my $prefilter_pair_readids = get_local_filename("prefilter.".$prefilter_out_num.".pair.readids");
+		$runner->run("$align_pair_bin $prefilter_fasta -1 #<1 -2 #<2 #>1", [$reads_end_1_fastq, $reads_end_2_fastq], [$prefilter_pair_sam]);
+		$runner->run("$filter_sam_concordant_script < #<1 | $sam_readids_script > #>1", [$prefilter_pair_sam], [$prefilter_pair_readids]);
+		
+		push @concordant_readids, $prefilter_pair_readids;
+		$prefilter_out_num++;
 		
 		if (lc($remove_job_temp_files) eq "yes")
 		{
-			unlink $cdna_pair_readids;
-			unlink @all_prefilter_pair_readids;
-			unlink $cdna_end_1_ig_readids;
-			unlink $cdna_end_2_ig_readids;
-			unlink $ig_readids;
+			unlink $prefilter_pair_sam;
 		}
 	}
 	
+	print "Excluding IG rearrangements\n";
+	my $cdna_end_1_ig_readids = get_local_filename("cdna.ig.end.1.readids");
+	my $cdna_end_2_ig_readids = get_local_filename("cdna.ig.end.2.readids");
+	my $ig_readids = get_local_filename("ig.readids");
+	$runner->run("$filter_sam_mapped_script < #<1 | $filter_sam_genes_script $ig_gene_list | $sam_readids_script > #>1", [$cdna_end_1_sam], [$cdna_end_1_ig_readids]);
+	$runner->run("$filter_sam_mapped_script < #<1 | $filter_sam_genes_script $ig_gene_list | $sam_readids_script > #>1", [$cdna_end_2_sam], [$cdna_end_2_ig_readids]);
+	$runner->run("$intersect_script #<1 #<2 > #>1", [$cdna_end_1_ig_readids, $cdna_end_2_ig_readids], [$ig_readids]);
+	push @concordant_readids, $ig_readids;
+
+	print "Coallating concordant read ids\n";
+	my $all_concordant_readids = get_local_filename("concordant.readids");
+	$runner->run("cat #<A > #>1", [@concordant_readids], [$all_concordant_readids]);
+
 	print "Extracting aligned read ids\n";
-	my $cdna_end_1_readids = get_local_filename("cdna.end.1.readids");
-	my $cdna_end_2_readids = get_local_filename("cdna.end.2.readids");
-	my $cdna_all_readids = get_local_filename("cdna.all.readids");
-	my $cdna_aligned_readids = get_local_filename("cdna.aligned.readids");
-	my $cdna_unaligned_readids = get_local_filename("cdna.unaligned.readids");
-	my $discordant_aligned_readids = get_local_filename("discordant.aligned.readids");
-	my $discordant_unaligned_readids = get_local_filename("discordant.unaligned.readids");	
-	$runner->run("$filter_sam_mapped_script < #<1 | $sam_readids_script | uniq | $sort_cmd -u > #>1", [$cdna_end_1_sam], [$cdna_end_1_readids]);
-	$runner->run("$filter_sam_mapped_script < #<1 | $sam_readids_script | uniq | $sort_cmd -u > #>1", [$cdna_end_2_sam], [$cdna_end_2_readids]);
-	$runner->run("$sort_cmd -m #<1 #<2 | uniq > #>1", [$cdna_end_1_readids, $cdna_end_2_readids], [$cdna_all_readids]);
-	$runner->run("join #<1 #<2 > #>1", [$cdna_end_1_readids, $cdna_end_2_readids], [$cdna_aligned_readids]);
-	$runner->run("join -v 1 -v 2 #<1 #<2 > #>1", [$cdna_end_1_readids, $cdna_end_2_readids], [$cdna_unaligned_readids]);
-	$runner->run("join -v 1 #<1 #<2 > #>1", [$cdna_aligned_readids, $concordant_readids], [$discordant_aligned_readids]);
-	$runner->run("join -v 1 #<1 #<2 > #>1", [$cdna_unaligned_readids, $concordant_readids], [$discordant_unaligned_readids]);
+	my $aligned_end_1_readids = get_local_filename("aligned.end.1.readids");
+	my $aligned_end_2_readids = get_local_filename("aligned.end.2.readids");
+	my $aligned_all_readids = get_local_filename("aligned.all.readids");
+	my $spanning_readids = get_local_filename("spanning.readids");
+	my $anchored_readids = get_local_filename("anchored.readids");
+	$runner->run("cat #<1 #<2 | $filter_sam_mapped_script | $filter_sam_readids_script -i #<3 | $sam_readids_script > #>1", [$cdna_end_1_sam, $dna_end_1_sam, $all_concordant_readids], [$aligned_end_1_readids]);
+	$runner->run("cat #<1 #<2 | $filter_sam_mapped_script | $filter_sam_readids_script -i #<3 | $sam_readids_script > #>1", [$cdna_end_2_sam, $dna_end_2_sam, $all_concordant_readids], [$aligned_end_2_readids]);
+	$runner->run("cat #<1 #<2 > #>1", [$aligned_end_1_readids, $aligned_end_2_readids], [$aligned_all_readids]);
+	$runner->run("$intersect_script #<1 #<2 > #>1", [$aligned_end_1_readids, $aligned_end_2_readids], [$spanning_readids]);
+	$runner->run("$disjoint_script #<1 #<2 > #>1", [$aligned_end_1_readids, $aligned_end_2_readids], [$anchored_readids]);
 	
 	print "Dividing sam output files\n";
-	my $discordant_aligned_sam = get_local_filename("discordant.aligned.sam");
-	my $discordant_unaligned_sam = get_local_filename("discordant.unaligned.sam");
-	$runner->run("cat #<1 #<2 | $filter_sam_readids_script #<3 | $sort_cmd > #>1", [$cdna_end_1_sam, $cdna_end_2_sam, $discordant_aligned_readids], [$discordant_aligned_sam]);
-	$runner->run("cat #<1 #<2 | $filter_sam_readids_script #<3 | $sort_cmd > #>1", [$cdna_end_1_sam, $cdna_end_2_sam, $discordant_unaligned_readids], [$discordant_unaligned_sam]);
+	my $spanning_sam = get_local_filename("spanning.sam");
+	my $anchored_sam = get_local_filename("anchored.sam");
+	$runner->run("cat #<1 #<2 #<3 #<4 | $filter_sam_mapped_script | $filter_sam_readids_script #<5 > #>1", [$cdna_end_1_sam, $cdna_end_2_sam, $dna_end_1_sam, $dna_end_2_sam, $spanning_readids], [$spanning_sam]);
+	$runner->run("cat #<1 #<2 #<3 #<4 | $filter_sam_mapped_script | $filter_sam_readids_script #<5 > #>1", [$cdna_end_1_sam, $cdna_end_2_sam, $dna_end_1_sam, $dna_end_2_sam, $anchored_readids], [$anchored_sam]);
 	
 	print "Converting sam to bam\n";
 	my $cdna_pair_bam_prefix = $cdna_pair_bam.".sort";
-	my $discordant_aligned_bam_prefix = $discordant_aligned_bam.".sort";
-	my $discordant_unaligned_bam_prefix = $discordant_unaligned_bam.".sort";
+	my $spanning_bam_prefix = $spanning_bam.".sort";
+	my $spanning_byread_bam_prefix = $spanning_byread_bam.".sort";
+	my $anchored_bam_prefix = $anchored_bam.".sort";
 	$runner->run("$samtools_bin view -bt $cdna_fasta_index #<1 | $samtools_bin sort -o - $cdna_pair_bam_prefix > #>1", [$cdna_pair_sam], [$cdna_pair_bam]);
-	$runner->run("$samtools_bin view -bt $cdna_gene_fasta_index #<1 | $samtools_bin sort -o - $discordant_aligned_bam_prefix > #>1", [$discordant_aligned_sam], [$discordant_aligned_bam]);
-	$runner->run("$samtools_bin view -bt $cdna_gene_fasta_index #<1 | $samtools_bin sort -o - $discordant_unaligned_bam_prefix > #>1", [$discordant_unaligned_sam], [$discordant_unaligned_bam]);
+	$runner->run("$samtools_bin view -bt $reference_fasta_index #<1 | $samtools_bin sort -o - $spanning_bam_prefix > #>1", [$spanning_sam], [$spanning_bam]);
+	$runner->run("$samtools_bin view -bt $reference_fasta_index #<1 | $samtools_bin sort -on - $spanning_byread_bam_prefix > #>1", [$spanning_sam], [$spanning_byread_bam]);
+	$runner->run("$samtools_bin view -bt $reference_fasta_index #<1 | $samtools_bin sort -o - $anchored_bam_prefix > #>1", [$anchored_sam], [$anchored_bam]);
 }
 
 print "Finished Alignments\n";

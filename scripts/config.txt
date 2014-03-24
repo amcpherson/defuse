@@ -1,64 +1,52 @@
 #
-# Configuration file for deFuse
+# Configuration file for defuse
 #
-# At a minimum, change all values enclused by []
+# At a minimum, change all values enclosed by []
 #
 
-# Directory where you have decompressed your dataset
-dataset_dir                                 = [Where you unpacked or intend to store the dataset]
-dataset_prefix                              = $(dataset_dir)/Homo_sapiens.GRCh37.59
+# Directory where the defuse code was unpacked
+source_directory                            = [Where you unpacked the defuse code]
 
-# Local directory acessible by individual cluster jobs
-cluster_dir                                 = $(dataset_dir)
-cluster_prefix                              = $(cluster_dir)/Homo_sapiens.GRCh37.59
+# Directory where you want your dataset
+dataset_directory                           = [Where you intend to store the dataset]
+
+# Input genome and gene models
+gene_models                                 = [Gene models gtf file downloaded from ensembl or similar]
+genome_fasta                                = [Genome fasta]
+
+# Repeat table from ucsc genome browser
+repeats_filename                            = [Repeats table downloaded from ucsc]
+
+# EST info downloaded from ucsc genome browser
+est_fasta                                   = [EST fasta downloaded from ucsc]
+est_alignments                              = [spliced EST alignments downloaded from ucsc]
+
+# Unigene clusters downloaded from ncbi
+unigene_fasta                               = [Unigene fasta downloaded from ncbi]
+
+# Paths to external tools
+bowtie_bin                                  = [path of your bowtie binary version 0.12.5 or greater recommended]
+bowtie_build_bin                            = [path of your bowtie-build binary version 0.12.5 or greater recommended]
+blat_bin                                    = [path of your blat binary]
+fatotwobit_bin                              = [path of your faToTwoBit binary from the blat suite]
+r_bin                                       = R
+rscript_bin                                 = Rscript
 
 # Dataset files
-gene_models                                 = $(dataset_prefix).gtf
-genome_fasta                                = $(dataset_prefix).dna.fa
-intron_regions                              = $(dataset_prefix).intron.regions
-intronic_fasta                              = $(dataset_prefix).intronic.fa
+dataset_prefix                              = $(dataset_directory)/defuse
+chromosome_prefix                           = $(dataset_prefix).dna.chromosomes
 exons_fasta                                 = $(dataset_prefix).exons.fa
-exons_regions                               = $(dataset_prefix).exons.regions
 cds_fasta                                   = $(dataset_prefix).cds.fa
-utr5p_fasta                                 = $(dataset_prefix).utr5p.fa
-utr3p_fasta                                 = $(dataset_prefix).utr3p.fa
 cdna_regions                                = $(dataset_prefix).cdna.regions
 cdna_fasta                                  = $(dataset_prefix).cdna.fa
-cdna_ext_fasta                              = $(dataset_prefix).cdna.ext.fa
-cdna_ext_regions                            = $(dataset_prefix).cdna.ext.regions
-gene_regions                                = $(dataset_prefix).gene.regions
-gene_fasta                                  = $(dataset_prefix).gene.fa
-cdna_gene_fasta                             = $(dataset_prefix).cdna.gene.fa
-cdna_gene_regions                           = $(dataset_prefix).cdna.gene.regions
-tss_regions                                 = $(dataset_prefix).gene.tss.regions
-tts_regions                                 = $(dataset_prefix).gene.tts.regions
-upstream_fasta                              = $(dataset_prefix).upstream.fa
-downstream_fasta                            = $(dataset_prefix).downstream.fa
+reference_fasta                             = $(dataset_prefix).reference.fa
 rrna_fasta                                  = $(dataset_prefix).rrna.fa
 ig_gene_list                                = $(dataset_prefix).ig.gene.list
-gene_info_list                              = $(dataset_prefix).gene.info.list
-gene_adj_list                               = $(dataset_prefix).gene.adj.list
-gene_tran_list                              = $(dataset_prefix).genetran.list
-est_fasta                                   = $(dataset_dir)/est.fa
-est_alignments                              = $(dataset_dir)/intronEst.txt
-
-# Fasta files with bowtie indices, accessible by individual alignment jobs, possibly locally stored on cluster nodes
-#  If you wish to have files local to a cluster's execution nodes, these can be different than the 
-#  non-cluster equivalents, otherwise they could be set the same as cdna_fasta and cdna_gene_fasta
-cdna_fasta_cluster                          = $(cluster_prefix).cdna.fa
-cdna_gene_fasta_cluster                     = $(cluster_prefix).cdna.gene.fa
+repeats_regions                             = $(dataset_directory)/repeats.regions
+est_split_catalog                           = $(dataset_directory)/est.fa.split.catalog
 
 # Fasta files with bowtie indices for prefiltering reads for concordantly mapping pairs
-#  Accessed only by individual jobs, thus these files could be put in the local directory 
-#  of each cluster node if a cluster is being used. 
-prefilter1                                  = $(cluster_dir)/Homo_sapiens.GRCh37.59.dna.fa
-prefilter2                                  = $(cluster_dir)/Hs.seq.uniq
-
-# Repeats downloaded from ucsc and formatted, included in dataset for hg19
-repeats_filename                            = $(dataset_dir)/repeats.txt
-
-# Path where you unpacked the source
-source_directory                            = [where you unpacked the source code]
+prefilter1                                  = $(unigene_fasta)
 
 # deFuse scripts and tools
 scripts_directory                           = $(source_directory)/scripts
@@ -68,38 +56,31 @@ data_directory                              = $(source_directory)/data
 # Path to samtools, 0.1.8 is compiled for you, use other versions at your own risk
 samtools_bin                                = $(source_directory)/external/samtools-0.1.8/samtools
 
-# Paths to executables and scripts
-bowtie_bin                                  = [path to your bowtie binary version 0.12.5 or greater recommended]
-bowtie_build_bin                            = [path to your bowtie-build binary version 0.12.5 or greater recommended]
+# Bowtie parameters
 bowtie_threads                              = 1
 bowtie_quals                                = --phred33-quals
-blat_bin                                    = [path to your blat binary, 64-bit recommended]
-r_bin                                       = [path to R binary]
-rscript_bin                                 = [path to Rscript binary]
+max_insert_size                             = 500
 
 # Parameters for building the dataset
+chromosomes                                 = 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,X,Y,MT
+mt_chromosome                               = MT
 gene_sources                                = IG_C_gene,IG_D_gene,IG_J_gene,IG_V_gene,processed_transcript,protein_coding
-chromosomes                                 = 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,X,Y
-ig_gene_sources                             = IG_C_gene,IG_D_gene,IG_J_gene,IG_V_gene
+ig_gene_sources                             = IG_C_gene,IG_D_gene,IG_J_gene,IG_V_gene,IG_pseudogene
 rrna_gene_sources                           = Mt_rRNA,rRNA,rRNA_pseudogene
-utr_extend                                  = 2000
-cdna_utr_extend                             = 500
-rrna_extend                                 = 100
 
-# Max insert size considered by bowtie
-max_insert_size                             = 500
+# Blat sequences per job
+num_blat_sequences                          = 10000
+
+# Minimum gene fusion range
+dna_concordant_length                       = 2000
 
 # Trim length for discordant reads (split reads are not trimmed)
 discord_read_trim                           = 50
 
 # Filtering parameters
 clustering_precision                        = 0.95
-span_coverage_threshold                     = 0.2
 span_count_threshold                        = 5
 split_count_threshold                       = 3
-split_pos_pvalue_threshold                  = 0.05
-split_min_pvalue_threshold                  = 0.05
-span_length_pvalue_threshold                = 0.05
 percent_identity_threshold                  = 0.90
 max_dist_pos                                = 600
 num_dist_genes                              = 500
@@ -107,12 +88,8 @@ split_min_anchor                            = 4
 max_concordant_ratio                        = 0.1
 splice_bias                                 = 10
 denovo_assembly                             = no
-genome_breakseq_threshold                   = 0.1
-cdna_breakseq_threshold                     = 0.1
-est_breakseq_threshold                      = 0.2
-estislands_breakseq_threshold               = 0.2
 positive_controls                           = $(data_directory)/controls.txt
-probability_threshold                       = 0.6
+probability_threshold                       = 0.50
 
 # Position density when calculating covariance
 covariance_sampling_density                 = 0.01

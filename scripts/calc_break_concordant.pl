@@ -10,6 +10,7 @@ use List::Util qw[min max];
 
 use lib dirname($0);
 use configdata;
+use gene_models;
 
 my @usage;
 push @usage, "Usage: ".basename($0)." [options]\n";
@@ -42,10 +43,8 @@ my $config = configdata->new();
 $config->read($config_filename);
 
 # Config values
-my $cdna_gene_regions		= $config->get_value("cdna_gene_regions");
-my $cdna_regions		= $config->get_value("cdna_regions");
-my $gene_tran_list			= $config->get_value("gene_tran_list");
-my $splice_bias             = $config->get_value("splice_bias");
+my $gene_models_filename	= $config->get_value("gene_models");
+my $splice_bias				= $config->get_value("splice_bias");
 my $samtools_bin			= $config->get_value("samtools_bin");
 
 # Require concordant alignments bam
@@ -59,17 +58,8 @@ get_stats($read_stats, \%read_stat_values);
 # Approximate max fragment length
 my $max_fragment_length = int($read_stat_values{"fraglength_mean"} + 3 * $read_stat_values{"fraglength_stddev"});
 
-# Read in the gene transcripts
-my %gene_transcripts;
-read_gene_transcript($gene_tran_list, \%gene_transcripts);
-
-# Read in the cdna regions
-my %cdna;
-read_regions($cdna_regions, \%cdna);
-
-# Read in the cdna gene regions
-my %cdna_gene;
-read_regions($cdna_gene_regions, \%cdna_gene);
+# Read in the gene models
+my $gene_models = gene_models->new($gene_models_filename);
 
 # Read the breakpoints file
 my %breaks;
@@ -77,16 +67,7 @@ read_breaks($breaks_filename, \%breaks);
 
 # Calculate break concordant
 my %break_concordant;
-calculate_break_concordant(\%breaks, \%cdna, \%cdna_gene, \%gene_transcripts, $cdna_bam_filename, $max_fragment_length, $splice_bias, \%break_concordant);
-
-# Output
-foreach my $cluster_id (keys %break_concordant)
-{
-	foreach my $cluster_end (keys %{$break_concordant{$cluster_id}})
-	{
-		print $cluster_id."\t".$cluster_end."\t".$break_concordant{$cluster_id}{$cluster_end}."\n";
-	}
-}
+calculate_break_concordant(\%breaks, $gene_models, $cdna_bam_filename, $max_fragment_length, $splice_bias, \%break_concordant);
 
 sub read_breaks
 {
@@ -112,62 +93,10 @@ sub read_breaks
 	close BR;
 }
 
-sub read_gene_transcript
-{
-	my $gene_tran_filename = shift;
-	my $gene_tran_ref = shift;
-	
-	# Read in gene transcript mapping
-	open GT, $gene_tran_filename or die "Error: Unable to open $gene_tran_filename: $!\n";
-	while (<GT>)
-	{
-		chomp;
-		my @fields = split /\t/;
-		
-		my $ensgene = $fields[0];
-		my $enstran = $fields[1];
-		
-		push @{$gene_tran_ref->{$ensgene}}, $enstran;
-	}
-	close GT;
-}
-
-sub read_regions
-{
-	my $regions_filename = shift;
-	my $regions_hash_ref = shift;
-
-	open REG, $regions_filename or die;
-	while (<REG>)
-	{
-		chomp;
-		my @fields = split /\t/;
-		
-		my $gene = $fields[0];
-		my $chromosome = $fields[1];
-		my $strand = $fields[2];
-	
-		my @exons;
-		my $fieldindex = 4;
-		while ($fieldindex <= $#fields)
-		{
-			push @exons, [$fields[$fieldindex-1],$fields[$fieldindex]];
-			$fieldindex += 2;
-		}
-		
-		$regions_hash_ref->{$gene}{chromosome} = $chromosome;
-		$regions_hash_ref->{$gene}{strand} = $strand;
-		$regions_hash_ref->{$gene}{exons} = [@exons];
-	}
-	close REG;
-}
-
 sub calculate_break_concordant
 {
 	my $breaks_ref = shift;
-	my $cdna_ref = shift;
-	my $cdna_gene_ref = shift;
-	my $gene_transcripts_ref = shift;
+	my $gene_models = shift;
 	my $cdna_bam_filename = shift;
 	my $max_fragment_length = shift;
 	my $splice_bias = shift;
@@ -181,31 +110,33 @@ sub calculate_break_concordant
 			my $strand = $breaks_ref->{$cluster_id}{$cluster_end}{strand};
 			my $breakpos = $breaks_ref->{$cluster_id}{$cluster_end}{breakpos};
 			
-			$reference =~ /(ENSG\d+)/;
-			my $gene = $1;
+			my $gene_id = $gene_models->calc_gene($reference, $breakpos);
+			my $gene_location = $gene_models->calc_gene_location($gene_id, $breakpos);
+			
+			next if $gene_location eq "upstream" or $gene_location eq "downstream";
 			
 			# Find the genomic position of the break with bias
 			my $breakpos_genomic;
 			if ($strand eq "+")
 			{
-				$breakpos_genomic = calc_genomic_position($breakpos - $splice_bias, $cdna_gene_ref->{$reference}) + $splice_bias;
+				$breakpos_genomic = $gene_models->calc_genomic_position($reference, $breakpos - $splice_bias) + $splice_bias;
 			}
 			elsif ($strand eq "-")
 			{
-				$breakpos_genomic = calc_genomic_position($breakpos + $splice_bias, $cdna_gene_ref->{$reference}) - $splice_bias;
+				$breakpos_genomic = $gene_models->calc_genomic_position($reference, $breakpos + $splice_bias) - $splice_bias;
 			}
 			
 			# Find position of break in each cdna
 			# Count the number of concordant reads spanning the breakpoint
 			my $concordant_count = 0;
-			foreach my $transcript (@{$gene_transcripts_ref->{$gene}})
+			foreach my $transcript_id (keys %{$gene_models->{genes}{$gene_id}{transcripts}})
 			{
 				# Find position of break in cdna space
-				my $breakpos_transcript = calc_transcript_position($breakpos_genomic, $cdna_ref->{$transcript});
+				my $breakpos_transcript = $gene_models->calc_transcript_position($transcript_id, $breakpos_genomic);
 				
 				my $query_start_pos = max(1, $breakpos_transcript - $max_fragment_length);
 				my $query_end_pos = $breakpos_transcript + $max_fragment_length;
-				my $query_pos = $transcript.":".$query_start_pos."-".$query_end_pos;
+				my $query_pos = $transcript_id.":".$query_start_pos."-".$query_end_pos;
 				
 				# Read in potential spanning alignments
 				open TA, "$samtools_bin view $cdna_bam_filename '$query_pos' |" or die "Error: Unable to run samtools on $cdna_bam_filename: $!\n";
@@ -225,7 +156,7 @@ sub calculate_break_concordant
 					my $read_align_start = int($pos);
 					my $read_align_end = int($pos + length($seq) - 1);
 					
-					$transcript eq $rname or die "Error: samtools retrieived alignments to $rname when alignments to $transcript were requested\n";
+					$transcript_id eq $rname or die "Error: samtools retrieived alignments to $rname when alignments to $transcript_id were requested\n";
 
 					$qname_alignment{$qname}{$read_align_strand} = [$read_align_start,$read_align_end];
 				}
@@ -243,7 +174,7 @@ sub calculate_break_concordant
 				}
 			}
 			
-			$break_concordant_ref->{$cluster_id}{$cluster_end} = $concordant_count;
+			print $cluster_id."\t".$cluster_end."\t".$concordant_count."\n";
 		}
 	}
 }
