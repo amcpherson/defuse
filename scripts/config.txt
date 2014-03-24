@@ -7,33 +7,43 @@
 # source_directory = /path/to/defuse
 #
 
+ensembl_version                             = 69
+ensembl_genome_version                      = GRCh37
+ucsc_genome_version                         = hg19
+
 # Directory where the defuse code was unpacked
 source_directory                            = [Where you unpacked the defuse code]
 
 # Directory where you want your dataset
-dataset_directory                           = [Where you intend to store the dataset]
+dataset_directory                           = [Where you intend to store the reference dataset]
 
 # Input genome and gene models
-gene_models                                 = [Gene models gtf file downloaded from ensembl or similar]
-genome_fasta                                = [Genome fasta]
+gene_models                                 = $(dataset_directory)/Homo_sapiens.$(ensembl_genome_version).$(ensembl_version).gtf
+genome_fasta                                = $(dataset_directory)/Homo_sapiens.$(ensembl_genome_version).$(ensembl_version).dna.chromosomes.fa
 
 # Repeat table from ucsc genome browser
-repeats_filename                            = [Repeats table downloaded from ucsc]
+repeats_filename                            = $(dataset_directory)/repeats.txt
 
 # EST info downloaded from ucsc genome browser
-est_fasta                                   = [EST fasta downloaded from ucsc]
-est_alignments                              = [spliced EST alignments downloaded from ucsc]
+est_fasta                                   = $(dataset_directory)/est.fa
+est_alignments                              = $(dataset_directory)/intronEst.txt
 
 # Unigene clusters downloaded from ncbi
-unigene_fasta                               = [Unigene fasta downloaded from ncbi]
+unigene_fasta                               = $(dataset_directory)/Hs.seq.uniq
 
 # Paths to external tools
+samtools_bin                                = [path of your samtools binary]
 bowtie_bin                                  = [path of your bowtie binary version 0.12.5 or greater recommended]
 bowtie_build_bin                            = [path of your bowtie-build binary version 0.12.5 or greater recommended]
 blat_bin                                    = [path of your blat binary]
 fatotwobit_bin                              = [path of your faToTwoBit binary from the blat suite]
 r_bin                                       = [path of your R binary]
 rscript_bin                                 = [path of your Rscript binary]
+gmap_bin                                    = [path of your gmap binary]
+gmap_setup_bin                              = [path of your gmap_setup binary]
+
+# Directory where you want your dataset
+gmap_index_directory                        = $(dataset_directory)/gmap
 
 # Dataset files
 dataset_prefix                              = $(dataset_directory)/defuse
@@ -63,9 +73,6 @@ prefilter1                                  = $(unigene_fasta)
 scripts_directory                           = $(source_directory)/scripts
 tools_directory                             = $(source_directory)/tools
 data_directory                              = $(source_directory)/data
-
-# Path to samtools, 0.1.8 is compiled for you, use other versions at your own risk
-samtools_bin                                = $(source_directory)/external/samtools-0.1.8/samtools
 
 # Bowtie parameters
 bowtie_threads                              = 1

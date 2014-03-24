@@ -55,7 +55,6 @@ my $genome_fasta			= $config->get_value("genome_fasta");
 my $cdna_fasta				= $config->get_value("cdna_fasta");
 my $exons_fasta				= $config->get_value("exons_fasta");
 my $cds_fasta				= $config->get_value("cds_fasta");
-my $rrna_fasta				= $config->get_value("rrna_fasta");
 my $est_fasta				= $config->get_value("est_fasta");
 my $est_alignments			= $config->get_value("est_alignments");
 my $repeats_regions			= $config->get_value("repeats_regions");
@@ -89,14 +88,18 @@ sub get_splice_seq
 	my $position = shift;
 	my $strand = shift;
 	
+	my $seq;
 	if ($strand eq "+")
 	{
-		return $genome_db->seq($chromosome, $position + 1, $position + 2);
+		$seq = $genome_db->seq($chromosome, $position + 1, $position + 2);
 	}
 	elsif ($strand eq "-")
 	{
-		return revcomp($genome_db->seq($chromosome, $position - 2, $position - 1));
+		$seq = revcomp($genome_db->seq($chromosome, $position - 2, $position - 1));
 	}
+	defined $seq or die "Error: unable to obtain sequence at $chromosome:$position\n";
+	
+	return $seq;
 }
 
 sub calc_edit_dist
@@ -132,9 +135,6 @@ my $runner = cmdrunner->new();
 $runner->name("annotate");
 $runner->prefix($log_prefix);
 
-my $fusionreads_genome_psl = $output_directory."/fusionreads.genome.psl";
-my $fusionreads_cdna_psl = $output_directory."/fusionreads.cdna.psl";
-my $fusionreads_rrna_psl = $output_directory."/fusionreads.rrna.psl";
 my $breakpoints_genome_psl = $output_directory."/breakpoints.genome.psl";
 my $breakpoints_genome_nointron_psl = $output_directory."/breakpoints.genome.nointron.psl";
 my $breakpoints_cdna_psl = $output_directory."/breakpoints.cdna.psl";
@@ -364,7 +364,7 @@ my $cdna_pair_bam_prefix = $cdna_pair_bam.".sort";
 $runner->run("$samtools_bin view -bt $cdna_fasta_index #<1 | $samtools_bin sort -o - $cdna_pair_bam_prefix > #>1", [$cdna_pair_sam], [$cdna_pair_bam]);
 $runner->padd("$samtools_bin index #<1 #>1", [$cdna_pair_bam], [$cdna_pair_bam_bai]);
 
-# Calculate break concordant counts
+# Calculate mapping statistics
 my %mapping_stats;
 calculate_mapping_stats(\%mapping_stats);
 
@@ -512,25 +512,6 @@ my %cds_target_region;
 
 find_alignregion($breakpoints_exons_psl, \%exon_align_strand, \%exon_query_region, \%exon_target_region);
 find_alignregion($breakpoints_cds_psl, \%cds_align_strand, \%cds_query_region, \%cds_target_region);
-
-my %concordant_reads;
-find_concordant_reads($fusionreads_genome_psl, \%concordant_reads, $genome_max_ins);
-find_concordant_reads($fusionreads_cdna_psl, \%concordant_reads, $cdna_max_ins);
-find_anchored_concordant_reads($fusionreads_rrna_psl, \%concordant_reads);
-
-my %concordant_ratio;
-foreach my $cluster_id (keys %fusion_span_count)
-{
-	my $span_count = $fusion_span_count{$cluster_id};
-	
-	my $concordant_fragments = 0;
-	foreach my $fragment_id (keys %{$fusion_fragments{$cluster_id}})
-	{
-		$concordant_fragments++ if $concordant_reads{$fragment_id};
-	}
-
-	$concordant_ratio{$cluster_id} = $concordant_fragments / $span_count;
-}
 
 my $minimum_coverage = $read_stat_values{"fraglength_mean"} - $read_stat_values{"readlength_min"};
 
@@ -842,7 +823,6 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\taltsplice\t".$altsplice{$cluster_id}."\n";
 	
 	print $cluster_id."\tspan_count\t".$fusion_span_count{$cluster_id}."\n";
-	print $cluster_id."\tconcordant_ratio\t".$concordant_ratio{$cluster_id}."\n";
 	print $cluster_id."\tgenome_breakseqs_percident\t".$breakseqs_percident{genome}{$cluster_id}."\n";
 	print $cluster_id."\tcdna_breakseqs_percident\t".$breakseqs_percident{cdna}{$cluster_id}."\n";
 	print $cluster_id."\test_breakseqs_percident\t".$breakseqs_percident{est}{$cluster_id}."\n";
@@ -955,91 +935,6 @@ sub read_clusters
 		$clusters_hash_ref->{$cluster_id}{$cluster_end}{$fragment_id}{end} = $end;
 	}
 	close CLU;
-}
-
-sub find_concordant_reads
-{
-	my $fusionreads_psl = shift;
-	my $concordant_ref = shift;
-	my $max_insert_size = shift;
-	
-	my %read_align;
-		
-	open PSL, $fusionreads_psl or die "Error: Unable to open $fusionreads_psl\n";
-	while (<PSL>)
-	{
-		chomp;
-		my @psl_fields = split /\t/;
-		
-		my $matches = $psl_fields[0];
-		my $read_id = $psl_fields[9];
-		my $qsize = $psl_fields[10];
-		my $align_chr = $psl_fields[13];
-		my $align_start = $psl_fields[15];
-		my $align_end = $psl_fields[16];
-		my $align_strand = $psl_fields[8];
-	
-		$read_id =~ /(.*)\/([12])/;
-		my $fragment_id = $1;
-		my $read_end = $2;
-
-		my $percent_identity = $matches / $qsize;
-		next if $percent_identity < $percident_threshold;
-		
-		push @{$read_align{$fragment_id}{$read_end}}, [$align_chr,$align_strand,$align_start,$align_end];
-	}
-	close PSL;
-	
-	foreach my $fragment_id (keys %fragment_ids)
-	{
-		foreach my $aligninfo1 (@{$read_align{$fragment_id}{'1'}})
-		{
-			foreach my $aligninfo2 (@{$read_align{$fragment_id}{'2'}})
-			{
-				next unless $aligninfo1->[0] eq $aligninfo2->[0];
-
-				if (abs($aligninfo2->[2] - $aligninfo1->[3]) < $max_insert_size)
-				{
-					$concordant_ref->{$fragment_id} = 1;
-				}
-				elsif (abs($aligninfo1->[2] - $aligninfo2->[3]) < $max_insert_size)
-				{
-					$concordant_ref->{$fragment_id} = 1;
-				}
-				
-				last if defined $concordant_ref->{$fragment_id};
-			}
-			
-			last if defined $concordant_ref->{$fragment_id};
-		}
-	}
-}
-
-sub find_anchored_concordant_reads
-{
-	my $fusionreads_psl = shift;
-	my $concordant_ref = shift;
-	
-	open PSL, $fusionreads_psl or die "Error: Unable to open $fusionreads_psl\n";
-	while (<PSL>)
-	{
-		chomp;
-		my @psl_fields = split /\t/;
-
-		my $matches = $psl_fields[0];
-		my $qsize = $psl_fields[10];
-		my $read_id = $psl_fields[9];
-
-		my $percent_identity = $matches / $qsize;	
-		next if $percent_identity < $percident_threshold;
-
-		$read_id =~ /(.*)\/([12])/;
-		my $fragment_id = $1;
-		my $read_end = $2;
-
-		$concordant_ref->{$fragment_id} = 1;
-	}
-	close PSL;
 }
 
 sub find_breakseqs_percident

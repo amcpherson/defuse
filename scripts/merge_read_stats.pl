@@ -20,6 +20,11 @@ sub get_stats
 
 	my @keys = split /\t/, $stats[0];
 	my @values = split /\t/, $stats[1];
+	
+	while (scalar @keys > scalar @values)
+	{
+		push @values, "";
+	}
 
 	scalar @keys == scalar @values or die "Error: Stats file $stats_filename with column mismatch\n";
 

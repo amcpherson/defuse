@@ -273,12 +273,12 @@ def uptodate(inputs, outputs, remarks=[]):
 
 class cmdrun(object):
 
-	def __init__(self, name, workdir, log_filename, job_type="direct", job_mem="2", max_parallel=200):
+	def __init__(self, name, workdir, log_filename, job_type="direct", job_mem = "2"):
 		self.name = name
 		self.workdir = workdir
 		self.prefix = workdir + "/" + name
 		self.log_filename = log_filename
-		self.max_parallel = max_parallel
+		self.max_parallel = 200
 		self.file_timeout = 100
 		self.jobmem = job_mem
 		self.jobs = []

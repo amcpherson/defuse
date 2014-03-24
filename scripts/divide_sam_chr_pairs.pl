@@ -157,7 +157,7 @@ while (<>)
 	}
 	
 	$current_fragment_id = $fragment_id;
-	push @{$current_alignments{$read_end}{$chr}}, [$fragment_id,$read_end,$rname,$strand,$pos,$pos+length($seq)-1];
+	push @{$current_alignments{$read_end}{$chr}}, [$fragment_id,$read_end-1,$rname,$strand,$pos,$pos+length($seq)-1];
 }
 
 if (defined $current_fragment_id)

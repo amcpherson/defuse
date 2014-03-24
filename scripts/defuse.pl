@@ -107,7 +107,6 @@ my $cdna_fasta            = $config->get_value("cdna_fasta");
 my $cdna_regions          = $config->get_value("cdna_regions");
 my $exons_fasta           = $config->get_value("exons_fasta");
 my $cds_fasta             = $config->get_value("cds_fasta");
-my $rrna_fasta            = $config->get_value("rrna_fasta");
 my $est_fasta             = $config->get_value("est_fasta");
 my @est_split_fastas      = $config->get_list("est_split_fasta");
 my $ig_gene_list          = $config->get_value("ig_gene_list");
@@ -133,6 +132,8 @@ my $num_blat_sequences    = $config->get_value("num_blat_sequences");
 my $blat_bin              = $config->get_value("blat_bin");
 my $percident_threshold   = $config->get_value("percent_identity_threshold");
 my $dna_concordant_len    = $config->get_value("dna_concordant_length");
+my $gmap_bin              = $config->get_value("gmap_bin");
+my $gmap_index_directory  = $config->get_value("gmap_index_directory");
 
 my $cdna_fasta_fai        = $cdna_fasta.".fai";
 
@@ -235,7 +236,7 @@ $runner->name("defuse");
 $runner->prefix($log_prefix);
 $runner->maxparallel($max_parallel);
 $runner->submitter($submitter_type);
-$runner->jobmem(3000000000);
+$runner->jobmem(4000000000);
 
 # Fastq files and prefix for index and name map
 my $reads_prefix = $output_directory."/reads";
@@ -251,7 +252,7 @@ if (defined $source_directory)
 	print "Retreiving fastq files\n";
 	-d $source_directory or die "Error: Unable to find source directory $source_directory\n";
 	$source_directory = abs_path($source_directory);
-	$runner->run("$retreive_fastq_script -c $config_filename -d $source_directory -1 $reads_end_1_fastq -2 $reads_end_2_fastq -i $reads_index_filename -n $reads_names_filename -s $reads_sources_filename -f", [], []);
+	$runner->run("$retreive_fastq_script -c $config_filename -d $source_directory -1 $reads_end_1_fastq -2 $reads_end_2_fastq -i $reads_index_filename -n $reads_names_filename -s $reads_sources_filename", [], []);
 }
 
 print "Splitting fastq files\n";
@@ -397,7 +398,7 @@ print "Generating maximum parsimony solution\n";
 my $clusters_sc_all = $output_directory."/clusters.sc.all";
 $runner->jobmem(10000000000);
 $runner->run("$setcover_bin -m $span_count_threshold -c #<1 -o #>1", [$clusters], [$clusters_sc_all]);
-$runner->jobmem(3000000000);
+$runner->jobmem(4000000000);
 
 print "Selecting fusion clusters\n";
 my $clusters_sc_unfilt = $output_directory."/clusters.sc.unfilt";
@@ -456,25 +457,16 @@ my $splitreads_split_pval = $output_directory."/splitreads.split.pval";
 $runner->run("$evaluate_split_rscript #<1 #<2 #<3 #>1", [$splitpos_cov,$splitmin_cov,$splitreads_seq], [$splitreads_split_pval]);
 
 print "Creating fastas\n";
-my $fusionreads_fasta = $output_directory."/fusionreads.fa";
 my $breakpoints_fasta = $output_directory."/breakpoints.fa";
-$runner->run("$create_read_fasta_script #<1 $reads_prefix > #>1", [$clusters_sc], [$fusionreads_fasta]);
 $runner->run("cut -f1,2 #<1 | $make_fasta_script > #>1", [$splitreads_seq], [$breakpoints_fasta]);
 
 print "Splitting fastas\n";
-my $fusionreads_split_prefix = $job_directory."/fusionreads";
-my $fusionreads_split_catalog = $output_directory."/fusionreads.split.catalog";
 my $breakpoints_split_prefix = $job_directory."/breakpoints";
 my $breakpoints_split_catalog = $output_directory."/breakpoints.split.catalog";
-$runner->run("$split_fasta_script #<1 $num_blat_sequences $fusionreads_split_prefix > #>1", [$fusionreads_fasta], [$fusionreads_split_catalog]);
 $runner->run("$split_fasta_script #<1 $num_blat_sequences $breakpoints_split_prefix > #>1", [$breakpoints_fasta], [$breakpoints_split_catalog]);
-my @fusionreads_split_fastas = readsplitcatalog($fusionreads_split_catalog);
 my @breakpoints_split_fastas = readsplitcatalog($breakpoints_split_catalog);
 
-print "Blat alignments\n";
-my $fusionreads_genome_psl = $output_directory."/fusionreads.genome.psl";
-my $fusionreads_cdna_psl = $output_directory."/fusionreads.cdna.psl";
-my $fusionreads_rrna_psl = $output_directory."/fusionreads.rrna.psl";
+print "Breakpoint alignments\n";
 my $breakpoints_genome_psl = $output_directory."/breakpoints.genome.psl";
 my $breakpoints_genome_nointron_psl = $output_directory."/breakpoints.genome.nointron.psl";
 my $breakpoints_cdna_psl = $output_directory."/breakpoints.cdna.psl";
@@ -482,20 +474,18 @@ my $breakpoints_est_psl = $output_directory."/breakpoints.est.psl";
 my $breakpoints_exons_psl = $output_directory."/breakpoints.exons.psl";
 my $breakpoints_cds_psl = $output_directory."/breakpoints.cds.psl";
 
-my @blat_jobs;
-push @blat_jobs, [$fusionreads_fasta, $fusionreads_genome_psl, \@fusionreads_split_fastas, $genome_fasta, "", "genome"];
-push @blat_jobs, [$fusionreads_fasta, $fusionreads_cdna_psl, \@fusionreads_split_fastas, $cdna_fasta, "", "cdna"];
-push @blat_jobs, [$fusionreads_fasta, $fusionreads_rrna_psl, \@fusionreads_split_fastas, $rrna_fasta, "", "rrna"];
-push @blat_jobs, [$breakpoints_fasta, $breakpoints_genome_psl, \@breakpoints_split_fastas, $genome_fasta, "", "genome"];
-push @blat_jobs, [$breakpoints_fasta, $breakpoints_genome_nointron_psl, \@breakpoints_split_fastas, $genome_fasta, "-maxIntron=0", "genome.nointron"];
-push @blat_jobs, [$breakpoints_fasta, $breakpoints_cdna_psl, \@breakpoints_split_fastas, $cdna_fasta, "", "cdna"];
-push @blat_jobs, [$breakpoints_fasta, $breakpoints_est_psl, \@breakpoints_split_fastas, $est_fasta, "", "est"];
-push @blat_jobs, [$breakpoints_fasta, $breakpoints_exons_psl, \@breakpoints_split_fastas, $exons_fasta, "", "exons"];
-push @blat_jobs, [$breakpoints_fasta, $breakpoints_cds_psl, \@breakpoints_split_fastas, $cds_fasta, "", "cds"];
+my @breakpoint_jobs;
+push @breakpoint_jobs, [$breakpoints_fasta, $breakpoints_genome_psl, \@breakpoints_split_fastas, "genome", "", "genome"];
+push @breakpoint_jobs, [$breakpoints_fasta, $breakpoints_genome_nointron_psl, \@breakpoints_split_fastas, "genome", "--nosplicing", "genome.nointron"];
+push @breakpoint_jobs, [$breakpoints_fasta, $breakpoints_cdna_psl, \@breakpoints_split_fastas, "cdna", "", "cdna"];
+push @breakpoint_jobs, [$breakpoints_fasta, $breakpoints_est_psl, \@breakpoints_split_fastas, "est", "", "est"];
+push @breakpoint_jobs, [$breakpoints_fasta, $breakpoints_exons_psl, \@breakpoints_split_fastas, "exons", "", "exons"];
+push @breakpoint_jobs, [$breakpoints_fasta, $breakpoints_cds_psl, \@breakpoints_split_fastas, "cds", "", "cds"];
 
-doblatjobs(@blat_jobs);
+do_breakpoint_jobs(@breakpoint_jobs);
 
 print "Annotating fusions\n";
+$runner->jobmem(16000000000);
 my $annotations_filename = $output_directory."/annotations";
 $runner->run("$annotate_fusions_script -c $config_filename -o $output_directory -n $library_name > #>1", [$splitreads_span_pval,$splitreads_break,$splitreads_seq,$clusters_sc], [$annotations_filename]);
 
@@ -545,18 +535,18 @@ sub readsplitcatalog
 	return @split_prefixes;
 }
 
-sub doblatjobs
+sub do_breakpoint_jobs
 {
 	my @merge_jobs;
-	foreach my $blat_job (@_)
+	foreach my $breakpoint_job (@_)
 	{
-		my @blat_job_info = @{$blat_job};
+		my @breakpoint_job_info = @{$breakpoint_job};
 		
-		my $fasta = shift @blat_job_info;
-		my $psl = shift @blat_job_info;
+		my $fasta = shift @breakpoint_job_info;
+		my $psl = shift @breakpoint_job_info;
 		if (not cmdrunner::uptodate([$fasta], [$psl]))
 		{
-			my @split_psls = padd_doblatalignments(@blat_job_info);
+			my @split_psls = padd_do_breakpoint_alignments(@breakpoint_job_info);
 			push @merge_jobs, [\@split_psls, $psl];
 		}
 	}
@@ -569,60 +559,96 @@ sub doblatjobs
 	$runner->prun();
 }
 
-sub padd_doblatalignments
+sub padd_do_breakpoint_alignments
 {
 	my $split_fastas_ref = shift;
-	my $reference = shift;
-	my $blat_parameters = shift;
+	my $ref_name = shift;
+	my $parameters = shift;
 	my $align_name = shift;
 	
-	if ($reference eq $genome_fasta)
+	if ($ref_name eq "genome")
 	{
-		return padd_doblatalignments_genome($split_fastas_ref, $blat_parameters, $align_name);
+		return padd_do_gmap_alignments_genome($split_fastas_ref, $parameters, $align_name);
 	}
-	elsif ($reference eq $est_fasta)
+	elsif ($ref_name eq "est")
 	{
-		return padd_doblatalignments_est($split_fastas_ref, $blat_parameters, $align_name);
+		return padd_do_gmap_alignments_est($split_fastas_ref, $parameters, $align_name);
 	}
+	elsif ($ref_name eq "cds")
+	{
+		return padd_do_blat_alignments($split_fastas_ref, $cds_fasta, $parameters, $align_name);
+	}
+	elsif ($ref_name eq "exons")
+	{
+		return padd_do_blat_alignments($split_fastas_ref, $exons_fasta, $parameters, $align_name);
+	}
+	else
+	{
+		return padd_do_gmap_alignments($split_fastas_ref, $ref_name, $parameters, $align_name);
+	}
+}
+	
+sub padd_do_gmap_alignments
+{
+	my $split_fastas_ref = shift;
+	my $ref_name = shift;
+	my $parameters = shift;
+	my $align_name = shift;
 	
 	my @output_psls;
 	foreach my $split_fasta (@{$split_fastas_ref})
 	{
 		my $output_psl = $split_fasta.".".$align_name.".psl";
-		$runner->padd("$blat_bin -noHead $blat_parameters $reference.2bit #<1 #>1", [$split_fasta], [$output_psl]);
+		$runner->padd("$gmap_bin -D $gmap_index_directory -d $ref_name -f psl $parameters #<1 > #>1", [$split_fasta], [$output_psl]);
 		push @output_psls, $output_psl;
 	}
 	
 	return @output_psls;
 }
 
-sub padd_doblatalignments_genome
+sub padd_do_blat_alignments
 {
 	my $split_fastas_ref = shift;
-	my $blat_parameters = shift;
+	my $reference = shift;
+	my $parameters = shift;
 	my $align_name = shift;
 	
 	my @output_psls;
-	foreach my $chromosome (keys %chromosomes)
+	foreach my $split_fasta (@{$split_fastas_ref})
 	{
-		my $chromosome_fasta = $chromosome_prefix.".".$chromosome.".fa";
-		push @output_psls, padd_doblatalignments($split_fastas_ref, $chromosome_fasta, $blat_parameters, $align_name.".".$chromosome);
+		my $output_psl = $split_fasta.".".$align_name.".psl";
+		$runner->padd("$blat_bin -noHead $parameters $reference.2bit #<1 #>1", [$split_fasta], [$output_psl]);
+		push @output_psls, $output_psl;
 	}
 	
 	return @output_psls;
 }
 
-sub padd_doblatalignments_est
+sub padd_do_gmap_alignments_genome
 {
 	my $split_fastas_ref = shift;
-	my $blat_parameters = shift;
+	my $gmap_parameters = shift;
 	my $align_name = shift;
 	
 	my @output_psls;
-	foreach my $est_split_fasta_index (0..$#est_split_fastas)
+	foreach my $chromosome (keys %chromosomes)
 	{
-		my $est_split_fasta = $est_split_fastas[$est_split_fasta_index];
-		push @output_psls, padd_doblatalignments($split_fastas_ref, $est_split_fasta, $blat_parameters, $align_name.".".$est_split_fasta_index);
+		push @output_psls, padd_do_gmap_alignments($split_fastas_ref, "chr".$chromosome, $gmap_parameters, $align_name.".".$chromosome);
+	}
+	
+	return @output_psls;
+}
+
+sub padd_do_gmap_alignments_est
+{
+	my $split_fastas_ref = shift;
+	my $gmap_parameters = shift;
+	my $align_name = shift;
+	
+	my @output_psls;
+	foreach my $est_split_index (0..$#est_split_fastas)
+	{
+		push @output_psls, padd_do_gmap_alignments($split_fastas_ref, "est".$est_split_index, $gmap_parameters, $align_name.".".$est_split_index);
 	}
 	
 	return @output_psls;

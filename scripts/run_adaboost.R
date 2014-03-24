@@ -1,4 +1,4 @@
-require(kernlab)
+require(ada)
 
 args <- commandArgs(TRUE)
 
@@ -6,7 +6,6 @@ controls <- read.table(args[1], header=T);
 data <- read.table(args[2], header=T);
 
 features <- c(
-"concordant_ratio",
 "break_adj_entropy_min",
 "cdna_breakseqs_percident",
 "genome_breakseqs_percident",
@@ -26,12 +25,17 @@ features <- c(
 controls_features <- controls[,match(features,names(controls))]
 controls_class <- controls$validated == "Y"
 
+model = ada(controls_features,controls_class)
+
 data_features <- data[,match(features,names(data))]
 
-sig = sigest(controls_class~., cbind(controls_features,controls_class), frac = 0.5, na.action = na.omit, scaled = TRUE)[2]
-model = ksvm(controls_class~., cbind(controls_features,controls_class), type = "C-svc", kernel = "rbfdot", kpar = list(sigma = sig), C = 1, prob.model = TRUE)
-predict = predict(model, data_features, type = "probabilities")
-data_prob = data.frame(data, probability=predict[,2])
+if (length(rownames(data)) == 1) {
+	data_features = rbind(data_features,data_features)
+	predict = predict(model,data_features,type="prob")
+	data_prob = data.frame(data,probability=predict[1,2])
+} else {
+	predict = predict(model,data_features,type="prob")
+	data_prob = data.frame(data,probability=predict[,2])
+}
 
 write.table(data_prob, file=args[3], quote=F, sep="\t", eol="\n", row.names=F)
-

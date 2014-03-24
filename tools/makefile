@@ -49,16 +49,6 @@ $(BAMTOOLSDIR)/$(BAMTOOLSLIB) :
 # Build tools
 #
 
-clustermatepairs_stdin : \
-		./Common.o\
-		./DebugCheck.o\
-		./MatePairEM.o\
-		./asa136.o\
-		./asa241.o\
-		./clustermatepairs_stdin.o\
-		$(BAMTOOLSDIR)/$(BAMTOOLSLIB)\
-		$(ZDIR)/$(ZLIB)
-
 clustermatepairs : \
 		./AlignmentStream.o\
 		./Common.o\
@@ -139,21 +129,6 @@ splitseq: \
 		./splitseq.o\
 		$(BAMTOOLSDIR)/$(BAMTOOLSLIB)\
 		$(BAMDIR)/$(BAMLIB)\
-		$(ZDIR)/$(ZLIB)
-
-denovoseq: \
-		./AlignmentIndex.o\
-		./ReadIndex.o\
-		./FastaIndex.o\
-		./Common.o\
-		./DebugCheck.o\
-		./ExonRegions.o\
-		./SplitReadAligner.o\
-		./Parsers.o\
-		./PathFinder.o\
-		./DeNovoFusion.o\
-		./denovoseq.o\
-		$(BAMTOOLSDIR)/$(BAMTOOLSLIB)\
 		$(ZDIR)/$(ZLIB)
 
 calccov: \

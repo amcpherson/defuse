@@ -39,171 +39,188 @@ my $config = configdata->new();
 $config->read($config_filename);
 
 # Filenames for reference files
-my $gene_models			        = $config->get_value("gene_models");
+my $dataset_directory           = $config->get_value("dataset_directory");
+my $ensembl_version             = $config->get_value("ensembl_version");
+my $ensembl_genome_version      = $config->get_value("ensembl_genome_version");
+my $ucsc_genome_version         = $config->get_value("ucsc_genome_version");
+my $gene_models                 = $config->get_value("gene_models");
 my $genome_fasta                = $config->get_value("genome_fasta");
+my $est_alignments              = $config->get_value("est_alignments");
+my $unigene_fasta               = $config->get_value("unigene_fasta");
+my %chromosomes                 = $config->get_hash("chromosomes");
 my $chromosome_prefix           = $config->get_value("chromosome_prefix");
-my $exons_fasta					= $config->get_value("exons_fasta");
-my $cds_fasta			        = $config->get_value("cds_fasta");
-my $rrna_fasta			        = $config->get_value("rrna_fasta");
-my $cdna_regions		        = $config->get_value("cdna_regions");
-my $cdna_fasta			        = $config->get_value("cdna_fasta");
-my $est_fasta			        = $config->get_value("est_fasta");
+my $mt_chromosome               = $config->get_value("mt_chromosome");
+my $exons_fasta                 = $config->get_value("exons_fasta");
+my $cds_fasta                   = $config->get_value("cds_fasta");
+my $rrna_fasta                  = $config->get_value("rrna_fasta");
+my $cdna_regions                = $config->get_value("cdna_regions");
+my $cdna_fasta                  = $config->get_value("cdna_fasta");
+my $est_fasta                   = $config->get_value("est_fasta");
 my @est_split_fastas            = $config->get_list("est_split_fasta");
-my $ig_gene_list		        = $config->get_value("ig_gene_list");
+my $ig_gene_list                = $config->get_value("ig_gene_list");
 my $reference_fasta             = $config->get_value("reference_fasta");
 my $repeats_filename            = $config->get_value("repeats_filename");
 my $repeats_regions             = $config->get_value("repeats_regions");
-my %gene_sources		        = $config->get_hash("gene_sources");
-my %chromosomes			        = $config->get_hash("chromosomes");
+my %gene_sources                = $config->get_hash("gene_sources");
 my %ig_gene_sources             = $config->get_hash("ig_gene_sources");
-my %rrna_gene_sources	        = $config->get_hash("rrna_gene_sources");
-my @prefilter_fastas	        = $config->get_list("prefilter");
-my $bowtie_build_bin	        = $config->get_value("bowtie_build_bin");
-my $samtools_bin		        = $config->get_value("samtools_bin");
-my $fatotwobit_bin				= $config->get_value("fatotwobit_bin");
-my $scripts_directory			= $config->get_value("scripts_directory");
+my %rrna_gene_sources           = $config->get_hash("rrna_gene_sources");
+my @prefilter_fastas            = $config->get_list("prefilter");
+my $bowtie_build_bin            = $config->get_value("bowtie_build_bin");
+my $samtools_bin                = $config->get_value("samtools_bin");
+my $fatotwobit_bin              = $config->get_value("fatotwobit_bin");
+my $gmap_setup_bin              = $config->get_value("gmap_setup_bin");
+my $gmap_index_directory        = $config->get_value("gmap_index_directory");
+my $scripts_directory           = $config->get_value("scripts_directory");
 
 my $divide_fasta_script = $scripts_directory."/divide_fasta.pl";
+my $remove_fasta_description_script = $scripts_directory."/remove_fasta_description.pl";
 
-sub verify_file_exists
-{
-	my $filename = shift;
-	
-	if (not -e $filename)
-	{
-		die "Error: Required file $filename does not exist\n";
-	}
-}
-
-# Check for the required files
-verify_file_exists($gene_models);
-verify_file_exists($genome_fasta);
 
 # Create cmdrunner for running bowtie-build and samtools faidx
 my $log_directory = dirname($0)."/log";
 my $log_prefix = $log_directory."/create_reference_dataset";
 
-mkdir $log_directory if not -e $log_directory;
+mkdir $log_directory if not -d $log_directory;
 
 my $runner = cmdrunner->new();
 $runner->name("defuse");
 $runner->prefix($log_prefix);
 
-# Create an indexable genome
-my $dna_db = Bio::DB::Fasta->new($genome_fasta);
+mkdir $dataset_directory if not -d $dataset_directory;
 
-# Merge overlapping regions
-sub merge_regions
+sub system_with_check
 {
-	my @regions = @_;
-	my @merged;
-
-	my $merged_start;
-	my $merged_end;
-	foreach my $region (@regions)
-	{
-		$merged_start = $region->[0] if not defined $merged_start;
-		$merged_end = $region->[1] if not defined $merged_end;
-
-		if ($region->[0] > $merged_end + 1)
-		{
-			push @merged, [$merged_start, $merged_end];
-
-			$merged_start = $region->[0];
-			$merged_end = $region->[1];
-		}
-		else
-		{
-			$merged_end = max($merged_end, $region->[1]);
-		}
-	}
-	push @merged, [$merged_start, $merged_end];
-
-	return @merged;
-}
-
-# Remove duplicate regions
-sub remove_duplicates
-{
-	my @regions = @_;
-	my @unique;
-	my %uniquecheck;
-
-	foreach my $region (@regions)
-	{
-		next if defined $uniquecheck{$region->[0]}{$region->[1]};
-
-		$uniquecheck{$region->[0]}{$region->[1]} = 1;
-		push @unique, $region;
-	}
-
-	return @unique;
-}
-
-# Find gaps between regions
-sub region_gaps
-{
-	my @regions = @_;
-	my @gaps;
-
-	my $gap_start;
-	foreach my $region (@regions)
-	{
-		if (defined $gap_start)
-		{
-			if ($gap_start <= $region->[0] - 1)
-			{
-				push @gaps, [$gap_start, $region->[0] - 1];
-			}
-		}
-
-		$gap_start = $region->[1] + 1;
-	}
-
-	return @gaps;
-}
-
-# Find the combined length of a set of regions
-sub regions_length
-{
-	my @regions = @_;
-
-	my $length = 0;
-	foreach my $region (@regions)
-	{
-		$length += $region->[1] - $region->[0] + 1;
-	}
-
-	return $length;
-}
-
-# Check for overlap between regions
-sub overlap
-{
-	my $region1 = shift;
-	my $region2 = shift;
+	my $command = shift;
 	
-	if ($region1->[1] < $region2->[0] or $region1->[0] > $region2->[1])
+	my $result = system $command;
+	die "Error: Unable to execute $command" unless $result == 0;
+}
+
+sub wget_gunzip
+{
+	my $url = shift;
+	my $filename = shift;
+	
+	my $filename_gz = $filename.".gz";
+	
+	system_with_check("wget $url -O $filename_gz");
+	system_with_check("gunzip $filename_gz");
+}
+
+sub cat_files
+{
+	my $input_filenames_ref = shift;
+	my $output_filename = shift;
+	
+	my $input_filenames_list = join " ", @{$input_filenames_ref};
+	my $output_filename_tmp = $output_filename.".tmp";
+	
+	system_with_check("cat $input_filenames_list > $output_filename_tmp");
+	rename $output_filename_tmp, $output_filename;
+}
+
+# Retrieve the ensembl chromosome fastas
+my %chromosome_fastas;
+foreach my $chromosome (keys %chromosomes)
+{
+	my $chromosome_fasta = $chromosome_prefix.".".$chromosome.".fa";
+	
+	$chromosome_fastas{$chromosome} = $chromosome_fasta;
+	
+	next if -e $chromosome_fasta;
+	
+	my $chromosome_tmp = $chromosome_prefix.".".$chromosome.".tmp.fa";
+	
+	wget_gunzip("ftp://ftp.ensembl.org/pub/release-$ensembl_version/fasta/homo_sapiens/dna/Homo_sapiens.$ensembl_genome_version.$ensembl_version.dna.chromosome.$chromosome.fa.gz", $chromosome_tmp);
+	
+	my $chromosome_tmp2 = $chromosome_prefix.".".$chromosome.".tmp2.fa";
+	
+	system_with_check("$remove_fasta_description_script < $chromosome_tmp > $chromosome_tmp2");
+	
+	rename $chromosome_tmp2, $chromosome_fasta;
+	unlink 	$chromosome_tmp;
+}
+
+# Create genome fasta
+if (not -e $genome_fasta)
+{
+	cat_files([values(%chromosome_fastas)], $genome_fasta);
+}
+
+# Retrieve the gene models
+if (not -e $gene_models)
+{
+	wget_gunzip("ftp://ftp.ensembl.org/pub/release-$ensembl_version/gtf/homo_sapiens/Homo_sapiens.$ensembl_genome_version.$ensembl_version.gtf.gz", $gene_models);
+}
+
+# Retrieve the repeats
+if (not -e $repeats_filename)
+{
+	if ($ucsc_genome_version eq "hg18")
 	{
-		return 0;
+		my @chromosome_repeats_all;
+		foreach my $chromosome (keys %chromosomes)
+		{
+			$chromosome = "M" if $chromosome eq $mt_chromosome;
+			
+			my $chromosome_repeats = $repeats_filename.".".$chromosome.".tmp";
+			
+			wget_gunzip("ftp://hgdownload.cse.ucsc.edu/goldenPath/hg18/database/chr$chromosome\_rmsk.txt.gz", $chromosome_repeats);
+			
+			push @chromosome_repeats_all, $chromosome_repeats;
+		}
+		
+		cat_files(\@chromosome_repeats_all, $repeats_filename);
+		unlink @chromosome_repeats_all;
 	}
 	else
 	{
-		return 1;
+		wget_gunzip("ftp://hgdownload.cse.ucsc.edu/goldenPath/$ucsc_genome_version/database/rmsk.txt.gz", $repeats_filename);
 	}
 }
 
-# Expand to the largest region containing both regions
-sub expand
+# Retrieve the est fasta
+if (not -e $est_fasta)
 {
-	my $region1 = shift;
-	my $region2 = shift;
-	
-	my $expanded_start = min($region1->[0], $region2->[0]);
-	my $expanded_end = max($region1->[1], $region2->[1]);
-
-	return [$expanded_start, $expanded_end];
+	wget_gunzip("ftp://hgdownload.cse.ucsc.edu/goldenPath/$ucsc_genome_version/bigZips/est.fa.gz", $est_fasta);
 }
+
+# Retrieve the est alignments
+if (not -e $est_alignments)
+{
+	if ($ucsc_genome_version eq "hg18")
+	{
+		my @chromosome_est_alignments_all;
+		foreach my $chromosome (keys %chromosomes)
+		{
+			$chromosome = "M" if $chromosome eq $mt_chromosome;
+			
+			my $chromosome_est_alignments = $est_alignments.".".$chromosome.".tmp";
+			
+			wget_gunzip("ftp://hgdownload.cse.ucsc.edu/goldenPath/hg18/database/chr$chromosome\_intronEst.txt.gz", $chromosome_est_alignments);
+			
+			push @chromosome_est_alignments_all, $chromosome_est_alignments;
+		}
+		
+		cat_files(\@chromosome_est_alignments_all, $est_alignments);
+		unlink @chromosome_est_alignments_all;
+	}
+	else
+	{
+		wget_gunzip("ftp://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/intronEst.txt.gz", $est_alignments);
+	}
+}
+
+# Retrieve the unigene fasta
+if (not -e $unigene_fasta)
+{
+	wget_gunzip("ftp://ftp.ncbi.nih.gov/repository/UniGene/Homo_sapiens/Hs.seq.uniq.gz", $unigene_fasta);
+}
+
+
+# Create an indexable genome
+my $dna_db = Bio::DB::Fasta->new($genome_fasta);
+
 
 my $line_number = 1;
 
@@ -527,36 +544,41 @@ $runner->run("$samtools_bin faidx $reference_fasta", [$reference_fasta], [$refer
 print "Splitting est file\n";
 $runner->run("$divide_fasta_script #<1 #>A", [$est_fasta], [@est_split_fastas]);
 
-print "Splitting genome file\n";
-my $genome_in = Bio::SeqIO->new(-format => "fasta", -file => $genome_fasta);
-while (my $seq = $genome_in->next_seq())
-{
-	my $chromosome_fasta = $chromosome_prefix.".".$seq->id().".fa";
-	if (not cmdrunner::uptodate([$genome_fasta], [$chromosome_fasta]))
-	{
-		my $chromosome_out = Bio::SeqIO->new(-format => "fasta", -file => ">".$chromosome_fasta);
-		$chromosome_out->write_seq($seq);
-		$chromosome_out->close();
-	}
-}
-$genome_in->close();
-
 print "Creating 2bit files\n";
-$runner->run("$fatotwobit_bin #<1 #>1", [$genome_fasta], [$genome_fasta.".2bit"]);
-$runner->run("$fatotwobit_bin #<1 #>1", [$cdna_fasta], [$cdna_fasta.".2bit"]);
-$runner->run("$fatotwobit_bin #<1 #>1", [$rrna_fasta], [$rrna_fasta.".2bit"]);
 $runner->run("$fatotwobit_bin #<1 #>1", [$cds_fasta], [$cds_fasta.".2bit"]);
 $runner->run("$fatotwobit_bin #<1 #>1", [$exons_fasta], [$exons_fasta.".2bit"]);
-foreach my $est_split_fasta (@est_split_fastas)
+
+mkdir $gmap_index_directory if not -d $gmap_index_directory;
+
+sub create_gmap_indices
 {
-	$runner->run("$fatotwobit_bin #<1 #>1", [$est_split_fasta], [$est_split_fasta.".2bit"]);
-}
-foreach my $chromosome (keys %chromosomes)
-{
-	my $chromosome_fasta = $chromosome_prefix.".".$chromosome.".fa";
-	$runner->run("$fatotwobit_bin #<1 #>1", [$chromosome_fasta], [$chromosome_fasta.".2bit"]);
+	my $fasta = shift;
+	my $name = shift;
+	
+	print "Creating $name gmap index\n";
+	
+	my $gmap_makefile = $gmap_index_directory."/Makefile.$name";
+	$runner->run("$gmap_setup_bin -D $gmap_index_directory -d $name -o #>1 #<1", [$fasta], [$gmap_makefile]);
+	
+	my $gmap_coords_log = $gmap_index_directory."/Makefile.$name.coords.log";
+	my $gmap_gmapdb_log = $gmap_index_directory."/Makefile.$name.gmapdb.log";
+	my $gmap_install_log = $gmap_index_directory."/Makefile.$name.install.log";
+	$runner->run("make -C $gmap_index_directory -f #<1 coords > #>1", [$gmap_makefile], [$gmap_coords_log]);
+	$runner->run("make -C $gmap_index_directory -f #<1 gmapdb > #>1", [$gmap_makefile], [$gmap_gmapdb_log]);
+	$runner->run("make -C $gmap_index_directory -f #<1 install > #>1", [$gmap_makefile], [$gmap_install_log]);
 }
 
+create_gmap_indices($cdna_fasta, "cdna");
+
+foreach my $est_split_index (0..$#est_split_fastas)
+{
+	create_gmap_indices($est_split_fastas[$est_split_index], "est".$est_split_index);
+}
+
+foreach my $chromosome (keys %chromosome_fastas)
+{
+	create_gmap_indices($chromosome_fastas{$chromosome}, "chr".$chromosome);
+}
 if (not cmdrunner::uptodate([$repeats_filename], [$repeats_regions]))
 {
 	print "Converting repeats\n";

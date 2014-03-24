@@ -32,7 +32,6 @@ my $reads_end_2_fastq;
 my $reads_index_filename;
 my $reads_names_filename;
 my $reads_sources_filename;
-my $filter_garbage;
 
 GetOptions
 (
@@ -44,7 +43,6 @@ GetOptions
 	'index=s'     => \$reads_index_filename,
 	'names=s'     => \$reads_names_filename,
 	'sources=s'   => \$reads_sources_filename,
-	'filter'      => \$filter_garbage,
 );
 
 not defined $help or die @usage;
@@ -299,8 +297,6 @@ foreach my $lane (keys %convert_command)
 		chomp($comment2);
 		chomp($quality2);
 		
-		next if $filter_garbage and (is_garbage($sequence1) or is_garbage($sequence2));
-		
 		my $filepos1 = pack('q',tell(FQ1));
 		my $filepos2 = pack('q',tell(FQ2));
 		
@@ -356,25 +352,4 @@ close RSRC;
 rename $reads_sources_temp, $reads_sources_filename;
 
 print "Finished Retrieval\n";
-
-sub is_garbage
-{
-	my $sequence = $_[0];
-
-	my $max_single_nt = 0.9 * length($sequence);
-	my $max_run_nt = 0.5 * length($sequence);
-
-	return 1 if @{[$sequence =~ /(A)/g]} > $max_single_nt;
-	return 1 if @{[$sequence =~ /(C)/g]} > $max_single_nt;
-	return 1 if @{[$sequence =~ /(T)/g]} > $max_single_nt;
-	return 1 if @{[$sequence =~ /(G)/g]} > $max_single_nt;
-	return 1 if @{[$sequence =~ /(N)/g]} > $max_single_nt;
-	return 1 if $sequence =~ /(A{$max_run_nt,})/;
-	return 1 if $sequence =~ /(C{$max_run_nt,})/;
-	return 1 if $sequence =~ /(T{$max_run_nt,})/;
-	return 1 if $sequence =~ /(G{$max_run_nt,})/;
-	return 1 if $sequence =~ /(N{$max_run_nt,})/;
-
-	return 0;
-}
 

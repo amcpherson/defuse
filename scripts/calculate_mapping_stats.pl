@@ -119,7 +119,7 @@ sub count_alignments
 				my @fields = split /\t/;
 				
 				my $fragment_index = $fields[0];
-				my $read_end = $fields[1];
+				my $read_end = $fields[1] + 1;
 				my $rname = $fields[2];
 				my $strand = $fields[3];
 				my $start = $fields[4];

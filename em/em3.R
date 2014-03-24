@@ -1,144 +1,9 @@
 
-pe_prob <- function(X, Y, U, s, B)
-{
-	return(1/(sqrt(2) * U) * dnorm(B[1]+B[2] - X - Y - U, mean=0, sd=s) )
-}
-
-pe_likelihood <- function(X, Y, U, s, B)
-{
-	if (B[1] < max(X) || B[2] < max(Y)){
-		return(0)
-	}
-	lh = 1.0
-	for (n in 1:length(X))
-	{
-		lh = lh*pe_prob(X[n], Y[n], U[n], s, B)
-	}
-	return(lh)
-}
-
-n=50
-s=50
-
-set.seed(3)
-
-# generate means
-U = runif(n, 100, 500)
-
-# generate fragment lengths
-lengths = as.integer(rnorm(n, U, s))
-
-U = U[lengths > 0]
-lengths = lengths[lengths > 0]
-
-# generate breakpoint offsets
-offsets = as.integer(runif(length(lengths), 0, 1) * lengths)
-
-# Breakpoint
-B = c(1000,2000)
-
-# generate positions
-X = B[1] - offsets
-Y = B[2] - (lengths - offsets)
-
-extend = 100
-
-X0 = as.integer(max(X)) - 1
-X1 = as.integer(max(X)) + extend
-
-Y0 = as.integer(max(Y)) - 1
-Y1 = as.integer(max(Y)) + extend
-
-resolution = 100
-
-Xs = seq(X0,X1,length.out=resolution)
-Ys = seq(Y0,Y1,length.out=resolution)
-
-lh = c()
-for (v in Ys) {
-	for (u in Xs) {
-		lh = c(lh,pe_likelihood(X,Y,U,s,c(u,v)))
-	}
-}
-
-image(Xs,Ys,z=matrix(lh,nrow=length(Xs),ncol=length(Ys)),col=rev(heat.colors(100)),xlim=c(min(X)-10,max(Xs)+10),ylim=c(min(Y)-10,max(Ys)+10))
-points(X,Y,pch=20)
-
-
-
-
-
-	k=3
-	n=10000
-	s=50
-	
-	set.seed(5)
-	
-	# random selection of breakpoints B
-	B = matrix(round(runif(k*2,0,2000)), nrow=k)
-	
-	# mixing weights W
-	W = runif(k,0,1); 
-	W = W / sum(W);
-	
-	# create n simulated fragments
-	Z = rmultinom(n, 1, W)
-	
-	# generate means
-	U = runif(n, 100, 500)
-	
-	# generate fragment lengths
-	lengths = as.integer(rnorm(n, U, s))
-	
-	U = U[lengths > 0]
-	Z = Z[,lengths > 0]
-	lengths = lengths[lengths > 0]
-	
-	# generate breakpoint offsets
-	offsets = as.integer(runif(length(lengths), 0, 1) * lengths)
-	
-	# generate positions
-	X1 = colSums(B[,1] * Z) - offsets
-	Y1 = colSums(B[,2] * Z) - (lengths - offsets)
-	
-	plot(X1,Y1,col=palette(rainbow(100,alpha=0.05))[100*(U+500)/max(U+500)],pch=20,xlim=c(min(X1),max(X1)),ylim=c(min(Y1),max(Y1)),xlab="x",ylab="y")
-		
-	X1a = X1 + U / 2
-	Y1a = Y1 + U / 2
-	
-	X1a = (X1 + Y1 + U) / (2 * s)
-	Y1a = (X1 - Y1) / max(U)
-	
-	X1ab = (2 * s * X1a + max(U) * Y1a) / 2
-	Y1ab = (2 * s * X1a - max(U) * Y1a) / 2
-	
-	X1a = X1ab
-	Y1a = Y1ab
-	
-	plot(X1a,Y1a,col=palette(rainbow(100,alpha=0.01))[100*(U+500)/max(U+500)],pch=20,xlim=c(min(X1a),max(X1a)),ylim=c(min(Y1a),max(Y1a)),xlab="t(x)",ylab="t(y)")
-
-
-
-	X1a = (X1 + Y1 + U)
-	Y1a = (X1 - Y1) * (2 * s) / max(U)
-	
-	X1ab = (X1a + Y1a) / 2
-	Y1ab = (X1a - Y1a) / 2
-	
-	X1a = X1ab
-	Y1a = Y1ab
-	
-	plot(X1a,Y1a,col=palette(rainbow(100,alpha=0.01))[100*(U+500)/max(U+500)],pch=20,xlim=c(min(X1a),max(X1a)),ylim=c(min(Y1a),max(Y1a)),xlab="t(x)",ylab="t(y)")
-
-
-
-
-
 
 pe_random <- function()
 {
-	k=1
-	n=50000
+	k=5
+	n=500
 	u=400
 	s=50
 	
@@ -180,8 +45,8 @@ pe_random <- function()
 	X2 = colSums(B[,1] * Z) - offsets
 	Y2 = colSums(B[,2] * Z) - (lengths - offsets)
 	
-	plot(X1,Y1,col=rgb(1,0,0,alpha=0.01),pch=20,xlim=c(min(c(X1,X2)),max(c(X1,X2))),ylim=c(min(c(Y1,Y2)),max(c(Y1,Y2))))
-	points(X2,Y2,col=rgb(0,0,1,alpha=1/256),pch=20)
+	plot(X1,Y1,col="red",xlim=c(min(c(X1,X2)),max(c(X1,X2))),ylim=c(min(c(Y1,Y2)),max(c(Y1,Y2))))
+	points(X2,Y2,col="blue")
 	
 	X1a = X1 + Y1 + u
 	Y1a = X1 - Y1
@@ -189,8 +54,8 @@ pe_random <- function()
 	X2a = X2 + Y2 + u1
 	Y2a = X2 - Y2
 	
-	plot(X1a,Y1a,col=rgb(1,0,0,alpha=0.01),pch=20,xlim=c(min(c(X1a,X2a)),max(c(X1a,X2a))),ylim=c(min(c(Y1a,Y2a)),max(c(Y1a,Y2a))))
-	points(X2a,Y2a,col=rgb(0,0,1,alpha=1/256),pch=20)
+	plot(X1a,Y1a,col="red",xlim=c(min(c(X1a,X2a)),max(c(X1a,X2a))),ylim=c(min(c(Y1a,Y2a)),max(c(Y1a,Y2a))))
+	points(X2a,Y2a,col="blue")
 	
 	X = c(X1,X2)
 	Y = c(Y1,Y2)
