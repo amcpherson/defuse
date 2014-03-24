@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 
 my $usage = "Usage: $0 sam1 sam2\n";
 

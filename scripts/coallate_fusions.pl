@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
@@ -40,7 +40,8 @@ defined $cluster_list or die @usage;
 my $config = configdata->new();
 $config->read($config_filename);
 
-my $scripts_directory                 = $config->get_value("scripts_directory");
+my $scripts_directory		= $config->get_value("scripts_directory");
+my $denovo_assembly			= $config->get_value("denovo_assembly");
 
 my %span_count_failed;
 my %span_align_failed;
@@ -135,9 +136,12 @@ print "splitr_span_pvalue\t";
 print "splitr_pos_pvalue\t";
 print "splitr_min_pvalue\t";
 
-print "denovo_sequence\t";
-print "denovo_min_count\t";
-print "denovo_span_pvalue\t";
+if (lc($denovo_assembly) eq "yes")
+{
+	print "denovo_sequence\t";
+	print "denovo_min_count\t";
+	print "denovo_span_pvalue\t";
+}
 
 foreach my $anno_type (@anno_types)
 {
@@ -155,9 +159,12 @@ foreach my $cluster_id (keys %cluster_ids)
 	print $splitr_split_pval{$cluster_id}{pos_pvalue}."\t";
 	print $splitr_split_pval{$cluster_id}{min_pvalue}."\t";
 
-	print $denovo_seq{$cluster_id}{sequence}."\t";
-	print $denovo_seq{$cluster_id}{min_count}."\t";
-	print $denovo_span_pval{$cluster_id}{pvalue}."\t";
+	if (lc($denovo_assembly) eq "yes")
+	{
+		print $denovo_seq{$cluster_id}{sequence}."\t";
+		print $denovo_seq{$cluster_id}{min_count}."\t";
+		print $denovo_span_pval{$cluster_id}{pvalue}."\t";
+	}
 
 	foreach my $anno_type (@anno_types)
 	{

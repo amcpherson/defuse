@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use warnings FATAL => qw( all );
+use warnings FATAL => 'all';
 use List::Util qw(min max);
 
 my $fraglength_sum = 0;

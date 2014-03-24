@@ -12,6 +12,7 @@ genome_fasta                                = $(dataset_prefix).dna.fa
 intron_regions                              = $(dataset_prefix).intron.regions
 intronic_fasta                              = $(dataset_prefix).intronic.fa
 exons_fasta                                 = $(dataset_prefix).exons.fa
+exons_regions                               = $(dataset_prefix).exons.regions
 cds_fasta                                   = $(dataset_prefix).cds.fa
 utr5p_fasta                                 = $(dataset_prefix).utr5p.fa
 utr3p_fasta                                 = $(dataset_prefix).utr3p.fa
@@ -47,16 +48,23 @@ cdna_gene_fasta_cluster                     = $(cluster_prefix).cdna.gene.fa
 prefilter1                                  = $(cluster_dir)/Homo_sapiens.NCBI36.54.dna.fa
 prefilter2                                  = $(cluster_dir)/Hs.seq.uniq
 
+# Path where you unpacked the source
+source_directory                            = /share/data4/amcpherson/svn/code/dev/defuse/
+
+# deFuse scripts and tools
+scripts_directory                           = $(source_directory)/scripts
+tools_directory                             = $(source_directory)/tools
+
+# Path to samtools, 0.1.8 is compiled for you, use other versions at your own risk
+samtools_bin                                = $(source_directory)/external/samtools-0.1.8/samtools
+
 # Paths to executables and scripts
 bowtie_bin                                  = /home/amcpherson/install/bin/bowtie
 bowtie_build_bin                            = /home/amcpherson/install/bin/bowtie-build
 bowtie_threads                              = 1
-samtools_bin                                = /home/amcpherson/install/bin/samtools
 blat_bin                                    = /home/amcpherson/install/bin/blat
 r_bin                                       = /home/amcpherson/install/bin/R
 rscript_bin                                 = /home/amcpherson/install/bin/Rscript
-scripts_directory                           = /share/data4/amcpherson/svn/code/dev/defuse/scripts
-tools_directory                             = /share/data4/amcpherson/svn/code/dev/defuse/tools
 
 # Parameters for building the dataset
 gene_sources                                = IG_C_gene,IG_D_gene,IG_J_gene,IG_V_gene,processed_transcript,protein_coding
@@ -82,7 +90,9 @@ percent_identity_threshold                  = 0.80
 max_dist_pos                                = 600
 num_dist_genes                              = 500
 split_min_anchor                            = 4
-max_concordant_ratio                        = 0.5
+max_concordant_ratio                        = 0.1
+splice_bias                                 = 10
+denovo_assembly                             = no
 
 # Position density when calculating covariance
 covariance_sampling_density                 = 0.01

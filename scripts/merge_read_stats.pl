@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 use List::Util qw(min max);
 
 die "Usage $0 read_stats1 read_stats2 ...\n" if scalar @ARGV == 0;

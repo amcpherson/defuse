@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
@@ -126,6 +126,8 @@ close SP;
 
 foreach my $cluster_id (keys %cluster_strand)
 {
+	next if not defined $cluster_break_pos{$cluster_id};
+	
 	die "Error: Did not find 2 reference names for cluster $cluster_id\n" if scalar keys %{$cluster_strand{$cluster_id}} != 2;
 
 	my $spanning_fragment_sum = 0;

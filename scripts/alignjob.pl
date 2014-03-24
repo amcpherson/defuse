@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
@@ -110,7 +110,7 @@ my $align_single_bin = "$bowtie_bin --sam-nosq -S --mm -t -k 100 -m 100";
 my $sort_cmd = "sort";
 
 my $filter_sam_readids_script = "$scripts_directory/filter_sam_readids.pl";
-my $filter_sam_genes_script = "$scripts_directory/filter_sam_reference.pl";
+my $filter_sam_genes_script = "$scripts_directory/filter_sam_genes.pl";
 my $read_stats_script = "$scripts_directory/read_stats.pl";
 my $expression_script = "$scripts_directory/calculate_expression_simple.pl";
 my $find_concordant_ensembl_script = "$scripts_directory/find_concordant_ensembl.pl";
@@ -285,15 +285,12 @@ if (not $runner->uptodate([$reads_end_1_fastq, $reads_end_2_fastq], [$discordant
 	$runner->run("cat #<1 #<2 | $filter_sam_readids_script #<3 | $sort_cmd > #>1", [$cdna_end_1_sam, $cdna_end_2_sam, $discordant_unaligned_readids], [$discordant_unaligned_sam]);
 	
 	print "Converting sam to bam\n";
-	my $cdna_pair_bam_prefix = $cdna_pair_bam;
-	my $discordant_aligned_bam_prefix = $discordant_aligned_bam;
-	my $discordant_unaligned_bam_prefix = $discordant_unaligned_bam;
-	$cdna_pair_bam_prefix =~ s/.bam$//;
-	$discordant_aligned_bam_prefix =~ s/.bam$//;
-	$discordant_unaligned_bam_prefix =~ s/.bam$//;
-	$runner->run("$samtools_bin view -bt $cdna_fasta_index #<1 | $samtools_bin sort - $cdna_pair_bam_prefix", [$cdna_pair_sam], [$cdna_pair_bam]);
-	$runner->run("$samtools_bin view -bt $cdna_gene_fasta_index #<1 | $samtools_bin sort - $discordant_aligned_bam_prefix", [$discordant_aligned_sam], [$discordant_aligned_bam]);
-	$runner->run("$samtools_bin view -bt $cdna_gene_fasta_index #<1 | $samtools_bin sort - $discordant_unaligned_bam_prefix", [$discordant_unaligned_sam], [$discordant_unaligned_bam]);
+	my $cdna_pair_bam_prefix = $cdna_pair_bam.".sort";
+	my $discordant_aligned_bam_prefix = $discordant_aligned_bam.".sort";
+	my $discordant_unaligned_bam_prefix = $discordant_unaligned_bam.".sort";
+	$runner->run("$samtools_bin view -bt $cdna_fasta_index #<1 | $samtools_bin sort -o - $cdna_pair_bam_prefix > #>1", [$cdna_pair_sam], [$cdna_pair_bam]);
+	$runner->run("$samtools_bin view -bt $cdna_gene_fasta_index #<1 | $samtools_bin sort -o - $discordant_aligned_bam_prefix > #>1", [$discordant_aligned_sam], [$discordant_aligned_bam]);
+	$runner->run("$samtools_bin view -bt $cdna_gene_fasta_index #<1 | $samtools_bin sort -o - $discordant_unaligned_bam_prefix > #>1", [$discordant_unaligned_sam], [$discordant_unaligned_bam]);
 
 	unlink $cdna_end_1_sam;
 	unlink $cdna_end_2_sam;

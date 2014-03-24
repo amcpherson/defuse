@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 
 my $usage = "Usage: $0 regions_filename regions_per_file split_filename\n\tA % in split_filename will be replaced by the file number\n";
 

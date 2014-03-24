@@ -21,7 +21,14 @@ CXX = /usr/bin/g++
 CXXFLAGS = -O2 -DDEBUG_CHECKS $(INCLUDE)
 LDFLAGS = -O2 -L$(BAMDIR) -lbam -L$(ZDIR) -lz
 
-all: tools
+all: tools $(BAMDIR)/samtools
+
+#
+# Build samtools
+#
+
+$(BAMDIR)/samtools :
+		$(MAKE) --no-print-directory -C $(BAMDIR) samtools
 
 # 
 # Build libs

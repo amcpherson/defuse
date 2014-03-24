@@ -1,7 +1,7 @@
 package cmdrunner;
 
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 use List::Util qw[min max];
 use File::stat;
 use Sys::Hostname;

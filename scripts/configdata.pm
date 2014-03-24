@@ -1,7 +1,7 @@
 package configdata;
 
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 
 sub new
 {

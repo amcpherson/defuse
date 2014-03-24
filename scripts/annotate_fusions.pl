@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
@@ -50,6 +50,7 @@ my $rrna_fasta				= $config->get_value("rrna_fasta");
 my $est_fasta				= $config->get_value("est_fasta");
 my $est_alignments			= $config->get_value("est_alignments");
 my $exons_fasta				= $config->get_value("exons_fasta");
+my $exons_regions			= $config->get_value("exons_regions");
 my $cds_fasta				= $config->get_value("cds_fasta");
 my $utr5p_fasta				= $config->get_value("utr5p_fasta");
 my $utr3p_fasta				= $config->get_value("utr3p_fasta");
@@ -60,14 +61,23 @@ my $upstream_fasta			= $config->get_value("upstream_fasta");
 my $downstream_fasta		= $config->get_value("downstream_fasta");
 my $gene_info_list			= $config->get_value("gene_info_list");
 my $gene_adj_list			= $config->get_value("gene_adj_list");
+my $cdna_gene_regions		= $config->get_value("cdna_gene_regions");
+my $cdna_regions			= $config->get_value("cdna_regions");
+my $gene_tran_list			= $config->get_value("gene_tran_list");
+my $splice_bias             = $config->get_value("splice_bias");
+my $denovo_assembly			= $config->get_value("denovo_assembly");
 my $tools_directory			= $config->get_value("tools_directory");
+my $scripts_directory		= $config->get_value("scripts_directory");
 my $blat_bin				= $config->get_value("blat_bin");
+my $samtools_bin			= $config->get_value("samtools_bin");
 
 my $genome_max_ins = 2000;
 my $est_max_ins = 10000;
 my $cdna_max_ins = 10000000;
 
-my $estislandsbin = "$tools_directory/estislands";
+my $estislandsbin = $tools_directory."/estislands";
+my $break_concordant_script = $scripts_directory."/calc_break_concordant.pl";
+my $interrupted_script = $scripts_directory."/calc_interrupted.pl";
 
 my $log_directory = $output_directory."/log";
 my $log_prefix = $log_directory."/annotate";
@@ -78,43 +88,55 @@ my $runner = cmdrunner->new();
 $runner->name("annotate");
 $runner->prefix($log_prefix);
 
-my %gene_chromosome;
-my %gene_strand;
-my %gene_start;
-open GINF, $gene_info_list or die "Error: Unable to open $gene_info_list: $!\n";
-while (<GINF>)
-{
-	chomp;
-	my @annofields = split /\t/;
-
-	my $ensgene = $annofields[0];
-	my $chromosome = $annofields[2];
-	my $strand = $annofields[3];
-	my $start = $annofields[4];
-
-	$gene_chromosome{$ensgene} = $chromosome;
-	$gene_strand{$ensgene} = $strand;
-	$gene_start{$ensgene} = $start;
-}
-close GINF;
+# Read gene info
+my %gene_info;
+read_gene_info($gene_info_list, \%gene_info);
 
 my $splitr_break_filename = $output_directory."/splitr.break";
+my $denovo_break_filename = $output_directory."/denovo.break";
 my $splitr_seq_filename = $output_directory."/splitr.seq";
 my $denovo_seq_filename = $output_directory."/denovo.seq";
 my $splitr_span_pval_filename = $output_directory."/splitr.span.pval";
 my $denovo_span_pval_filename = $output_directory."/denovo.span.pval";
 
 my %splitr_break;
+my %denovo_break;
 my %splitr_seq;
 my %denovo_seq;
 my %splitr_span_pval;
 my %denovo_span_pval;
 
 read_breaks($splitr_break_filename, \%splitr_break);
+read_breaks($denovo_break_filename, \%denovo_break);
 read_splitr_seq($splitr_seq_filename, \%splitr_seq);
 read_denovo_seq($denovo_seq_filename, \%denovo_seq);
 read_span_pval($splitr_span_pval_filename, \%splitr_span_pval);
 read_span_pval($denovo_span_pval_filename, \%denovo_span_pval);
+
+# Read in the read stats
+my $read_stats = $output_directory."/concordant.read.stats";
+my %read_stat_values;
+get_stats($read_stats, \%read_stat_values);
+
+# Read in the cdna gene regions
+my %cdna_gene_reg;
+read_regions($cdna_gene_regions, \%cdna_gene_reg);
+
+# Read in the exons regions
+my %exons_reg;
+read_regions($exons_regions, \%exons_reg);
+
+# Read in expression
+my %expression;
+my $expression_filename = $output_directory."/expression.txt";
+read_expression($expression_filename, \%expression);
+
+sub get_expression
+{
+	my $gene = shift;
+	return 0 if not defined $expression{$gene};
+	return $expression{$gene}{expression};
+}
 
 my %fusion_gene_lookup;
 my %fusion_gene1;
@@ -123,6 +145,8 @@ my %fusion_ref_name1;
 my %fusion_ref_name2;
 my %fusion_strand1;
 my %fusion_strand2;
+my %genomic_breakpos1;
+my %genomic_breakpos2;
 my %fusion_break_predict;
 
 my $breakpoint_sequences_temp_filename = $output_directory."/breakpoint.sequences.fa.tmp";
@@ -134,27 +158,6 @@ open SEQ, ">".$breakpoint_sequences_temp_filename or die "Error: Unable to open 
 my %cluster_ids = (%splitr_seq, %denovo_seq);
 foreach my $cluster_id (keys %cluster_ids)
 {
-	# Select the breakpoint prediction with the highest spanning pvalue
-	my $break_sequence = "";
-	my $break_predict = "";
-	if ($splitr_span_pval{$cluster_id}{pvalue} >= $denovo_span_pval{$cluster_id}{pvalue})
-	{
-		$break_sequence = $splitr_seq{$cluster_id}{sequence};
-		$break_predict = "splitr";
-	}
-	else
-	{
-		$break_sequence = $denovo_seq{$cluster_id}{sequence};
-		$break_predict = "denovo";
-	}
-	
-	# Skip if no breakpoint sequence was predicted
-	delete $cluster_ids{$cluster_id} and next if $break_sequence eq "";
-	
-	die "Error: Unable to find break infor for $cluster_id\n" if scalar @{$splitr_break{$cluster_id}{breakpos}} != 2;
-	
-	print SEQ ">$cluster_id\n".$break_sequence."\n";
-	
 	my $ref_name1 = $splitr_break{$cluster_id}{breakpos}->[0]->[0];
 	my $ref_name2 = $splitr_break{$cluster_id}{breakpos}->[1]->[0];
 	
@@ -163,6 +166,30 @@ foreach my $cluster_id (keys %cluster_ids)
 
 	my $strand1 = $splitr_break{$cluster_id}{breakpos}->[0]->[1];
 	my $strand2 = $splitr_break{$cluster_id}{breakpos}->[1]->[1];
+	
+	$genomic_breakpos1{$cluster_id} = calc_genomic_position($splitr_break{$cluster_id}{breakpos}->[0]->[2], $cdna_gene_reg{$ref_name1});
+	$genomic_breakpos2{$cluster_id} = calc_genomic_position($splitr_break{$cluster_id}{breakpos}->[1]->[2], $cdna_gene_reg{$ref_name2});
+	
+	# Select the breakpoint prediction with the highest spanning pvalue
+	my $break_sequence = "";
+	my $break_predict = "";
+	if (lc($denovo_assembly) eq "yes" and $denovo_span_pval{$cluster_id}{pvalue} > $splitr_span_pval{$cluster_id}{pvalue})
+	{
+		$break_sequence = $denovo_seq{$cluster_id}{sequence};
+		$break_predict = "denovo";
+	}
+	else
+	{
+		$break_sequence = $splitr_seq{$cluster_id}{sequence};
+		$break_predict = "splitr";
+	}
+	
+	# Skip if no breakpoint sequence was predicted
+	delete $cluster_ids{$cluster_id} and next if $break_sequence eq "";
+	
+	die "Error: Unable to find break infor for $cluster_id\n" if scalar @{$splitr_break{$cluster_id}{breakpos}} != 2;
+	
+	print SEQ ">$cluster_id\n".$break_sequence."\n";
 	
 	$fusion_gene_lookup{$cluster_id}{$gene1} = 1;
 	$fusion_gene_lookup{$cluster_id}{$gene2} = 1;
@@ -197,7 +224,7 @@ my %fusion_span_count;
 # Find cluster fragment info
 # Create a read sequence fasta
 open RFA, ">".$read_sequences_temp_filename or die "Error: Unable to open file $read_sequences_temp_filename\n";
-foreach my $cluster_id (keys %clusters)
+foreach my $cluster_id (keys %cluster_ids)
 {
 	die "Error: fusion $cluster_id does not refer to 2 reference sequences\n" if scalar keys %{$clusters{$cluster_id}} != 2;
 	foreach my $ref_name (keys %{$clusters{$cluster_id}})
@@ -219,23 +246,61 @@ close RFA;
 # Replace old file if we generated a different one
 $runner->replaceifdifferent($read_sequences_temp_filename, $read_sequences_filename);
 
-# Read in gene information
-my %gene_info;
-open GI, $gene_info_list or die "Error: Unable to open $gene_info_list: $!\n";
-while (<GI>)
-{
-	chomp;
-	my @fields = split /\t/;
-	
-	my $ensgene = $fields[0];
+# Calculate break concordant counts
+my %splitr_break_concordant;
+my %denovo_break_concordant;
+calculate_break_concordant($splitr_break_filename, \%splitr_break_concordant);
+calculate_break_concordant($denovo_break_filename, \%denovo_break_concordant);
 
-	$gene_info{$ensgene}{name} = $fields[1];
-	$gene_info{$ensgene}{chromosome} = $fields[2];
-	$gene_info{$ensgene}{strand} = $fields[3];
-	$gene_info{$ensgene}{start} = $fields[4];
-	$gene_info{$ensgene}{end} = $fields[5];
+# Calculate interrupted
+my %splitr_interruption_info;
+my %denovo_interruption_info;
+calculate_interrupted($splitr_break_filename, \%splitr_interruption_info);
+calculate_interrupted($denovo_break_filename, \%denovo_interruption_info);
+
+# Calculate splicing index
+my %fusion_splicing_index1;
+my %fusion_splicing_index2;
+foreach my $cluster_id (keys %cluster_ids)
+{
+	if ($fusion_break_predict{$cluster_id} eq "splitr")
+	{
+		$fusion_splicing_index1{$cluster_id} = $splitr_break_concordant{$cluster_id}{$fusion_gene1{$cluster_id}}{break_concordant} / $fusion_span_count{$cluster_id};
+		$fusion_splicing_index2{$cluster_id} = $splitr_break_concordant{$cluster_id}{$fusion_gene2{$cluster_id}}{break_concordant} / $fusion_span_count{$cluster_id};
+	}
+	elsif ($fusion_break_predict{$cluster_id} eq "denovo")
+	{
+		$fusion_splicing_index1{$cluster_id} = $denovo_break_concordant{$cluster_id}{$fusion_gene1{$cluster_id}}{break_concordant} / $fusion_span_count{$cluster_id};
+		$fusion_splicing_index2{$cluster_id} = $denovo_break_concordant{$cluster_id}{$fusion_gene2{$cluster_id}}{break_concordant} / $fusion_span_count{$cluster_id};
+	}
 }
-close GI;
+
+sub calculate_interrupted_index
+{
+	my $interrupted_ref = shift;
+	
+	my $expression_before = $interrupted_ref->{count_before} / ($interrupted_ref->{size_before} + 1) + 1;
+	my $expression_after = $interrupted_ref->{count_after} / ($interrupted_ref->{size_after} + 1) + 1;
+	
+	return $expression_before / $expression_after;
+}
+
+# Calculate interrupted index
+my %fusion_interrupted_index1;
+my %fusion_interrupted_index2;
+foreach my $cluster_id (keys %cluster_ids)
+{
+	if ($fusion_break_predict{$cluster_id} eq "splitr")
+	{
+		$fusion_interrupted_index1{$cluster_id} = calculate_interrupted_index($splitr_interruption_info{$cluster_id}{$fusion_gene1{$cluster_id}});
+		$fusion_interrupted_index2{$cluster_id} = calculate_interrupted_index($splitr_interruption_info{$cluster_id}{$fusion_gene2{$cluster_id}});
+	}
+	elsif ($fusion_break_predict{$cluster_id} eq "denovo")
+	{
+		$fusion_interrupted_index1{$cluster_id} = calculate_interrupted_index($splitr_interruption_info{$cluster_id}{$fusion_gene1{$cluster_id}});
+		$fusion_interrupted_index2{$cluster_id} = calculate_interrupted_index($splitr_interruption_info{$cluster_id}{$fusion_gene2{$cluster_id}});
+	}
+}
 
 my %gene_tss;
 open TSS, $tss_regions or die "Error: Unable to open $tss_regions\n";
@@ -301,8 +366,9 @@ sub find_alignregion
 		my $num_target_bases_inserted = $psl_fields[7];
 		my $strand = $psl_fields[8];
 		my $cluster_id = $psl_fields[9];
-		my $breakpoint_seq_length = $psl_fields[10];
+		my $query_size = $psl_fields[10];
 		my $target_seq_name = $psl_fields[13];
+		my $target_size = $psl_fields[14];
 		my @block_sizes = split /,/, $psl_fields[18];
 		my @query_starts = split /,/, $psl_fields[19];
 		my @target_starts = split /,/, $psl_fields[20];
@@ -321,16 +387,16 @@ sub find_alignregion
 
 			if ($strand eq "-")
 			{
-				$query_start = $breakpoint_seq_length - $query_starts[$block_index] - $block_size + 1;
-				$query_end = $breakpoint_seq_length - $query_starts[$block_index];
+				$query_start = $query_size - $query_starts[$block_index] - $block_size + 1;
+				$query_end = $query_size - $query_starts[$block_index];
 			}
 
 			my $target_start = $target_starts[$block_index] + 1;
 			my $target_end = $target_starts[$block_index] + $block_size;
 			
 			push @{$align_strand->{$cluster_id}{$gene}}, $strand;
-			push @{$query_region->{$cluster_id}{$gene}}, [$query_start, $query_end];
-			push @{$target_region->{$cluster_id}{$gene}}, [$target_start, $target_end];
+			push @{$query_region->{$cluster_id}{$gene}}, [$query_start, $query_end, $query_size];
+			push @{$target_region->{$cluster_id}{$gene}}, [$target_start, $target_end, $target_size, $target_seq_name];
 		}
 	}
 	close PSL;
@@ -474,14 +540,7 @@ foreach my $cluster_id (keys %fusion_span_count)
 	$average_mappings{$cluster_id} = $total_mappings / $span_count;
 }
 
-# Read in the read stats
-my $read_stats = $output_directory."/concordant.read.stats";
-my %read_stat_values;
-get_stats($read_stats, \%read_stat_values);
-
-my $read_length_min = $read_stat_values{"readlength_min"};
-my $fragment_mean = $read_stat_values{"fraglength_mean"};
-my $expected_coverage = $fragment_mean - $read_length_min;
+my $expected_coverage = $read_stat_values{"fraglength_mean"} - $read_stat_values{"readlength_min"};
 
 my %span_coverage;
 foreach my $cluster_id (keys %clusters)
@@ -608,33 +667,128 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	my $exonboundaries = "N";
 	foreach my $start_index1 (0..$#{$exon_align_strand{$cluster_id}{$gene1}})
 	{
+		my $strand1 = $exon_align_strand{$cluster_id}{$gene1}->[$start_index1];
 		my $query_region1 = $exon_query_region{$cluster_id}{$gene1}->[$start_index1];
+		my $target_region1 = $exon_target_region{$cluster_id}{$gene1}->[$start_index1];
+
+		my $target_size1 = $target_region1->[2];
+		my $target_name1 = $target_region1->[3];
 
 		foreach my $start_index2 (0..$#{$exon_align_strand{$cluster_id}{$gene2}})
 		{	
+			my $strand2 = $exon_align_strand{$cluster_id}{$gene2}->[$start_index2];
 			my $query_region2 = $exon_query_region{$cluster_id}{$gene2}->[$start_index2];
+			my $target_region2 = $exon_target_region{$cluster_id}{$gene2}->[$start_index2];
 
-			$exonboundaries = "Y" if $query_region1->[1] + 1 == $query_region2->[0];
-			$exonboundaries = "Y" if $query_region2->[1] + 1 == $query_region1->[0];
+			my $target_size2 = $target_region2->[2];
+			my $target_name2 = $target_region2->[3];
+			
+			my $query_end1_start2 = ($query_region1->[1] + 1 == $query_region2->[0]);
+			my $query_end2_start1 = ($query_region2->[1] + 1 == $query_region1->[0]);
+			
+			if ($query_end1_start2)
+			{
+				my $query_end1_boundary;
+				my $query_end1_targetpos;
+				if ($strand1 eq "+")
+				{
+					$query_end1_boundary = $target_region1->[1] == $target_size1;
+					$query_end1_targetpos = $target_size1;
+				}
+				else
+				{
+					$query_end1_boundary = $target_region1->[0] == 1;
+					$query_end1_targetpos = 1;
+				}
+				
+				my $query_start2_boundary;
+				my $query_start2_targetpos;
+				if ($strand2 eq "+")
+				{
+					$query_start2_boundary = $target_region2->[0] == 1;
+					$query_start2_targetpos = 1;
+				}
+				else
+				{
+					$query_start2_boundary = $target_region2->[1] == $target_size2;
+					$query_start2_targetpos = $target_size2;
+				}
+				
+				if ($query_end1_boundary and $query_start2_boundary)
+				{
+					$exonboundaries = "Y";
+					
+					$genomic_breakpos1{$cluster_id} = calc_genomic_position($query_end1_targetpos, $exons_reg{$target_name1});
+					$genomic_breakpos2{$cluster_id} = calc_genomic_position($query_start2_targetpos, $exons_reg{$target_name2});
+					
+					last;
+				}
+			}
+			elsif ($query_end2_start1)
+			{
+				my $query_end2_boundary;
+				my $query_end2_targetpos;
+				if ($strand2 eq "+")
+				{
+					$query_end2_boundary = $target_region2->[1] == $target_size2;
+					$query_end2_targetpos = $target_size2;
+				}
+				else
+				{
+					$query_end2_boundary = $target_region2->[0] == 1;
+					$query_end2_targetpos = 1;
+				}
+				
+				my $query_start1_boundary;
+				my $query_start1_targetpos;
+				if ($strand1 eq "+")
+				{
+					$query_start1_boundary = $target_region1->[0] == 1;
+					$query_start1_targetpos = 1;
+				}
+				else
+				{
+					$query_start1_boundary = $target_region1->[1] == $target_size1;
+					$query_start1_targetpos = $target_size1;
+				}
+				
+				if ($query_end2_boundary and $query_start1_boundary)
+				{
+					$exonboundaries = "Y";
+					
+					$genomic_breakpos1{$cluster_id} = calc_genomic_position($query_start1_targetpos, $exons_reg{$target_name1});
+					$genomic_breakpos2{$cluster_id} = calc_genomic_position($query_end2_targetpos, $exons_reg{$target_name2});
+					
+					last;
+				}
+			}
 		}
+		
+		last if $exonboundaries eq "Y";
 	}
 
 	my $adjacent = "N";
 	$adjacent = "Y" if defined $gene_adjacency{$gene1}{$gene2};
 
-	my $genome_strand1 = ($gene_strand{$gene1} eq $fusion_strand1{$cluster_id}) ? "+" : "-";
-	my $genome_strand2 = ($gene_strand{$gene2} eq $fusion_strand2{$cluster_id}) ? "+" : "-";
+	my $genome_strand1 = ($gene_info{$gene1}{strand} eq $fusion_strand1{$cluster_id}) ? "+" : "-";
+	my $genome_strand2 = ($gene_info{$gene2}{strand} eq $fusion_strand2{$cluster_id}) ? "+" : "-";
 
 	my $interchromosomal = "N";
-	$interchromosomal = "Y" if $gene_chromosome{$gene1} ne $gene_chromosome{$gene2};
+	$interchromosomal = "Y" if $gene_info{$gene1}{chromosome} ne $gene_info{$gene2}{chromosome};
 
 	my $inversion = "N";
 	$inversion = "Y" if $interchromosomal eq "N" and $genome_strand1 eq $genome_strand2;
 
 	my $eversion = "N";
-	$eversion = "Y" if $interchromosomal eq "N" and $gene_start{$gene1} < $gene_start{$gene2} and $genome_strand1 eq "-" and $genome_strand2 eq "+";
-	$eversion = "Y" if $interchromosomal eq "N" and $gene_start{$gene1} > $gene_start{$gene2} and $genome_strand1 eq "+" and $genome_strand2 eq "-";
+	$eversion = "Y" if $interchromosomal eq "N" and $gene_info{$gene1}{start} < $gene_info{$gene2}{start} and $genome_strand1 eq "-" and $genome_strand2 eq "+";
+	$eversion = "Y" if $interchromosomal eq "N" and $gene_info{$gene1}{start} > $gene_info{$gene2}{start} and $genome_strand1 eq "+" and $genome_strand2 eq "-";
 	
+	my $deletion = "N";
+	$deletion = "Y" if $interchromosomal eq "N" and $inversion eq "N" and $eversion eq "N";
+
+	my $read_through = "N";
+	$read_through = "Y" if $deletion eq "Y" and $adjacent eq "Y";
+
 	$breakseqs_percident{genome}{$cluster_id} = 0 if not defined $breakseqs_percident{genome}{$cluster_id};
 	$breakseqs_percident{cdna}{$cluster_id} = 0 if not defined $breakseqs_percident{cdna}{$cluster_id};
 	$breakseqs_percident{est}{$cluster_id} = 0 if not defined $breakseqs_percident{est}{$cluster_id};
@@ -656,11 +810,23 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\tgene_start2\t".$gene_info{$gene2}{start}."\n";
 	print $cluster_id."\tgene_end2\t".$gene_info{$gene2}{end}."\n";
 	
-	print $cluster_id."\talign_strand1\t".$fusion_strand1{$cluster_id}."\n";
-	print $cluster_id."\talign_strand2\t".$fusion_strand2{$cluster_id}."\n";
+	print $cluster_id."\tgene_align_strand1\t".$fusion_strand1{$cluster_id}."\n";
+	print $cluster_id."\tgene_align_strand2\t".$fusion_strand2{$cluster_id}."\n";
+	
+	print $cluster_id."\tgenomic_break_pos1\t".$genomic_breakpos1{$cluster_id}."\n";
+	print $cluster_id."\tgenomic_break_pos2\t".$genomic_breakpos2{$cluster_id}."\n";	
+	print $cluster_id."\tgenomic_strand1\t".$genome_strand1."\n";
+	print $cluster_id."\tgenomic_strand2\t".$genome_strand2."\n";	
 
+	print $cluster_id."\tsplicing_index1\t".$fusion_splicing_index1{$cluster_id}."\n";
+	print $cluster_id."\tsplicing_index2\t".$fusion_splicing_index2{$cluster_id}."\n";
+	print $cluster_id."\tinterrupted_index1\t".$fusion_interrupted_index1{$cluster_id}."\n";
+	print $cluster_id."\tinterrupted_index2\t".$fusion_interrupted_index2{$cluster_id}."\n";
 	print $cluster_id."\tspan_coverage1\t".$span_coverage{$cluster_id}{$ref_name1}."\n";
 	print $cluster_id."\tspan_coverage2\t".$span_coverage{$cluster_id}{$ref_name2}."\n";
+	print $cluster_id."\texpression1\t".get_expression($gene1)."\n";
+	print $cluster_id."\texpression2\t".get_expression($gene2)."\n";
+	
 	print $cluster_id."\tupstream1\t".$upstream1."\n";
 	print $cluster_id."\tupstream2\t".$upstream2."\n";
 	print $cluster_id."\texonic1\t".$exonic1."\n";
@@ -683,6 +849,9 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\tinterchromosomal\t".$interchromosomal."\n";
 	print $cluster_id."\tinversion\t".$inversion."\n";
 	print $cluster_id."\teversion\t".$eversion."\n";
+	print $cluster_id."\tdeletion\t".$deletion."\n";
+	print $cluster_id."\tread_through\t".$read_through."\n";
+	
 	print $cluster_id."\tspan_count\t".$fusion_span_count{$cluster_id}."\n";
 	print $cluster_id."\tconcordant_ratio\t".$concordant_ratio{$cluster_id}."\n";
 	print $cluster_id."\taverage_mappings\t".$average_mappings{$cluster_id}."\n";
@@ -1069,4 +1238,261 @@ sub get_stats
 		$stats_outref->{$key} = $value;
 	}
 }
+
+sub read_expression
+{
+	my $expression_filename = shift;
+	my $expression_ref = shift;
+
+	open EXPR, $expression_filename or die "Error: Unable to open $expression_filename: $!\n";
+	while (<EXPR>)
+	{
+		chomp;
+		my @fields = split /\t/;
+	
+		my $ensgene = $fields[0];
+		
+		$expression_ref->{$ensgene}{expression} = $fields[1];
+	}
+	close EXPR;
+}
+
+sub read_gene_info
+{
+	my $gene_info_list = shift;
+	my $gene_info_ref = shift;
+	
+	# Read in gene information
+	open GI, $gene_info_list or die "Error: Unable to open $gene_info_list: $!\n";
+	while (<GI>)
+	{
+		chomp;
+		my @fields = split /\t/;
+	
+		my $ensgene = $fields[0];
+
+		$gene_info_ref->{$ensgene}{name} = $fields[1];
+		$gene_info_ref->{$ensgene}{chromosome} = $fields[2];
+		$gene_info_ref->{$ensgene}{strand} = $fields[3];
+		$gene_info_ref->{$ensgene}{start} = $fields[4];
+		$gene_info_ref->{$ensgene}{end} = $fields[5];
+	}
+	close GI;
+}
+
+sub read_gene_transcript
+{
+	my $gene_tran_filename = shift;
+	my $gene_tran_ref = shift;
+	
+	# Read in gene transcript mapping
+	open GT, $gene_tran_filename or die "Error: Unable to open $gene_tran_filename: $!\n";
+	while (<GT>)
+	{
+		chomp;
+		my @fields = split /\t/;
+		
+		my $ensgene = $fields[0];
+		my $enstran = $fields[1];
+		
+		push @{$gene_tran_ref->{$ensgene}}, $enstran;
+	}
+	close GT;
+}
+
+sub read_regions
+{
+	my $regions_filename = shift;
+	my $regions_hash_ref = shift;
+
+	open REG, $regions_filename or die;
+	while (<REG>)
+	{
+		chomp;
+		my @fields = split /\t/;
+		
+		my $gene = $fields[0];
+		my $chromosome = $fields[1];
+		my $strand = $fields[2];
+	
+		my @exons;
+		my $fieldindex = 4;
+		while ($fieldindex <= $#fields)
+		{
+			push @exons, [$fields[$fieldindex-1],$fields[$fieldindex]];
+			$fieldindex += 2;
+		}
+		
+		$regions_hash_ref->{$gene}{chromosome} = $chromosome;
+		$regions_hash_ref->{$gene}{strand} = $strand;
+		$regions_hash_ref->{$gene}{exons} = [@exons];
+	}
+	close REG;
+}
+
+sub calculate_break_concordant
+{
+	my $breaks_filename = shift;
+	my $break_concordant_ref = shift;
+
+	my $break_concordant_filename = $breaks_filename.".concordant.counts";
+
+	$runner->run("$break_concordant_script -c $config_filename -o $output_directory -b #<1 > #>1", [$breaks_filename], [$break_concordant_filename]);
+
+	open BRC, $break_concordant_filename or die "Error: Unable to open $break_concordant_filename: $!\n";
+	while (<BRC>)
+	{
+		chomp;
+		my ($cluster_id, $gene, $break_concordant) = split /\t/;
+		$break_concordant_ref->{$cluster_id}{$gene}{break_concordant} = $break_concordant;
+	}
+	close BRC;
+}
+
+sub calculate_interrupted
+{
+	my $breaks_filename = shift;
+	my $interrupted_ref = shift;
+
+	my $interrupted_filename = $breaks_filename.".interrupted.counts";
+
+	$runner->run("$interrupted_script -c $config_filename -o $output_directory -b #<1 > #>1", [$breaks_filename], [$interrupted_filename]);
+
+	open BIN, $interrupted_filename or die "Error: Unable to open $interrupted_filename: $!\n";
+	while (<BIN>)
+	{
+		chomp;
+		my ($cluster_id, $gene, $size_before, $size_after, $count_before, $count_after) = split /\t/;
+		$interrupted_ref->{$cluster_id}{$gene}{size_before} = $size_before;
+		$interrupted_ref->{$cluster_id}{$gene}{size_after} = $size_after;
+		$interrupted_ref->{$cluster_id}{$gene}{count_before} = $count_before;
+		$interrupted_ref->{$cluster_id}{$gene}{count_after} = $count_after;
+	}
+	close BIN;
+}
+
+# Find the combined length of a set of regions
+sub regions_length
+{
+	my @regions = @_;
+
+	my $length = 0;
+	foreach my $region (@regions)
+	{
+		$length += $region->[1] - $region->[0] + 1;
+	}
+
+	return $length;
+}
+
+# Merge overlapping regions
+sub merge_regions
+{
+	my @regions = @_;
+	my @merged;
+
+	@regions = sort { $a->[0] <=> $b->[0] } (@regions);
+
+	my $merged_start;
+	my $merged_end;
+	foreach my $region (@regions)
+	{
+		$merged_start = $region->[0] if not defined $merged_start;
+		$merged_end = $region->[1] if not defined $merged_end;
+
+		if ($region->[0] > $merged_end + 1)
+		{
+			push @merged, [$merged_start, $merged_end];
+
+			$merged_start = $region->[0];
+			$merged_end = $region->[1];
+		}
+		else
+		{
+			$merged_end = max($merged_end, $region->[1]);
+		}
+	}
+	push @merged, [$merged_start, $merged_end];
+
+	return @merged;
+}
+
+# Find position in genome given a position and the strand and exons of the transcript
+sub calc_genomic_position
+{
+	my $position = shift;
+	my $transcript_ref = shift;
+	
+	my $strand = $transcript_ref->{strand};
+	my $exons = $transcript_ref->{exons};
+	
+	if ($strand eq "-")
+	{
+		$position = regions_length(@{$exons}) - $position + 1;
+	}
+	
+	if ($position < 1)
+	{
+		return $exons->[0]->[0] + $position - 1;
+	}
+	
+	my $local_offset = 0;
+	foreach my $exon (@{$exons})
+	{
+		my $exonsize = $exon->[1] - $exon->[0] + 1;
+			
+		if ($position <= $local_offset + $exonsize)
+		{
+			return $position - $local_offset - 1 + $exon->[0];
+		}
+				
+		$local_offset += $exonsize;
+	}
+	
+	return $position - $local_offset + $exons->[$#{$exons}]->[1];
+}
+
+# Find position in a transcript given a genomic position and strand and exons of the transcript
+# This version returns the position of the beginning of the next exon if the genomic position is intronic
+sub calc_transcript_position
+{
+	my $position = shift;
+	my $transcript_ref = shift;
+
+	my $strand = $transcript_ref->{strand};
+	my $exons = $transcript_ref->{exons};
+	
+	my $local_offset = 0;
+	my $transcript_position;
+	foreach my $exon (@{$exons})
+	{
+		my $exonsize = $exon->[1] - $exon->[0] + 1;
+
+		if ($position <= $exon->[1])
+		{
+			if ($position < $exon->[0])
+			{
+				$transcript_position = $local_offset + 1;
+				last;
+			}
+			else
+			{
+				$transcript_position = $local_offset + $position - $exon->[0] + 1;
+				last;
+			}
+		}
+				
+		$local_offset += $exonsize;
+	}
+
+	$transcript_position = regions_length(@{$exons}) if not defined $transcript_position;
+	
+	if ($strand eq "-")
+	{
+		$transcript_position = regions_length(@{$exons}) - $transcript_position + 1;
+	}
+	
+	return $transcript_position;
+}
+
 

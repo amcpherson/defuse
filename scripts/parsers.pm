@@ -1,7 +1,7 @@
 package parsers;
 
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 
 sub get_stats
 {

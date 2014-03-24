@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 
 my $genes_filename = shift;
 
@@ -32,7 +32,7 @@ while (<>)
 
 	if ($genes{$gene})
 	{
-		print $line."\n";
+		print $line;
 	}
 }
 

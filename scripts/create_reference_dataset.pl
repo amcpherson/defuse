@@ -44,6 +44,7 @@ my $genome_fasta		= $config->get_value("genome_fasta");
 my $intron_regions		= $config->get_value("intron_regions");
 my $intronic_fasta		= $config->get_value("intronic_fasta");
 my $exons_fasta			= $config->get_value("exons_fasta");
+my $exons_regions       = $config->get_value("exons_regions");
 my $cds_fasta			= $config->get_value("cds_fasta");
 my $rrna_fasta			= $config->get_value("rrna_fasta");
 my $utr5p_fasta			= $config->get_value("utr5p_fasta");
@@ -279,10 +280,13 @@ while (<GFF>)
 	defined $exon_number or die "Error: line $line_number has no exon_number\n";
 	defined $gene_name or die "Error: line $line_number has no gene_name\n";
 
+	# Keep a list of ig genes
+	$ig_genes{$gene_id} = 1 if $ig_gene_sources{$source};
+	
 	# Only keep requested genes from requested sources
 	next unless defined $gene_sources{$source} or $rrna_gene_sources{$source};
 
-	# Only keep requested genes from requested sources
+	# Only keep requested genes from requested chromosomes
 	next unless defined $chromosomes{$chromosome};
 	
 	# Keep a list of candidate fusion partner genes and transcripts
@@ -293,9 +297,6 @@ while (<GFF>)
 	$rrna_genes{$gene_id} = 1 if $rrna_gene_sources{$source};
 	$rrna_transcripts{$transcript_id} = 1 if $rrna_gene_sources{$source};
 
-	# Keep a list of ig genes
-	$ig_genes{$gene_id} = 1 if $ig_gene_sources{$source};
-	
 	# Set gene extension dependent on source
 	$gene_extend{$gene_id} = $utr_extend if $gene_sources{$source};
 	$gene_extend{$gene_id} = $rrna_extend if $rrna_gene_sources{$source};
@@ -712,6 +713,7 @@ sub output_unspliced_regions
 
 print "Writing exon sequences\n";
 output_unspliced_sequences($exons_fasta, \%candidate_genes, \%gene_displayid, \%gene_chromosome, \%gene_strand, \%gene_exons);
+output_unspliced_regions($exons_regions, \%candidate_genes, \%gene_displayid, \%gene_chromosome, \%gene_strand, \%gene_exons);
 
 # Output cds sequences
 print "Writing cds sequences\n";
@@ -782,8 +784,8 @@ close IGL;
 
 # Create concatenated cdna genes reference
 print "Writing cdna and gene sequences\n";
-system "cat $cdna_ext_fasta $gene_fasta > $cdna_gene_fasta";
-system "cat $cdna_ext_regions $gene_regions > $cdna_gene_regions";
+$runner->run("cat $cdna_ext_fasta $gene_fasta > $cdna_gene_fasta", [], []);
+$runner->run("cat $cdna_ext_regions $gene_regions > $cdna_gene_regions", [], []);
 
 # Formatting genome sequence
 my $temp_genome = $genome_fasta.".tmp";

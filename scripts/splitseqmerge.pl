@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
@@ -51,6 +51,7 @@ my $cdna_gene_regions     = $config->get_value("cdna_gene_regions");
 my $scripts_directory     = $config->get_value("scripts_directory");
 my $tools_directory       = $config->get_value("tools_directory");
 my $regions_per_job       = $config->get_value("regions_per_job");
+my $denovo_assembly       = $config->get_value("denovo_assembly");
 
 sub verify_file_exists
 {
@@ -179,8 +180,15 @@ foreach my $split_regions_index (0..$#split_regions)
 	my $splitr_command = $split_seq_bin.$common_args." -i #<1 -b #>1 -q #>2 -l #>3";
 	$runner->padd($splitr_command, [$split_regions_filename], [$split_regions_splitr_break, $split_regions_splitr_seq, $split_regions_splitr_log]); 
 
-	my $denovo_command = $denovo_seq_bin.$common_args." -i #<1 -b #>1 -q #>2 -l #>3";
-	$runner->padd($denovo_command, [$split_regions_filename], [$split_regions_denovo_break, $split_regions_denovo_seq, $split_regions_denovo_log]); 
+	if (lc($denovo_assembly) eq "yes")
+	{
+		my $denovo_command = $denovo_seq_bin.$common_args." -i #<1 -b #>1 -q #>2 -l #>3";
+		$runner->padd($denovo_command, [$split_regions_filename], [$split_regions_denovo_break, $split_regions_denovo_seq, $split_regions_denovo_log]);
+	}
+	else
+	{
+		$runner->padd("touch #>1 #>2 #>3", [], [$split_regions_denovo_break, $split_regions_denovo_seq, $split_regions_denovo_log]);
+	}
 }
 $runner->prun();
 

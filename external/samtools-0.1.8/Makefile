@@ -10,8 +10,7 @@ AOBJS=		bam_tview.o bam_maqcns.o bam_plcmd.o sam_view.o	\
 			bamtk.o kaln.o
 PROG=		samtools
 INCLUDES=	-I../zlib-1.2.5
-SUBDIRS=	. misc
-LIBPATH=
+LIBPATH=	-L../zlib-1.2.5
 LIBCURSES=	#-lcurses # -lXCurses
 
 .SUFFIXES:.c .o
@@ -19,20 +18,9 @@ LIBCURSES=	#-lcurses # -lXCurses
 .c.o:
 		$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $< -o $@
 
-all-recur lib-recur clean-recur cleanlocal-recur install-recur:
-		@target=`echo $@ | sed s/-recur//`; \
-		wdir=`pwd`; \
-		list='$(SUBDIRS)'; for subdir in $$list; do \
-			cd $$subdir; \
-			$(MAKE) CC="$(CC)" DFLAGS="$(DFLAGS)" CFLAGS="$(CFLAGS)" \
-				INCLUDES="$(INCLUDES)" LIBPATH="$(LIBPATH)" $$target || exit 1; \
-			cd $$wdir; \
-		done;
-
 all:$(PROG)
 
 .PHONY:all lib clean cleanlocal
-.PHONY:all-recur lib-recur clean-recur cleanlocal-recur install-recur
 
 lib:libbam.a
 

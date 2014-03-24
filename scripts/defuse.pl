@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
@@ -18,8 +18,8 @@ push @usage, "Usage: ".basename($0)." [options]\n";
 push @usage, "Run the defuse pipeline for fusion discovery.\n";
 push @usage, "  -h, --help      Displays this information\n";
 push @usage, "  -c, --config    Configuration Filename\n";
-push @usage, "  -d, --data      Source Data Directory\n";
 push @usage, "  -o, --output    Output Directory\n";
+push @usage, "  -d, --data      Source Data Directory (default: Skip data retrieval)\n";
 push @usage, "  -n, --name      Library Name (default: Output Directory Suffix)\n";
 push @usage, "  -l, --local     Job Local Directory (default: Output Directory)\n";
 push @usage, "  -s, --submit    Submitter Type (default: direct)\n";
@@ -49,7 +49,6 @@ GetOptions
 not defined $help or die @usage;
 
 defined $config_filename or die @usage;
-defined $source_directory or die @usage;
 defined $output_directory or die @usage;
 
 mkdir $output_directory if not -d $output_directory;
@@ -225,7 +224,11 @@ my $reads_end_1_fastq = $reads_prefix.".1.fastq";
 my $reads_end_2_fastq = $reads_prefix.".2.fastq";
 
 # Retrieve Fastq Files
-$runner->run("$retreive_fastq_script -c $config_filename -d $source_directory -o $output_directory -s $submitter_type", [], [$reads_end_1_fastq,$reads_end_2_fastq]);
+if (defined $source_directory)
+{
+	$source_directory = abs_path($source_directory);
+	$runner->run("$retreive_fastq_script -c $config_filename -d $source_directory -o $output_directory -s $submitter_type", [], [$reads_end_1_fastq,$reads_end_2_fastq]);
+}
 
 # Products of the alignment process
 my $read_stats = $output_directory."/concordant.read.stats";
@@ -245,9 +248,9 @@ $runner->jobmem(30000000000);
 my $cdna_pair_bam_bai = $cdna_pair_bam.".bai";
 my $discordant_aligned_bam_bai = $discordant_aligned_bam.".bai";
 my $discordant_unaligned_bam_bai = $discordant_unaligned_bam.".bai";
-$runner->padd("$samtools_bin index #<1", [$cdna_pair_bam], [$cdna_pair_bam_bai]);
-$runner->padd("$samtools_bin index #<1", [$discordant_aligned_bam], [$discordant_aligned_bam_bai]);
-$runner->padd("$samtools_bin index #<1", [$discordant_unaligned_bam], [$discordant_unaligned_bam_bai]);
+$runner->padd("$samtools_bin index #<1 #>1", [$cdna_pair_bam], [$cdna_pair_bam_bai]);
+$runner->padd("$samtools_bin index #<1 #>1", [$discordant_aligned_bam], [$discordant_aligned_bam_bai]);
+$runner->padd("$samtools_bin index #<1 #>1", [$discordant_unaligned_bam], [$discordant_unaligned_bam_bai]);
 $runner->prun();
 
 # Read in the read stats
@@ -308,7 +311,7 @@ $runner->run("$calc_split_pvalues_script -c $config_filename -s #<1 -v #<2 > #>1
 
 # Annotate fusions
 my $annotations_filename = $output_directory."/annotations.txt";
-$runner->run("$annotate_fusions_script -c $config_filename -o $output_directory -n $library_name > #>1", [$clusters_sc_sam], [$annotations_filename]);
+$runner->run("$annotate_fusions_script -c $config_filename -o $output_directory -n $library_name > #>1", [$splitr_span_pval,$denovo_span_pval,$splitr_split_pval], [$annotations_filename]);
 
 # Run the filtering script
 my $filtered_filename = $output_directory."/filtered.txt";

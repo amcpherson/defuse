@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 
 my $usage = "Usage: $0 fastq_filename reads_per_file split_filename\n\tA % in split_filename will be replaced by the file number\n";
 

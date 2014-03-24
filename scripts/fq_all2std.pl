@@ -4,7 +4,7 @@
 # Version: 0.1.7
 
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 use Getopt::Std;
 
 my $usage = qq(

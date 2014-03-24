@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 use List::Util qw(min max);
 
 die "Usage $0 expressio1 expression2 ...\n" if scalar @ARGV == 0;
