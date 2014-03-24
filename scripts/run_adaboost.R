@@ -1,4 +1,4 @@
-require(ada)
+require(kernlab)
 
 args <- commandArgs(TRUE)
 
@@ -26,17 +26,12 @@ features <- c(
 controls_features <- controls[,match(features,names(controls))]
 controls_class <- controls$validated == "Y"
 
-model = ada(controls_features,controls_class)
-
 data_features <- data[,match(features,names(data))]
 
-if (length(rownames(data)) == 1) {
-	data_features = rbind(data_features,data_features)
-	predict = predict(model,data_features,type="prob")
-	data_prob = data.frame(data,probability=predict[1,2])
-} else {
-	predict = predict(model,data_features,type="prob")
-	data_prob = data.frame(data,probability=predict[,2])
-}
+sig = sigest(controls_class~., cbind(controls_features,controls_class), frac = 0.5, na.action = na.omit, scaled = TRUE)[2]
+model = ksvm(controls_class~., cbind(controls_features,controls_class), type = "C-svc", kernel = "rbfdot", kpar = list(sigma = sig), C = 1, prob.model = TRUE)
+predict = predict(model, data_features, type = "probabilities")
+data_prob = data.frame(data, probability=predict[,2])
 
 write.table(data_prob, file=args[3], quote=F, sep="\t", eol="\n", row.names=F)
+

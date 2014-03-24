@@ -83,11 +83,11 @@ my %fusion_gene_exons_before_size;
 my %fusion_gene_exons_after_size;
 foreach my $cluster_id (keys %breaks)
 {
-	foreach my $breakpos (@{$breaks{$cluster_id}{breakpos}})
+	foreach my $cluster_end ("0","1")
 	{
-		my $reference = $breakpos->[0];
-		my $strand = $breakpos->[1];
-		my $position = $breakpos->[2];
+		my $reference = $breaks{$cluster_id}{$cluster_end}{reference};
+		my $strand = $breaks{$cluster_id}{$cluster_end}{strand};
+		my $position = $breaks{$cluster_id}{$cluster_end}{breakpos};
 		
 		$reference =~ /(ENSG\d+)/;
 		my $gene = $1;
@@ -108,7 +108,6 @@ foreach my $cluster_id (keys %breaks)
 			{
 				$strand = "-";
 			}
-			$breakpos->[1] = $strand;
 		}
 		else
 		{
@@ -221,11 +220,11 @@ foreach my $transcript (keys %transcript_fusion_position)
 
 foreach my $cluster_id (keys %breaks)
 {
-	foreach my $breakpos (@{$breaks{$cluster_id}{breakpos}})
+	foreach my $cluster_end (keys %{$breaks{$cluster_id}})
 	{
-		my $reference = $breakpos->[0];
-		my $strand = $breakpos->[1];
-		my $breakpos = $breakpos->[2];
+		my $reference = $breaks{$cluster_id}{$cluster_end}{reference};
+		my $strand = $breaks{$cluster_id}{$cluster_end}{strand};
+		my $position = $breaks{$cluster_id}{$cluster_end}{breakpos};
 		
 		$reference =~ /(ENSG\d+)/;
 		my $gene = $1;
@@ -245,7 +244,7 @@ foreach my $cluster_id (keys %breaks)
 		$count_before = 0 if not defined $count_before;
 		$count_after = 0 if not defined $count_after;
 		
-		print $cluster_id."\t".$gene."\t".$size_before."\t".$size_after."\t".$count_before."\t".$count_after."\n";
+		print $cluster_id."\t".$cluster_end."\t".$gene."\t".$size_before."\t".$size_after."\t".$count_before."\t".$count_after."\n";
 	}
 }
 
@@ -261,11 +260,14 @@ sub read_breaks
 		my @fields = split /\t/;
 		
 		my $cluster_id = $fields[0];
-		my $reference = $fields[1];
-		my $strand = $fields[2];
-		my $breakpos = $fields[3];
+		my $cluster_end = $fields[1];
+		my $reference = $fields[2];
+		my $strand = $fields[3];
+		my $breakpos = $fields[4];
 		
-		push @{$breaks_hash_ref->{$cluster_id}{breakpos}}, [$reference,$strand,$breakpos];
+		$breaks_hash_ref->{$cluster_id}{$cluster_end}{reference} = $reference;
+		$breaks_hash_ref->{$cluster_id}{$cluster_end}{strand} = $strand;
+		$breaks_hash_ref->{$cluster_id}{$cluster_end}{breakpos} = $breakpos;
 	}
 	close BR;
 }

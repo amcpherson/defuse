@@ -54,7 +54,7 @@ bool FragmentLessThan(const CompactAlignment& a1, const CompactAlignment& a2)
 	return a1.readID.fragmentIndex < a2.readID.fragmentIndex;
 }
 
-double normalpdf(int x, int mu, int sigma)
+double normalpdf(double x, double mu, double sigma)
 {
 	double coeff = 1.0 / ((double)sigma * sqrt(2 * M_PI));
 	

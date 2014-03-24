@@ -320,6 +320,8 @@ bool SplitAlignment::Align()
 			mAlignmentScore.push_back(min(splitAlignment.score1,splitAlignment.score2));
 		}
 	}
+	
+	return true;
 }
 
 void SplitAlignment::WriteAlignments(ostream& out, SplitAlignmentMap& splitAlignments)
@@ -370,13 +372,13 @@ void SplitAlignment::ReadAlignments(istream& in, SplitAlignmentMap& splitAlignme
 	}
 }
 
-bool SplitAlignment::Evaluate(IntegerVec& breakPos, string& sequence, int& splitReadCount, double& splitPosAvg, double& splitMinAvg)
+bool SplitAlignment::Evaluate()
 {
-	breakPos = IntegerVec(2);
-	sequence = "";
-	splitReadCount = 0;
-	splitPosAvg = -1.0;
-	splitMinAvg = -1.0;
+	mBreakPos = IntegerVec(2);
+	mSequence = "N";
+	mSplitReadCount = 0;
+	mSplitPosAvg = -1.0;
+	mSplitMinAvg = -1.0;
 		
 	if (mAlignmentReadID.size() == 0)
 	{
@@ -421,66 +423,83 @@ bool SplitAlignment::Evaluate(IntegerVec& breakPos, string& sequence, int& split
 		return false;
 	}
 	
-	if (sequence == "")
+	IntegerPair bestSplit = maxSplitScoreIter->first;
+	
+	DebugCheck(bestSplit.first <= mSplitAlignSeq[0].length());
+	DebugCheck(bestSplit.second + 1 < mSplitAlignSeq[1].length());
+	
+	string alignBreak1 = mSplitRemainderSeq[0] + mSplitAlignSeq[0].substr(0, bestSplit.first);
+	string alignBreak2 = mSplitAlignSeq[1].substr(bestSplit.second + 1) + mSplitRemainderSeq[1];
+	
+	mSequence = alignBreak1 + "|" + alignBreak2;
+	
+	if (mSplitSeqStrand[0] == PlusStrand)
 	{
-		IntegerPair bestSplit = maxSplitScoreIter->first;
-		
-		DebugCheck(bestSplit.first <= mSplitAlignSeq[0].length());
-		DebugCheck(bestSplit.second + 1 < mSplitAlignSeq[1].length());
-		
-		string alignBreak1 = mSplitRemainderSeq[0] + mSplitAlignSeq[0].substr(0, bestSplit.first);
-		string alignBreak2 = mSplitAlignSeq[1].substr(bestSplit.second + 1) + mSplitRemainderSeq[1];
-		
-		sequence = alignBreak1 + "|" + alignBreak2;
-		
-		if (mSplitSeqStrand[0] == PlusStrand)
-		{
-			breakPos[0] = mSplitAlignSeqStart[0] + bestSplit.first - 1;
-		}
-		else
-		{
-			breakPos[0] = mSplitAlignSeqStart[0] + mSplitAlignSeqLength[0] - bestSplit.first;				
-		}
-		
-		if (mSplitSeqStrand[1] == PlusStrand)
-		{
-			breakPos[1] = mSplitAlignSeqStart[1] + bestSplit.second + 1;
-		}
-		else
-		{
-			breakPos[1] = mSplitAlignSeqStart[1] + mSplitAlignSeqLength[1] - bestSplit.second - 2;
-		}
-		
-		splitReadCount = splitCountMap[bestSplit];
+		mBreakPos[0] = mSplitAlignSeqStart[0] + bestSplit.first - 1;
 	}
+	else
+	{
+		mBreakPos[0] = mSplitAlignSeqStart[0] + mSplitAlignSeqLength[0] - bestSplit.first;				
+	}
+	
+	if (mSplitSeqStrand[1] == PlusStrand)
+	{
+		mBreakPos[1] = mSplitAlignSeqStart[1] + bestSplit.second + 1;
+	}
+	else
+	{
+		mBreakPos[1] = mSplitAlignSeqStart[1] + mSplitAlignSeqLength[1] - bestSplit.second - 2;
+	}
+	
+	mSplitReadCount = splitCountMap[bestSplit];
 	
 	const IntegerVec& leftBaseCount = leftBaseCounts[maxSplitScoreIter->first];
 	const IntegerVec& rightBaseCount = rightBaseCounts[maxSplitScoreIter->first];
 	
-	if (splitPosAvg == -1.0 || splitMinAvg == -1.0)
+	double posSum = 0.0;
+	double minSum = 0.0;
+	
+	for (int splitIndex = 0; splitIndex < leftBaseCount.size(); splitIndex++)
 	{
-		double posSum = 0.0;
-		double minSum = 0.0;
+		double posRange = (double)(leftBaseCount[splitIndex] + rightBaseCount[splitIndex] - 2*minAnchor);
+		double posValue = max(0, leftBaseCount[splitIndex] - minAnchor);
 		
-		for (int splitIndex = 0; splitIndex < leftBaseCount.size(); splitIndex++)
-		{
-			double posRange = (double)(leftBaseCount[splitIndex] + rightBaseCount[splitIndex] - 2*minAnchor);
-			double posValue = max(0, leftBaseCount[splitIndex] - minAnchor);
-			
-			double minRange = 0.5 * (double)(leftBaseCount[splitIndex] + rightBaseCount[splitIndex] - 2*minAnchor);
-			double minValue = max(0, min(leftBaseCount[splitIndex] - minAnchor, rightBaseCount[splitIndex] - minAnchor));
-			
-			posSum += posValue / posRange;
-			minSum += minValue / minRange;
-		}
+		double minRange = 0.5 * (double)(leftBaseCount[splitIndex] + rightBaseCount[splitIndex] - 2*minAnchor);
+		double minValue = max(0, min(leftBaseCount[splitIndex] - minAnchor, rightBaseCount[splitIndex] - minAnchor));
 		
-		splitPosAvg = posSum / leftBaseCount.size();
-		splitMinAvg = minSum / leftBaseCount.size();
+		posSum += posValue / posRange;
+		minSum += minValue / minRange;
 	}
 	
-	splitScoreMap.erase(maxSplitScoreIter);
-	
+	mSplitPosAvg = posSum / leftBaseCount.size();
+	mSplitMinAvg = minSum / leftBaseCount.size();
+		
 	return true;
+}
+
+void SplitAlignment::WriteSequences(ostream& out, SplitAlignmentMap& splitAlignments)
+{
+	for (SplitAlignmentMapConstIter splitAlignIter = splitAlignments.begin(); splitAlignIter != splitAlignments.end(); splitAlignIter++)
+	{
+		int id = splitAlignIter->first;
+		const SplitAlignment& splitAlignment = splitAlignIter->second;
+		
+		out << id << "\t" << splitAlignment.mSequence << "\t" << "0" << "\t" << splitAlignment.mSplitReadCount << "\t" << splitAlignment.mSplitPosAvg << "\t" << splitAlignment.mSplitMinAvg << endl;
+	}
+}
+
+void SplitAlignment::WriteBreaks(ostream& out, SplitAlignmentMap& splitAlignments)
+{
+	for (SplitAlignmentMapConstIter splitAlignIter = splitAlignments.begin(); splitAlignIter != splitAlignments.end(); splitAlignIter++)
+	{
+		int id = splitAlignIter->first;
+		const SplitAlignment& splitAlignment = splitAlignIter->second;
+		
+		for (int clusterEnd = 0; clusterEnd <= 1; clusterEnd++)
+		{
+			out << id << "\t" << clusterEnd << "\t" << splitAlignment.mAlignRefName[clusterEnd] << "\t" << (splitAlignment.mAlignStrand[clusterEnd] == PlusStrand ? "+" : "-") << "\t" << splitAlignment.mBreakPos[clusterEnd] << endl;
+		}
+	}
 }
 
 void SplitAlignment::AddAnchoredReads(const AlignmentIndex& discordant, const AlignmentIndex& anchored, const string& transcript, int strand, int revComp, int start, int end)

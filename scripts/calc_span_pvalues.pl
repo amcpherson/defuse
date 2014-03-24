@@ -66,11 +66,12 @@ while (<BR>)
 	my @fields = split /\t/;
 	
 	my $cluster_id = $fields[0];
-	my $ref_name = $fields[1];
-	my $strand = $fields[2];
-	my $break_pos = $fields[3];
+	my $cluster_end = $fields[1];
+	my $ref_name = $fields[2];
+	my $strand = $fields[3];
+	my $break_pos = $fields[4];
 	
-	$cluster_break_pos{$cluster_id}{$ref_name} = $break_pos;
+	$cluster_break_pos{$cluster_id}{$cluster_end} = $break_pos;
 }
 close BR;
 
@@ -98,30 +99,18 @@ while (<SP>)
 	my @fields = split /\t/;
 	
 	my $cluster_id = $fields[0];
-	my $read_id = $fields[1];
-	my $flag = $fields[2];
-	my $ref_name = $fields[3];
-	my $start = $fields[4];
-	my $end = $start + length($fields[10]) - 1;
-
-	$read_id =~ /(.*)\/([12])/;
-	my $fragment_id = $1;
-	my $read_end = $2;
-
-	my $strand;
-	if ($flag & hex('0x0010'))
-	{
-		$strand = "-";
-	}
-	else
-	{
-		$strand = "+";
-	}
-
-	$cluster_strand{$cluster_id}{$ref_name} = $strand;
+	my $cluster_end = $fields[1];
+	my $fragment_id = $fields[2];
+	my $read_end = $fields[3];
+	my $ref_name = $fields[4];
+	my $strand = $fields[5];
+	my $start = $fields[6];
+	my $end = $fields[7];
 	
-	$cluster_align_start{$cluster_id}{$fragment_id}{$ref_name} = $start;
-	$cluster_align_end{$cluster_id}{$fragment_id}{$ref_name} = $end;
+	$cluster_strand{$cluster_id}{$cluster_end} = $strand;
+	
+	$cluster_align_start{$cluster_id}{$fragment_id}{$cluster_end} = $start;
+	$cluster_align_end{$cluster_id}{$fragment_id}{$cluster_end} = $end;
 }
 close SP;
 
@@ -137,16 +126,16 @@ foreach my $cluster_id (keys %cluster_strand)
 	foreach my $fragment_id (keys %{$cluster_align_start{$cluster_id}})
 	{
 		my $fragment_length = 0;
-		foreach my $ref_name (keys %{$cluster_align_start{$cluster_id}{$fragment_id}})
+		foreach my $cluster_end (keys %{$cluster_align_start{$cluster_id}{$fragment_id}})
 		{
-			my $strand = $cluster_strand{$cluster_id}{$ref_name};
+			my $strand = $cluster_strand{$cluster_id}{$cluster_end};
 			if ($strand eq "+")
 			{
-				$fragment_length += $cluster_break_pos{$cluster_id}{$ref_name} - $cluster_align_start{$cluster_id}{$fragment_id}{$ref_name} + 1;
+				$fragment_length += $cluster_break_pos{$cluster_id}{$cluster_end} - $cluster_align_start{$cluster_id}{$fragment_id}{$cluster_end} + 1;
 			}
 			else
 			{
-				$fragment_length += $cluster_align_end{$cluster_id}{$fragment_id}{$ref_name} - $cluster_break_pos{$cluster_id}{$ref_name} + 1;
+				$fragment_length += $cluster_align_end{$cluster_id}{$fragment_id}{$cluster_end} - $cluster_break_pos{$cluster_id}{$cluster_end} + 1;
 			}
 		}
 		$fragment_length += $cluster_inter_length{$cluster_id};

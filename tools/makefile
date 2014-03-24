@@ -18,8 +18,8 @@ ZLIB = libz.a
 INCLUDE = -I. -I../include -I$(BAMDIR) -I$(ZDIR)
 CC = /usr/bin/g++
 CXX = /usr/bin/g++
-CXXFLAGS = -O2 -DDEBUG_CHECKS $(INCLUDE)
-LDFLAGS = -O2 -L$(BAMDIR) -lbam -L$(ZDIR) -lz
+CXXFLAGS = -O3 -DDEBUG_CHECKS $(INCLUDE)
+LDFLAGS = -O3 -L$(BAMDIR) -lbam -L$(ZDIR) -lz
 
 all: tools $(BAMDIR)/samtools
 
@@ -70,13 +70,14 @@ overlapclusters : \
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
 
-maximalvalidclusters : \
-		./Clusters.o\
+clustermatepairs : \
 		./Common.o\
 		./DebugCheck.o\
-		./ExonRegions.o\
-		./MatePairCombinatorial.o\
-		./maximalvalidclusters.o\
+		./MatePairEM.o\
+		./asa136.o\
+		./asa241.o\
+		./clustermatepairs.o\
+		./FragmentAlignmentsIterator.o\
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
 
@@ -176,7 +177,7 @@ estislands : \
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
 
-tools : connectivity remapsplices overlapclusters maximalvalidclusters setcover splitseq denovoseq calccov estislands findcandidatereads dosplitalign evalsplitalign
+tools : connectivity remapsplices overlapclusters setcover splitseq denovoseq calccov estislands findcandidatereads dosplitalign evalsplitalign clustermatepairs
 	
 
 clean : 

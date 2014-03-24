@@ -9,6 +9,7 @@
 
 #include "Parsers.h"
 #include "Common.h"
+#include "DebugCheck.h"
 
 #include <fstream>
 #include <iostream>
@@ -47,15 +48,22 @@ void ReadClusters(const string& clustersFilename, IntegerTable& clusters)
 		vector<string> clusterFields;
 		split(clusterFields, line, is_any_of("\t"));
 		
-		if (clusterFields.size() < 2)
+		if (clusterFields.size() < 3)
 		{
 			cerr << "Error: Format error for clusters line " << lineNumber << " of " << clustersFilename << endl;
 			exit(1);
 		}
 		
 		int clusterID = lexical_cast<int>(clusterFields[0]);
-		int fragmentIndex = lexical_cast<int>(clusterFields[1]);
-		
+		int clusterEnd = lexical_cast<int>(clusterFields[1]);
+		int fragmentIndex = lexical_cast<int>(clusterFields[2]);
+
+		// Only read in cluster end 0
+		if (clusterEnd != 0)
+		{
+			continue;
+		}		
+
 		if (clusterID < 0)
 		{
 			cerr << "Error: Invalid cluster ID for line " << lineNumber << " of " << clustersFilename << endl;
@@ -121,14 +129,14 @@ void WriteClusters(const string& inClustersFilename, const string& outClustersFi
 		vector<string> clusterFields;
 		split(clusterFields, line, is_any_of("\t"));
 		
-		if (clusterFields.size() < 2)
+		if (clusterFields.size() < 3)
 		{
 			cerr << "Error: Format error for clusters line " << lineNumber << " of " << outClustersFilename << endl;
 			exit(1);
 		}
 		
 		int clusterID = lexical_cast<int>(clusterFields[0]);
-		int fragmentIndex = lexical_cast<int>(clusterFields[1]);
+		int fragmentIndex = lexical_cast<int>(clusterFields[2]);
 		
 		if (clusterID < 0)
 		{
@@ -294,15 +302,19 @@ void ReadAlignRegionPairs(const string& filename, LocationVecMap& alignRegionPai
 			continue;
 		}
 		
-		const string& pairID = alignRegionFields[0];
+		int pairID = lexical_cast<int>(alignRegionFields[0]);
+		int pairEnd = lexical_cast<int>(alignRegionFields[1]);
+		
+		DebugCheck(pairEnd == 0 || pairEnd == 1);
 		
 		Location alignRegion;
-		alignRegion.refName = alignRegionFields[1];
-		alignRegion.strand = InterpretStrand(alignRegionFields[2]);
-		alignRegion.start = lexical_cast<int>(alignRegionFields[3]);
-		alignRegion.end = lexical_cast<int>(alignRegionFields[4]);
-
-		alignRegionPairs[pairID].push_back(alignRegion);
+		alignRegion.refName = alignRegionFields[2];
+		alignRegion.strand = InterpretStrand(alignRegionFields[3]);
+		alignRegion.start = lexical_cast<int>(alignRegionFields[4]);
+		alignRegion.end = lexical_cast<int>(alignRegionFields[5]);
+		
+		alignRegionPairs[pairID].resize(2);
+		alignRegionPairs[pairID][pairEnd] = alignRegion;
 	}
 	
 	alignRegionPairsFile.close();

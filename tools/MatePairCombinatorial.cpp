@@ -6,7 +6,6 @@
  */
 
 #include "MatePairCombinatorial.h"
-#include "Clusters.h"
 #include "Common.h"
 #include "DebugCheck.h"
 
@@ -38,6 +37,7 @@ void MatePairCombinatorial::Initialize(const Parameters& parameters)
 	mMaxFragmentLengthDiff = 2 * x;
 
 	mMinClusterSize = parameters.minClusterSize;
+	mResolution = parameters.resolution;
 }
 
 void MatePairCombinatorial::StrandRemap(const Region& region, int strand, Region& remapped) const
@@ -124,7 +124,7 @@ void Intersect(const IntegerVec& vec1, const IntegerVec& vec2, IntegerVec& resul
 	result = IntegerVec(intersect.begin(), intersect.end());	
 }
 
-void MatePairCombinatorial::CreateOverlapClusters(FeatureRegionVec& regions, Clusters& overlapClusters) const
+void MatePairCombinatorial::CreateOverlapClusters(FeatureRegionVec& regions, IntegerTable& overlapClusters) const
 {
 	sort(regions.begin(), regions.end(), FeatureRegionStartLessThan());
 	
@@ -141,17 +141,20 @@ void MatePairCombinatorial::CreateOverlapClusters(FeatureRegionVec& regions, Clu
 			currentRegionIndex++;
 		}
 		
-		if (inserted)
+		if (inserted && currentCluster.size() != 0)
 		{
-			overlapClusters.OpenCluster();
+			overlapClusters.push_back(IntegerVec());
 			for (multiset<FeatureRegion,FeatureRegionEndLessThan>::const_iterator regionIter = currentCluster.begin(); regionIter != currentCluster.end(); regionIter++)
 			{
-				overlapClusters.AddToCluster(regionIter->matePairIndex);
+				overlapClusters.back().push_back(regionIter->matePairIndex);
 			}
-			overlapClusters.CloseCluster();
 		}
 		
-		currentCluster.erase(currentCluster.begin());
+		int currentEnd = currentCluster.begin()->end;
+		while (!currentCluster.empty() && currentCluster.begin()->end < currentEnd + mResolution)
+		{
+			currentCluster.erase(currentCluster.begin());
+		}
 	}
 }
 
@@ -170,7 +173,57 @@ void MatePairCombinatorial::CalcBreakRegion(const Region& alignment, int strand,
 	StrandRemap(breakRegion, strand, breakRegion);
 }
 
-void MatePairCombinatorial::DoClustering(const MatePairVec& matePairs, Clusters& clusters) const
+void MatePairCombinatorial::SelectFeatureRegions(const IntegerVec& indices, const FeatureRegionVec& features, FeatureRegionVec& selected) const
+{
+	for (IntegerVecConstIter iter = indices.begin(); iter != indices.end(); iter++)
+	{
+		selected.push_back(features[*iter]);
+	}
+}
+
+void MatePairCombinatorial::RemoveRedundant(IntegerTable& clusters) const
+{
+	for (IntegerTableIter clusterIter = clusters.begin(); clusterIter != clusters.end(); clusterIter++)
+	{
+		sort(clusterIter->begin(), clusterIter->end());
+	}
+	
+	unordered_set<int> redundant;
+	for (int cluster1Index = 0; cluster1Index < clusters.size(); cluster1Index++)
+	{
+		for (int cluster2Index = 0; cluster2Index < clusters.size(); cluster2Index++)
+		{
+			const IntegerVec& cluster1 = clusters[cluster1Index];
+			const IntegerVec& cluster2 = clusters[cluster2Index];
+			
+			bool clusterIncludes = includes(cluster1.begin(), cluster1.end(), cluster2.begin(), cluster2.end());
+			bool clusterEqual = clusterIncludes && cluster1.size() == cluster2.size();
+			
+			if (clusterIncludes && !clusterEqual)
+			{
+				redundant.insert(cluster2Index);
+			}
+			
+			if (clusterEqual && cluster1Index < cluster2Index)
+			{
+				redundant.insert(cluster2Index);				
+			}
+		}
+	}
+	
+	IntegerTable newClusters;
+	for (int clusterIndex = 0; clusterIndex < clusters.size(); clusterIndex++)
+	{
+		if (redundant.find(clusterIndex) == redundant.end())
+		{
+			newClusters.push_back(clusters[clusterIndex]);
+		}
+	}
+	
+	swap(newClusters, clusters);
+}
+
+void MatePairCombinatorial::DoClustering(const MatePairVec& matePairs, IntegerTable& clusters) const
 {
 	if (matePairs.size() < mMinClusterSize)
 	{
@@ -199,61 +252,31 @@ void MatePairCombinatorial::DoClustering(const MatePairVec& matePairs, Clusters&
 		lengthRanges.push_back(lengthRange);
 	}
 	
-	Clusters breakRegionClusters1;
-	Clusters breakRegionClusters2;
-	Clusters lengthRangeClusters;
-	
+	IntegerTable breakRegionClusters1;
 	CreateOverlapClusters(breakRegions1, breakRegionClusters1);
-	CreateOverlapClusters(breakRegions2, breakRegionClusters2);
-	CreateOverlapClusters(lengthRanges, lengthRangeClusters);
-	
-	ElementClusterMap clusterElements1;
-	ElementClusterMap clusterElements2;
-	ElementClusterMap clusterElements3;
-	
-	breakRegionClusters1.CreateElementClusterMap(clusterElements1);
-	breakRegionClusters2.CreateElementClusterMap(clusterElements2);
-	lengthRangeClusters.CreateElementClusterMap(clusterElements3);
-
-	ClusterElementMap clusterElements;
-	
-	// Divide elements into clusters according to 3 features
-	for (int matePairIndex = 0; matePairIndex < (int)matePairs.size(); matePairIndex++)
-	{
-		int matePairID = matePairs[matePairIndex].id;
-
-		const IntegerVec& matePairClusters1 = clusterElements1[matePairIndex];
-		const IntegerVec& matePairClusters2 = clusterElements2[matePairIndex];
-		const IntegerVec& matePairClusters3 = clusterElements3[matePairIndex];
 		
-		for (IntegerVecConstIter matePairCluster1Iter = matePairClusters1.begin(); matePairCluster1Iter != matePairClusters1.end(); matePairCluster1Iter++)
-		{
-			for (IntegerVecConstIter matePairCluster2Iter = matePairClusters2.begin(); matePairCluster2Iter != matePairClusters2.end(); matePairCluster2Iter++)
-			{
-				for (IntegerVecConstIter matePairCluster3Iter = matePairClusters3.begin(); matePairCluster3Iter != matePairClusters3.end(); matePairCluster3Iter++)
-				{
-					ClusterTuple clusterTuple;
-					clusterTuple.cluster1 = *matePairCluster1Iter;
-					clusterTuple.cluster2 = *matePairCluster2Iter;
-					clusterTuple.cluster3 = *matePairCluster3Iter;
-					
-					clusterElements[clusterTuple].push_back(matePairID);
-				}
-			}
-		}
+	IntegerTable breakRegionClusters2;
+	for (IntegerTableConstIter clusterIter = breakRegionClusters1.begin(); clusterIter != breakRegionClusters1.end(); clusterIter++)
+	{		
+		FeatureRegionVec clusterBreakRegions2;
+		SelectFeatureRegions(*clusterIter, breakRegions2, clusterBreakRegions2);
+		
+		CreateOverlapClusters(clusterBreakRegions2, breakRegionClusters2);
 	}
 	
-	// Add clusters
-	Clusters combClusters;
-	for (ClusterElementMapConstIter clusterElementsIter = clusterElements.begin(); clusterElementsIter != clusterElements.end(); clusterElementsIter++)
-	{
-		combClusters.AddCluster(clusterElementsIter->second);
+	RemoveRedundant(breakRegionClusters2);
+	
+	IntegerTable lengthRangeClusters;
+	for (IntegerTableConstIter clusterIter = breakRegionClusters2.begin(); clusterIter != breakRegionClusters2.end(); clusterIter++)
+	{		
+		FeatureRegionVec clusterLengthRange;
+		SelectFeatureRegions(*clusterIter, lengthRanges, clusterLengthRange);
+		
+		CreateOverlapClusters(clusterLengthRange, lengthRangeClusters);
 	}
 	
-	// Remove redundant clusters resulting from the combinatorial algorithm
-	combClusters.RemoveRedundant();
+	RemoveRedundant(lengthRangeClusters);
 	
-	// Merge the new clusters into the main set of clusters
-	clusters.Merge(combClusters);
+	clusters.insert(clusters.end(), lengthRangeClusters.begin(), lengthRangeClusters.end());	
 }
 

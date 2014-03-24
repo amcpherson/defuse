@@ -203,7 +203,7 @@ my $split_seq_merge_script = "$scripts_directory/splitseqmerge.pl";
 my $get_cluster_alignments_script = "$scripts_directory/get_cluster_alignments.pl";
 my $bowtie2sam_script = "$scripts_directory/bowtie2sam.pl";
 my $calccov_bin = "$tools_directory/calccov";
-my $maxvalclust_bin = "$tools_directory/maximalvalidclusters";
+my $clustermatepairs_bin = "$tools_directory/clustermatepairs";
 my $setcover_bin = "$tools_directory/setcover";
 my $split_seq_bin = "$tools_directory/splitseq";
 my $denovo_seq_bin = "$tools_directory/denovoseq";
@@ -298,25 +298,26 @@ print "\tRead length min $read_length_min max $read_length_max\n";
 # Run remaining commands on high memory cluster nodes
 $runner->jobmem(10000000000);
 
+print "Sorting alignments by read\n";
+my $discordant_aligned_byread_bam = $output_directory."/discordant.aligned.byread.bam";
+my $discordant_aligned_byread_bam_prefix = $discordant_aligned_byread_bam.".sort";
+$runner->run("$samtools_bin sort -on -m 10000000000 #<1 $discordant_aligned_byread_bam_prefix > #>1", [$discordant_aligned_bam], [$discordant_aligned_byread_bam]);
+
 print "Finding paired end alignment covariance\n";
 my $cov_stats = $output_directory."/covariance.stats";
 $runner->run("$calccov_bin -m $fragment_max -a $split_min_anchor -d $cov_samp_density -g $gene_tran_list -c #<1 -v #>1", [$cdna_pair_bam], [$cov_stats]);
 
 print "Generating maximal valid clusters\n";
 my $clusters = $output_directory."/clusters.txt";
-$runner->run("$maxvalclust_bin -m $span_count_threshold -a $clustering_precision -u $fragment_mean -s $fragment_stddev -d #<1 -g $gene_tran_list -c #>1", [$discordant_aligned_bam], [$clusters]);
+$runner->run("$clustermatepairs_bin -m $span_count_threshold -p $clustering_precision -u $fragment_mean -s $fragment_stddev -r #<1 -c #>1", [$discordant_aligned_byread_bam], [$clusters]);
 
 print "Generating maximum parsimony solution\n";
 my $clusters_sc = $output_directory."/clusters.sc.txt";
 $runner->run("$setcover_bin -m $span_count_threshold -c #<1 -o #>1", [$clusters], [$clusters_sc]);
 
-print "Generating sam format clusters\n";
-my $clusters_sc_sam = $output_directory."/clusters.sc.sam";
-$runner->run("$samtools_bin view #<1 | $get_cluster_alignments_script #<2 > #>1", [$discordant_aligned_bam,$clusters_sc], [$clusters_sc_sam]);
-
 print "Generating spanning alignment regions file\n";
 my $clusters_sc_regions = $output_directory."/clusters.sc.regions";
-$runner->run("$get_align_regions_script < #<1 > #>1", [$clusters_sc_sam], [$clusters_sc_regions]);
+$runner->run("$get_align_regions_script < #<1 > #>1", [$clusters_sc], [$clusters_sc_regions]);
 
 print "Finding candidate split reads\n";
 my $candidate_sequences = $output_directory."/candidate.seqs";
@@ -354,8 +355,8 @@ else
 print "Calculating spanning pvalues\n";
 my $splitr_span_pval = $output_directory."/splitr.span.pval";
 my $denovo_span_pval = $output_directory."/denovo.span.pval";
-$runner->padd("$calc_span_pvalues_script -c $config_filename -p #<1 -b #<2 -s #<3 -r #<4 -v #<5 > #>1", [$clusters_sc_sam,$splitr_break,$splitr_seq,$read_stats,$cov_stats], [$splitr_span_pval]);
-$runner->padd("$calc_span_pvalues_script -c $config_filename -p #<1 -b #<2 -s #<3 -r #<4 -v #<5 > #>1", [$clusters_sc_sam,$denovo_break,$denovo_seq,$read_stats,$cov_stats], [$denovo_span_pval]);
+$runner->padd("$calc_span_pvalues_script -c $config_filename -p #<1 -b #<2 -s #<3 -r #<4 -v #<5 > #>1", [$clusters_sc,$splitr_break,$splitr_seq,$read_stats,$cov_stats], [$splitr_span_pval]);
+$runner->padd("$calc_span_pvalues_script -c $config_filename -p #<1 -b #<2 -s #<3 -r #<4 -v #<5 > #>1", [$clusters_sc,$denovo_break,$denovo_seq,$read_stats,$cov_stats], [$denovo_span_pval]);
 $runner->prun();
 
 print "Calculating split read pvalues\n";
@@ -366,7 +367,7 @@ print "Annotating fusions\n";
 my $annotations_filename = $output_directory."/annotations.txt";
 my $mapping_stats_filename = $output_directory."/mapping.stats";
 $runner->run("$annotate_fusions_script -c $config_filename -o $output_directory -n $library_name > #>1", [$splitr_span_pval,$denovo_span_pval,$splitr_split_pval], [$annotations_filename]);
-$runner->run("$calc_map_stats_script -c $config_filename -o $output_directory > #>1", [$clusters_sc_sam], [$mapping_stats_filename]);
+$runner->run("$calc_map_stats_script -c $config_filename -o $output_directory > #>1", [$clusters_sc], [$mapping_stats_filename]);
 
 print "Coallating fusions\n";
 my $results_filename = $output_directory."/results.txt";

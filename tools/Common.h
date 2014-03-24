@@ -52,6 +52,23 @@ inline bool operator==(const Region& r1, const Region& r2)
 	return r1.start == r2.start && r1.end == r2.end;
 }
 
+inline int Length(const Region& r)
+{
+	return r.end - r.start + 1;
+}
+
+inline bool Overlap(const Region& r1, const Region& r2)
+{
+	if (r1.end < r2.start || r1.start > r2.end)
+	{
+		return false;
+	}
+	else
+	{
+		return true;
+	}
+}
+
 typedef vector<Region> RegionVec;
 typedef vector<Region>::iterator RegionVecIter;
 typedef vector<Region>::const_iterator RegionVecConstIter;
@@ -76,9 +93,9 @@ typedef vector<LocationVec> LocationTable;
 typedef vector<LocationVec>::iterator LocationTableIter;
 typedef vector<LocationVec>::const_iterator LocationTableConstIter;
 
-typedef unordered_map<string,LocationVec> LocationVecMap;
-typedef unordered_map<string,LocationVec>::iterator LocationVecMapIter;
-typedef unordered_map<string,LocationVec>::const_iterator LocationVecMapConstIter;
+typedef unordered_map<int,LocationVec> LocationVecMap;
+typedef unordered_map<int,LocationVec>::iterator LocationVecMapIter;
+typedef unordered_map<int,LocationVec>::const_iterator LocationVecMapConstIter;
 
 struct Counter
 {
@@ -111,6 +128,10 @@ typedef vector<int>::const_iterator IntegerVecConstIter;
 typedef vector<IntegerVec> IntegerTable;
 typedef vector<IntegerVec>::iterator IntegerTableIter;
 typedef vector<IntegerVec>::const_iterator IntegerTableConstIter;
+
+typedef unordered_map<int,IntegerVec> IntegerVecMap;
+typedef unordered_map<int,IntegerVec>::iterator IntegerVecMapIter;
+typedef unordered_map<int,IntegerVec>::const_iterator IntegerVecMapConstIter;
 
 typedef vector<float> FloatVec;
 typedef vector<float>::iterator FloatVecIter;
@@ -186,7 +207,7 @@ typedef vector<CompAlignVec>::const_iterator CompAlignTableConstIter;
 
 bool FragmentLessThan(const CompactAlignment& a1, const CompactAlignment& a2);
 
-double normalpdf(int x, int mu, int sigma);
+double normalpdf(double x, double mu, double sigma);
 
 int FindMaxElement(const IntegerTable& clusters);
 

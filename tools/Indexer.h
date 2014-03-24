@@ -24,6 +24,18 @@ class Indexer
 public:
 	typedef vector<TType> DataVec;
 
+	Indexer()
+	{}
+	
+	Indexer(const DataVec& data)
+	{
+		mData = data;
+		for (int index = 0; index < mData.size(); index++)
+		{
+			mLookup[mData[index]] = index;
+		}
+	}
+	
 	int Index(const TType& data, bool& inserted)
 	{
 		pair<IndexMapConstIter,bool> dataInsertResult = mLookup.insert(make_pair(data,mData.size()));

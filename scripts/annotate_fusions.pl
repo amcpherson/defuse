@@ -242,25 +242,24 @@ sub calcentropy
 }
 
 my %clusters;
-my $clusters_sam = $output_directory."/clusters.sc.sam";
-read_sam_clusters($clusters_sam, \%clusters);
+my $clusters_sc = $output_directory."/clusters.sc.txt";
+read_clusters($clusters_sc, \%clusters);
 
 # Calculate fusion align regions
 my %fusion_align_region;
 foreach my $cluster_id (keys %clusters)
 {
-	die "Error: fusion $cluster_id does not refer to 2 reference sequences\n" if scalar keys %{$clusters{$cluster_id}} != 2;
-	foreach my $ref_name (keys %{$clusters{$cluster_id}})
+	foreach my $cluster_end (keys %{$clusters{$cluster_id}})
 	{
-		foreach my $fragment_id (keys %{$clusters{$cluster_id}{$ref_name}})
+		foreach my $fragment_id (keys %{$clusters{$cluster_id}{$cluster_end}})
 		{
-			my $align_start = $clusters{$cluster_id}{$ref_name}{$fragment_id}{start};
-			my $align_end = $clusters{$cluster_id}{$ref_name}{$fragment_id}{end};
+			my $align_start = $clusters{$cluster_id}{$cluster_end}{$fragment_id}{start};
+			my $align_end = $clusters{$cluster_id}{$cluster_end}{$fragment_id}{end};
 			
-			$fusion_align_region{$cluster_id}{$ref_name} = [$align_start, $align_end] if not defined $fusion_align_region{$cluster_id}{$ref_name};
+			$fusion_align_region{$cluster_id}{$cluster_end} = [$align_start, $align_end] if not defined $fusion_align_region{$cluster_id}{$cluster_end};
 			
-			$fusion_align_region{$cluster_id}{$ref_name}->[0] = min($fusion_align_region{$cluster_id}{$ref_name}->[0], $align_start);
-			$fusion_align_region{$cluster_id}{$ref_name}->[1] = max($fusion_align_region{$cluster_id}{$ref_name}->[1], $align_end);
+			$fusion_align_region{$cluster_id}{$cluster_end}->[0] = min($fusion_align_region{$cluster_id}{$cluster_end}->[0], $align_start);
+			$fusion_align_region{$cluster_id}{$cluster_end}->[1] = max($fusion_align_region{$cluster_id}{$cluster_end}->[1], $align_end);
 		}
 	}
 }
@@ -274,23 +273,23 @@ open SEQ, ">".$breakpoint_sequences_temp_filename or die "Error: Unable to open 
 my %cluster_ids = (%splitr_seq, %denovo_seq);
 foreach my $cluster_id (keys %cluster_ids)
 {
-	my $ref_name1 = $splitr_break{$cluster_id}{breakpos}->[0]->[0];
-	my $ref_name2 = $splitr_break{$cluster_id}{breakpos}->[1]->[0];
+	my $ref_name1 = $splitr_break{$cluster_id}{"0"}{reference};
+	my $ref_name2 = $splitr_break{$cluster_id}{"1"}{reference};
 	
 	$ref_name1 =~ /(ENSG\d+)/ or die "Error: Unable to interpret $ref_name1\n"; my $gene1 = $1;
 	$ref_name2 =~ /(ENSG\d+)/ or die "Error: Unable to interpret $ref_name2\n"; my $gene2 = $1;
 
-	my $strand1 = $splitr_break{$cluster_id}{breakpos}->[0]->[1];
-	my $strand2 = $splitr_break{$cluster_id}{breakpos}->[1]->[1];
+	my $strand1 = $splitr_break{$cluster_id}{"0"}{strand};
+	my $strand2 = $splitr_break{$cluster_id}{"1"}{strand};
 	
 	my $genomic_strand1 = ($gene_info{$gene1}{strand} eq $strand1) ? "+" : "-";
 	my $genomic_strand2 = ($gene_info{$gene2}{strand} eq $strand2) ? "+" : "-";
 
-	$genomic_breakpos1{$cluster_id} = calc_genomic_position($splitr_break{$cluster_id}{breakpos}->[0]->[2], $cdna_gene_reg{$ref_name1});
-	$genomic_breakpos2{$cluster_id} = calc_genomic_position($splitr_break{$cluster_id}{breakpos}->[1]->[2], $cdna_gene_reg{$ref_name2});
+	$genomic_breakpos1{$cluster_id} = calc_genomic_position($splitr_break{$cluster_id}{"0"}{breakpos}, $cdna_gene_reg{$ref_name1});
+	$genomic_breakpos2{$cluster_id} = calc_genomic_position($splitr_break{$cluster_id}{"1"}{breakpos}, $cdna_gene_reg{$ref_name2});
 	
-	my @genomic_regions1 = calc_genomic_regions($fusion_align_region{$cluster_id}{$ref_name1}, $cdna_gene_reg{$ref_name1});
-	my @genomic_regions2 = calc_genomic_regions($fusion_align_region{$cluster_id}{$ref_name2}, $cdna_gene_reg{$ref_name2});
+	my @genomic_regions1 = calc_genomic_regions($fusion_align_region{$cluster_id}{"0"}, $cdna_gene_reg{$ref_name1});
+	my @genomic_regions2 = calc_genomic_regions($fusion_align_region{$cluster_id}{"1"}, $cdna_gene_reg{$ref_name2});
 	
 	my $chromosome1 = $gene_info{$gene1}{chromosome};
 	my $chromosome2 = $gene_info{$gene2}{chromosome};
@@ -331,8 +330,6 @@ foreach my $cluster_id (keys %cluster_ids)
 	# Remove breakpoint marker
 	$break_sequence =~ s/\|//g;
 	
-	die "Error: Unable to find break infor for $cluster_id\n" if scalar @{$splitr_break{$cluster_id}{breakpos}} != 2;
-	
 	print SEQ ">$cluster_id\n".$break_sequence."\n";
 	
 	$fusion_gene_lookup{$cluster_id}{$gene1} = 1;
@@ -364,34 +361,33 @@ close SEQ;
 # Replace old file if we generated a different one
 $runner->replaceifdifferent($breakpoint_sequences_temp_filename, $breakpoint_sequences_filename);
 
-my $read_sequences_temp_filename = $output_directory."/read.sequences.fa.tmp";
-my $read_sequences_filename = $output_directory."/read.sequences.fa";
-
 my %fragment_ids;
 my %fusion_fragments;
 my %fusion_span_count;
 
 # Find cluster fragment info
 # Create a read sequence fasta
-open RFA, ">".$read_sequences_temp_filename or die "Error: Unable to open file $read_sequences_temp_filename\n";
 foreach my $cluster_id (keys %cluster_ids)
 {
-	die "Error: fusion $cluster_id does not refer to 2 reference sequences\n" if scalar keys %{$clusters{$cluster_id}} != 2;
-	foreach my $ref_name (keys %{$clusters{$cluster_id}})
+	foreach my $cluster_end (keys %{$clusters{$cluster_id}})
 	{
-		foreach my $fragment_id (keys %{$clusters{$cluster_id}{$ref_name}})
+		foreach my $fragment_id (keys %{$clusters{$cluster_id}{$cluster_end}})
 		{
-			print RFA ">".$clusters{$cluster_id}{$ref_name}{$fragment_id}{read_id}."\n";
-			print RFA $clusters{$cluster_id}{$ref_name}{$fragment_id}{sequence}."\n";
-					        
 			$fragment_ids{$fragment_id} = 1;
 			$fusion_fragments{$cluster_id}{$fragment_id} = 1;
 		}
 		
-		$fusion_span_count{$cluster_id} = scalar keys %{$clusters{$cluster_id}{$ref_name}};
+		$fusion_span_count{$cluster_id} = scalar keys %{$clusters{$cluster_id}{$cluster_end}};
 	}
 }
-close RFA;
+
+# Create a read sequence fasta
+my $read_sequences_temp_filename = $output_directory."/read.sequences.fa.tmp";
+my $read_sequences_filename = $output_directory."/read.sequences.fa";
+my $reads_fastq_index = $output_directory."/reads.fqi";
+my $end_1_fastq = $output_directory."/reads.1.fastq";
+my $end_2_fastq = $output_directory."/reads.2.fastq";
+write_reads_to_fasta(\%fragment_ids, $reads_fastq_index, $end_1_fastq, $end_2_fastq, $read_sequences_temp_filename);
 
 # Replace old file if we generated a different one
 $runner->replaceifdifferent($read_sequences_temp_filename, $read_sequences_filename);
@@ -415,13 +411,13 @@ foreach my $cluster_id (keys %cluster_ids)
 {
 	if ($fusion_break_predict{$cluster_id} eq "splitr")
 	{
-		$fusion_splicing_index1{$cluster_id} = $splitr_break_concordant{$cluster_id}{$fusion_gene1{$cluster_id}}{break_concordant} / $fusion_span_count{$cluster_id};
-		$fusion_splicing_index2{$cluster_id} = $splitr_break_concordant{$cluster_id}{$fusion_gene2{$cluster_id}}{break_concordant} / $fusion_span_count{$cluster_id};
+		$fusion_splicing_index1{$cluster_id} = $splitr_break_concordant{$cluster_id}{"0"}{break_concordant} / $fusion_span_count{$cluster_id};
+		$fusion_splicing_index2{$cluster_id} = $splitr_break_concordant{$cluster_id}{"1"}{break_concordant} / $fusion_span_count{$cluster_id};
 	}
 	elsif ($fusion_break_predict{$cluster_id} eq "denovo")
 	{
-		$fusion_splicing_index1{$cluster_id} = $denovo_break_concordant{$cluster_id}{$fusion_gene1{$cluster_id}}{break_concordant} / $fusion_span_count{$cluster_id};
-		$fusion_splicing_index2{$cluster_id} = $denovo_break_concordant{$cluster_id}{$fusion_gene2{$cluster_id}}{break_concordant} / $fusion_span_count{$cluster_id};
+		$fusion_splicing_index1{$cluster_id} = $denovo_break_concordant{$cluster_id}{"0"}{break_concordant} / $fusion_span_count{$cluster_id};
+		$fusion_splicing_index2{$cluster_id} = $denovo_break_concordant{$cluster_id}{"1"}{break_concordant} / $fusion_span_count{$cluster_id};
 	}
 }
 
@@ -444,13 +440,13 @@ foreach my $cluster_id (keys %cluster_ids)
 {
 	if ($fusion_break_predict{$cluster_id} eq "splitr")
 	{
-		$fusion_interrupted_index1{$cluster_id} = calculate_interrupted_index($splitr_interruption_info{$cluster_id}{$fusion_gene1{$cluster_id}});
-		$fusion_interrupted_index2{$cluster_id} = calculate_interrupted_index($splitr_interruption_info{$cluster_id}{$fusion_gene2{$cluster_id}});
+		$fusion_interrupted_index1{$cluster_id} = calculate_interrupted_index($splitr_interruption_info{$cluster_id}{"0"});
+		$fusion_interrupted_index2{$cluster_id} = calculate_interrupted_index($splitr_interruption_info{$cluster_id}{"1"});
 	}
 	elsif ($fusion_break_predict{$cluster_id} eq "denovo")
 	{
-		$fusion_interrupted_index1{$cluster_id} = calculate_interrupted_index($splitr_interruption_info{$cluster_id}{$fusion_gene1{$cluster_id}});
-		$fusion_interrupted_index2{$cluster_id} = calculate_interrupted_index($splitr_interruption_info{$cluster_id}{$fusion_gene2{$cluster_id}});
+		$fusion_interrupted_index1{$cluster_id} = calculate_interrupted_index($splitr_interruption_info{$cluster_id}{"0"});
+		$fusion_interrupted_index2{$cluster_id} = calculate_interrupted_index($splitr_interruption_info{$cluster_id}{"1"});
 	}
 }
 
@@ -686,12 +682,12 @@ my $minimum_coverage = $read_stat_values{"fraglength_mean"} - $read_stat_values{
 my %span_coverage;
 foreach my $cluster_id (keys %clusters)
 {
-	foreach my $ref_name (keys %{$clusters{$cluster_id}})
+	foreach my $cluster_end (keys %{$clusters{$cluster_id}})
 	{
 		my %covered;
-		foreach my $fragment_id (keys %{$clusters{$cluster_id}{$ref_name}})
+		foreach my $fragment_id (keys %{$clusters{$cluster_id}{$cluster_end}})
 		{
-			foreach my $pos ($clusters{$cluster_id}{$ref_name}{$fragment_id}{start} .. $clusters{$cluster_id}{$ref_name}{$fragment_id}{end})
+			foreach my $pos ($clusters{$cluster_id}{$cluster_end}{$fragment_id}{start} .. $clusters{$cluster_id}{$cluster_end}{$fragment_id}{end})
 			{
 				$covered{$pos} = 1;
 			}
@@ -700,7 +696,7 @@ foreach my $cluster_id (keys %clusters)
 		my $num_covered = scalar keys %covered;
 		my $normalized_coverage = $num_covered / $minimum_coverage;
 		
-		$span_coverage{$cluster_id}{$ref_name} = $normalized_coverage;
+		$span_coverage{$cluster_id}{$cluster_end} = $normalized_coverage;
 	}
 }
 
@@ -1024,8 +1020,8 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\tsplicing_index2\t".$fusion_splicing_index2{$cluster_id}."\n";
 	print $cluster_id."\tinterrupted_index1\t".$fusion_interrupted_index1{$cluster_id}."\n";
 	print $cluster_id."\tinterrupted_index2\t".$fusion_interrupted_index2{$cluster_id}."\n";
-	print $cluster_id."\tspan_coverage1\t".$span_coverage{$cluster_id}{$ref_name1}."\n";
-	print $cluster_id."\tspan_coverage2\t".$span_coverage{$cluster_id}{$ref_name2}."\n";
+	print $cluster_id."\tspan_coverage1\t".$span_coverage{$cluster_id}{"0"}."\n";
+	print $cluster_id."\tspan_coverage2\t".$span_coverage{$cluster_id}{"1"}."\n";
 	print $cluster_id."\texpression1\t".get_expression($gene1)."\n";
 	print $cluster_id."\texpression2\t".get_expression($gene2)."\n";
 	
@@ -1068,8 +1064,8 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\tbreakpoint_homology\t".$breakpoint_homology{$cluster_id}."\n";
 	
 	print $cluster_id."\tbreak_adj_entropy_min\t".min($break_adj_entropy1{$cluster_id},$break_adj_entropy2{$cluster_id})."\n";
-	print $cluster_id."\tspan_coverage_min\t".min($span_coverage{$cluster_id}{$ref_name1},$span_coverage{$cluster_id}{$ref_name2})."\n";
-	print $cluster_id."\tspan_coverage_max\t".max($span_coverage{$cluster_id}{$ref_name1},$span_coverage{$cluster_id}{$ref_name2})."\n";
+	print $cluster_id."\tspan_coverage_min\t".min($span_coverage{$cluster_id}{"0"},$span_coverage{$cluster_id}{"1"})."\n";
+	print $cluster_id."\tspan_coverage_max\t".max($span_coverage{$cluster_id}{"0"},$span_coverage{$cluster_id}{"1"})."\n";
 
 	print $cluster_id."\trepeat_proportion1\t".$fusion_repeat_proportion1{$cluster_id}."\n";
 	print $cluster_id."\trepeat_proportion2\t".$fusion_repeat_proportion2{$cluster_id}."\n";
@@ -1132,11 +1128,14 @@ sub read_breaks
 		my @fields = split /\t/;
 		
 		my $cluster_id = $fields[0];
-		my $reference = $fields[1];
-		my $strand = $fields[2];
-		my $breakpos = $fields[3];
+		my $cluster_end = $fields[1];
+		my $reference = $fields[2];
+		my $strand = $fields[3];
+		my $breakpos = $fields[4];
 		
-		push @{$breaks_hash_ref->{$cluster_id}{breakpos}}, [$reference,$strand,$breakpos];
+		$breaks_hash_ref->{$cluster_id}{$cluster_end}{reference} = $reference;
+		$breaks_hash_ref->{$cluster_id}{$cluster_end}{strand} = $strand;
+		$breaks_hash_ref->{$cluster_id}{$cluster_end}{breakpos} = $breakpos;
 	}
 	close BR;
 }
@@ -1159,7 +1158,7 @@ sub read_span_pval
 	close SPP;
 }
 
-sub read_sam_clusters
+sub read_clusters
 {
 	my $clusters_filename = shift;
 	my $clusters_hash_ref = shift;
@@ -1171,39 +1170,19 @@ sub read_sam_clusters
 		my @fields = split /\t/;
 		
 		my $cluster_id = $fields[0];
-		my $read_id = $fields[1];
-		my $flag = $fields[2];
-		my $ref_name = $fields[3];
-		my $start = $fields[4];
-		my $end = $start + length($fields[10]) - 1;
-		my $sequence = $fields[10];
-	
-		$read_id =~ /(.*)\/([12])/;
-		my $fragment_id = $1;
-		my $read_end = $2;
-	
-		my $strand;
-		if ($flag & hex('0x0010'))
-		{
-			$strand = "-";
-		}
-		else
-		{
-			$strand = "+";
-		}
+		my $cluster_end = $fields[1];
+		my $fragment_id = $fields[2];
+		my $read_end = $fields[3];
+		my $ref_name = $fields[4];
+		my $strand = $fields[5];
+		my $start = $fields[6];
+		my $end = $fields[7];
 		
-		if ($strand eq "-")
-		{
-			$sequence = reverse($sequence);
-			$sequence =~ tr/ACGTacgt/TGCAtgca/;
-		}
-	
-		$clusters_hash_ref->{$cluster_id}{$ref_name}{$fragment_id}{read_id} = $read_id;
-		$clusters_hash_ref->{$cluster_id}{$ref_name}{$fragment_id}{read_end} = $read_end;
-		$clusters_hash_ref->{$cluster_id}{$ref_name}{$fragment_id}{strand} = $strand;
-		$clusters_hash_ref->{$cluster_id}{$ref_name}{$fragment_id}{sequence} = $sequence;
-		$clusters_hash_ref->{$cluster_id}{$ref_name}{$fragment_id}{start} = $start;
-		$clusters_hash_ref->{$cluster_id}{$ref_name}{$fragment_id}{end} = $end;
+		$clusters_hash_ref->{$cluster_id}{$cluster_end}{$fragment_id}{read_id} = $fragment_id."/".$read_end;
+		$clusters_hash_ref->{$cluster_id}{$cluster_end}{$fragment_id}{read_end} = $read_end;
+		$clusters_hash_ref->{$cluster_id}{$cluster_end}{$fragment_id}{strand} = $strand;
+		$clusters_hash_ref->{$cluster_id}{$cluster_end}{$fragment_id}{start} = $start;
+		$clusters_hash_ref->{$cluster_id}{$cluster_end}{$fragment_id}{end} = $end;
 	}
 	close CLU;
 }
@@ -1594,8 +1573,8 @@ sub calculate_break_concordant
 	while (<BRC>)
 	{
 		chomp;
-		my ($cluster_id, $gene, $break_concordant) = split /\t/;
-		$break_concordant_ref->{$cluster_id}{$gene}{break_concordant} = $break_concordant;
+		my ($cluster_id, $cluster_end, $break_concordant) = split /\t/;
+		$break_concordant_ref->{$cluster_id}{$cluster_end}{break_concordant} = $break_concordant;
 	}
 	close BRC;
 }
@@ -1613,11 +1592,12 @@ sub calculate_interrupted
 	while (<BIN>)
 	{
 		chomp;
-		my ($cluster_id, $gene, $size_before, $size_after, $count_before, $count_after) = split /\t/;
-		$interrupted_ref->{$cluster_id}{$gene}{size_before} = $size_before;
-		$interrupted_ref->{$cluster_id}{$gene}{size_after} = $size_after;
-		$interrupted_ref->{$cluster_id}{$gene}{count_before} = $count_before;
-		$interrupted_ref->{$cluster_id}{$gene}{count_after} = $count_after;
+		my ($cluster_id, $cluster_end, $gene, $size_before, $size_after, $count_before, $count_after) = split /\t/;
+		$interrupted_ref->{$cluster_id}{$cluster_end}{gene} = $gene;
+		$interrupted_ref->{$cluster_id}{$cluster_end}{size_before} = $size_before;
+		$interrupted_ref->{$cluster_id}{$cluster_end}{size_after} = $size_after;
+		$interrupted_ref->{$cluster_id}{$cluster_end}{count_before} = $count_before;
+		$interrupted_ref->{$cluster_id}{$cluster_end}{count_after} = $count_after;
 	}
 	close BIN;
 }
@@ -1781,6 +1761,62 @@ sub calc_genomic_regions
 	}
 
 	return @genomic;
+}
+
+sub write_reads_to_fasta
+{
+	my $fragments_ref = shift;
+	my $fastq_index_filename = shift;
+	my $end_1_fastq_filename = shift;
+	my $end_2_fastq_filename = shift;
+	my $fasta_filename = shift;
+	
+	open FQI, $fastq_index_filename or die "Error: Unable to open $fastq_index_filename\n";
+	binmode(FQI);
+	
+	open FA, ">".$fasta_filename or die "Error: Unable to open $fasta_filename\n";
+	
+	foreach my $read_end ("1","2")
+	{
+		my $fastq_filename = ($read_end eq "1") ? $end_1_fastq_filename : $end_2_fastq_filename;
+		open FQ, $fastq_filename or die "Error: Unable to open $fastq_filename\n";
+		
+		my $read_end_index = ($read_end eq "1") ? 0 : 1;
+		foreach my $fragment_index (sort {$a <=> $b} keys %{$fragments_ref})
+		{
+			# Seek to position in the index
+			my $fragment_index_file_pos = $fragment_index * 2 * 8 + $read_end_index * 8;
+			seek FQI, $fragment_index_file_pos, 0;
+			
+			# Read from index
+			my $fragment_file_pos_bytes;
+			read FQI, $fragment_file_pos_bytes, 8;
+			my $fragment_file_pos = unpack "q", $fragment_file_pos_bytes;
+			
+			# Seek to position in fastq
+			seek FQ, $fragment_file_pos, 0;
+			
+			# Read fastq entry
+			my $read_id = <FQ>;
+			my $sequence = <FQ>;
+			my $comment = <FQ>;
+			my $quality = <FQ>;
+			
+			chomp($read_id);
+			chomp($sequence);
+			
+			$read_id =~ s/\@// or die "Error: Unable to retrieve correct index for $fragment_index/$read_end\n";
+			$read_id = $fragment_index."/".$read_end or die "Error: Unable to retrieve correct index for $fragment_index/$read_end\n";
+			
+			print FA ">".$read_id."\n";
+			print FA $sequence."\n";
+		}
+		
+		close FQ;
+	}
+	
+	close FQI;
+	close FA;
 }
 
 sub overlapsize

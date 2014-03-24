@@ -82,9 +82,9 @@ calculate_break_concordant(\%breaks, \%cdna, \%cdna_gene, \%gene_transcripts, $c
 # Output
 foreach my $cluster_id (keys %break_concordant)
 {
-	foreach my $gene (keys %{$break_concordant{$cluster_id}})
+	foreach my $cluster_end (keys %{$break_concordant{$cluster_id}})
 	{
-		print $cluster_id."\t".$gene."\t".$break_concordant{$cluster_id}{$gene}."\n";
+		print $cluster_id."\t".$cluster_end."\t".$break_concordant{$cluster_id}{$cluster_end}."\n";
 	}
 }
 
@@ -100,11 +100,14 @@ sub read_breaks
 		my @fields = split /\t/;
 		
 		my $cluster_id = $fields[0];
-		my $reference = $fields[1];
-		my $strand = $fields[2];
-		my $breakpos = $fields[3];
+		my $cluster_end = $fields[1];
+		my $reference = $fields[2];
+		my $strand = $fields[3];
+		my $breakpos = $fields[4];
 		
-		push @{$breaks_hash_ref->{$cluster_id}{breakpos}}, [$reference,$strand,$breakpos];
+		$breaks_hash_ref->{$cluster_id}{$cluster_end}{reference} = $reference;
+		$breaks_hash_ref->{$cluster_id}{$cluster_end}{strand} = $strand;
+		$breaks_hash_ref->{$cluster_id}{$cluster_end}{breakpos} = $breakpos;
 	}
 	close BR;
 }
@@ -172,11 +175,11 @@ sub calculate_break_concordant
 	
 	foreach my $cluster_id (keys %{$breaks_ref})
 	{
-		foreach my $breakpos (@{$breaks_ref->{$cluster_id}{breakpos}})
+		foreach my $cluster_end ("0","1")
 		{
-			my $reference = $breakpos->[0];
-			my $strand = $breakpos->[1];
-			my $breakpos = $breakpos->[2];
+			my $reference = $breaks_ref->{$cluster_id}{$cluster_end}{reference};
+			my $strand = $breaks_ref->{$cluster_id}{$cluster_end}{strand};
+			my $breakpos = $breaks_ref->{$cluster_id}{$cluster_end}{breakpos};
 			
 			$reference =~ /(ENSG\d+)/;
 			my $gene = $1;
@@ -240,7 +243,7 @@ sub calculate_break_concordant
 				}
 			}
 			
-			$break_concordant_ref->{$cluster_id}{$gene} = $concordant_count;
+			$break_concordant_ref->{$cluster_id}{$cluster_end} = $concordant_count;
 		}
 	}
 }

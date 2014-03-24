@@ -153,6 +153,7 @@ int main(int argc, char* argv[])
 	double fragmentLengthStdDev;
 	double precision;
 	int minClusterSize;
+	int resolution;
 
 	try
 	{
@@ -164,6 +165,7 @@ int main(int argc, char* argv[])
 		TCLAP::ValueArg<double> fragmentLengthStdDevArg("s","fragmentstddev","Fragment Length Standard Deviation",true,-1,"integer",cmd);
 		TCLAP::ValueArg<double> precisionArg("a","precision","Precision",true,-1,"double",cmd);
 		TCLAP::ValueArg<int> minClusterSizeArg("m","minclustersize","Minimum Cluster Size",true,-1,"integer",cmd);
+		TCLAP::ValueArg<int> resolutionArg("r","resolution","Resolution",false,1,"integer",cmd);
 		cmd.parse(argc,argv);
 
 		discordantBamFilename = discordantBamFilenameArg.getValue();
@@ -173,6 +175,7 @@ int main(int argc, char* argv[])
 		fragmentLengthStdDev = fragmentLengthStdDevArg.getValue();
 		precision = precisionArg.getValue();
 		minClusterSize = minClusterSizeArg.getValue();
+		resolution = resolutionArg.getValue();
 	}
 	catch (TCLAP::ArgException &e)
 	{
@@ -318,6 +321,7 @@ int main(int argc, char* argv[])
 	clustererParams.fragmentStdDev = fragmentLengthStdDev;
 	clustererParams.precision = precision;
 	clustererParams.minClusterSize = minClusterSize;
+	clustererParams.resolution = resolution;
 	clusterer.Initialize(clustererParams);
 
 	// Open output clusters file
@@ -397,12 +401,12 @@ int main(int argc, char* argv[])
 			fragmentIndices.push_back(alignment1.readID.fragmentIndex);
 		}
 		
-		Clusters matePairClusters;
+		IntegerTable matePairClusters;
 		clusterer.DoClustering(matePairs, matePairClusters);
 		
-		for (int clusterIndex = 0; clusterIndex < matePairClusters.GetNumClusters(); clusterIndex++)
+		for (int clusterIndex = 0; clusterIndex < matePairClusters.size(); clusterIndex++)
 		{
-			const IntegerVec& cluster = matePairClusters.GetCluster(clusterIndex);
+			const IntegerVec& cluster = matePairClusters[clusterIndex];
 			
 			if (cluster.size() < minClusterSize)
 			{

@@ -304,17 +304,37 @@ sub writelog
 	close LOG;
 }
 
-sub catjoblog
+sub append_joblog_filename
 {
 	my $self = shift;
+	my $joblog = shift;
 	my $filename = shift;
-	my $logfilename = $self->{logfilename};
+	my $skiplast = shift;
 
 	return if not -e $filename;
+	
+	open OUT, ">>".$filename or die "Error: Unable to append job log to $filename\n";
+	$self->append_joblog_file($joblog, \*OUT, $skiplast);
+	close LOG;
+}
 
-	my $cat_result = system "head --lines=-1 $filename | perl -pe 's/^/\\t/' >> $logfilename";
+sub append_joblog_file
+{
+	my $self = shift;
+	my $joblog = shift;
+	my $file = shift;
+	my $skiplast = shift;
 
-	$cat_result == 0 or die "Error: Unable to append to log\n";
+	open JLG, $joblog or die "Error: Unable to find job log $joblog\n";
+	my $next_line = <JLG>;
+	while (<JLG>)
+	{
+		print $file "\t".$next_line;
+		$next_line = $_;
+	}
+	close JLG;
+	
+	print $next_line if defined $next_line and not $skiplast;
 }
 
 sub waitfiles
@@ -786,6 +806,7 @@ sub finalizejob
 	# Retrieve job message
 	my @job_message = <$job_pipe>;
 	chomp(@job_message);
+	close $job_pipe;
 
 	# Append job output to log file
 	if ($job_failed)
@@ -809,7 +830,7 @@ sub finalizejob
 		$self->writelog("", $pipestatus);
 
 		$self->writelog("", "Job output:");
-		$self->catjoblog($job_out);
+		$self->append_joblog_filename($job_out, $self->{logfilename}, 1);
 	}
 
 	# Write to stderr if job failed
@@ -830,12 +851,12 @@ sub finalizejob
 			if ($job_status == 2)
 			{
 				print STDERR "Job output:\n";
-				system "cat $job_out | perl -pe 's/^/\\t/' 1>&2";
+				$self->append_joblog_file($job_out, \*STDERR, 0);
 			}
 			else
 			{
 				print STDERR "Job output:\n";
-				system "head --lines=-1 $job_out | perl -pe 's/^/\\t/' 1>&2";
+				$self->append_joblog_file($job_out, \*STDERR, 1);
 				system "tail -1 $job_out 1>&2";
 			}
 		}

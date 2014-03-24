@@ -43,11 +43,11 @@ public:
 	static void WriteAlignments(ostream& out, SplitAlignmentMap& splitAlignments);
 	static void ReadAlignments(istream& in, SplitAlignmentMap& splitAlignments);
 	
-	bool Evaluate(IntegerVec& breakPos, string& sequence, int& splitReadCount, double& splitPosAvg, double& splitMinAvg);
+	bool Evaluate();
 	
-	const string& GetRefName(int clusterEnd) { return mAlignRefName[clusterEnd]; }
-	int GetStrand(int clusterEnd) { return mAlignStrand[clusterEnd]; }
-
+	static void WriteSequences(ostream& out, SplitAlignmentMap& splitAlignments);
+	static void WriteBreaks(ostream& out, SplitAlignmentMap& splitAlignments);
+	
 private:	
 	inline void AddAnchoredReads(const AlignmentIndex& discordant, const AlignmentIndex& anchored, const string& transcript, int strand, int revComp, int start, int end);
 		
@@ -79,6 +79,11 @@ private:
 	IntegerPairVec mAlignmentMatches;
 	IntegerVec mAlignmentScore;
 	
+	IntegerVec mBreakPos;
+	string mSequence;
+	int mSplitReadCount;
+	double mSplitPosAvg;
+	double mSplitMinAvg;	
 };
 
 #endif

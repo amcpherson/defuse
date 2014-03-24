@@ -6,7 +6,6 @@
  */
 
 #include "MatePairProbabilistic.h"
-#include "Clusters.h"
 #include "MatePairProbCalc.h"
 #include "HierarchicalClusterer.h"
 
@@ -22,7 +21,7 @@ void MatePairProbabilistic::Initialize(const Parameters& parameters)
 	mMinClusterSize = parameters.minClusterSize;
 }
 
-void MatePairProbabilistic::DoClustering(const MatePairVec& matePairs, Clusters& clusters) const
+void MatePairProbabilistic::DoClustering(const MatePairVec& matePairs, IntegerTable& clusters) const
 {
 	if (matePairs.size() < mMinClusterSize)
 	{

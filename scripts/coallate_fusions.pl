@@ -63,23 +63,22 @@ while (<CID>)
 }
 close CID;
 
-# Read in cluster sam file
+# Read in cluster file
 my %clusters;
-my $clusters_sam = $output_directory."/clusters.sc.sam";
-read_sam_clusters($clusters_sam, \%clusters);
+my $clusters_filename = $output_directory."/clusters.sc.txt";
+read_clusters($clusters_filename, \%clusters);
 
 # Find cluster spanning read count and strands
 my %fusion_span_count;
 my %fusion_strand;
 foreach my $cluster_id (keys %clusters)
 {
-	die "Error: fusion $cluster_id does not refer to 2 reference sequences\n" if scalar keys %{$clusters{$cluster_id}} != 2;
-	foreach my $ref_name (keys %{$clusters{$cluster_id}})
+	foreach my $cluster_end (keys %{$clusters{$cluster_id}})
 	{
-		$fusion_span_count{$cluster_id} = scalar keys %{$clusters{$cluster_id}{$ref_name}};
+		$fusion_span_count{$cluster_id} = scalar keys %{$clusters{$cluster_id}{$cluster_end}};
 		
-		my $fragment_id = (keys %{$clusters{$cluster_id}{$ref_name}})[0];
-		$fusion_strand{$cluster_id}{$ref_name} = $clusters{$cluster_id}{$ref_name}{$fragment_id}{strand};
+		my $fragment_id = (keys %{$clusters{$cluster_id}{$cluster_end}})[0];
+		$fusion_strand{$cluster_id}{$cluster_end} = $clusters{$cluster_id}{$cluster_end}{$fragment_id}{strand};
 	}
 }
 
@@ -178,7 +177,7 @@ foreach my $cluster_id (keys %cluster_ids)
 	print "\n";
 }
 
-sub read_sam_clusters
+sub read_clusters
 {
 	my $clusters_filename = shift;
 	my $clusters_hash_ref = shift;
@@ -190,39 +189,19 @@ sub read_sam_clusters
 		my @fields = split /\t/;
 		
 		my $cluster_id = $fields[0];
-		my $read_id = $fields[1];
-		my $flag = $fields[2];
-		my $ref_name = $fields[3];
-		my $start = $fields[4];
-		my $end = $start + length($fields[10]) - 1;
-		my $sequence = $fields[10];
-	
-		$read_id =~ /(.*)\/([12])/;
-		my $fragment_id = $1;
-		my $read_end = $2;
-	
-		my $strand;
-		if ($flag & hex('0x0010'))
-		{
-			$strand = "-";
-		}
-		else
-		{
-			$strand = "+";
-		}
+		my $cluster_end = $fields[1];
+		my $fragment_id = $fields[2];
+		my $read_end = $fields[3];
+		my $ref_name = $fields[4];
+		my $strand = $fields[5];
+		my $start = $fields[6];
+		my $end = $fields[7];
 		
-		if ($strand eq "-")
-		{
-			$sequence = reverse($sequence);
-			$sequence =~ tr/ACGTacgt/TGCAtgca/;
-		}
-	
-		$clusters_hash_ref->{$cluster_id}{$ref_name}{$fragment_id}{read_id} = $read_id;
-		$clusters_hash_ref->{$cluster_id}{$ref_name}{$fragment_id}{read_end} = $read_end;
-		$clusters_hash_ref->{$cluster_id}{$ref_name}{$fragment_id}{strand} = $strand;
-		$clusters_hash_ref->{$cluster_id}{$ref_name}{$fragment_id}{sequence} = $sequence;
-		$clusters_hash_ref->{$cluster_id}{$ref_name}{$fragment_id}{start} = $start;
-		$clusters_hash_ref->{$cluster_id}{$ref_name}{$fragment_id}{end} = $end;
+		$clusters_hash_ref->{$cluster_id}{$cluster_end}{$fragment_id}{read_id} = $fragment_id."/".$read_end;
+		$clusters_hash_ref->{$cluster_id}{$cluster_end}{$fragment_id}{read_end} = $read_end;
+		$clusters_hash_ref->{$cluster_id}{$cluster_end}{$fragment_id}{strand} = $strand;
+		$clusters_hash_ref->{$cluster_id}{$cluster_end}{$fragment_id}{start} = $start;
+		$clusters_hash_ref->{$cluster_id}{$cluster_end}{$fragment_id}{end} = $end;
 	}
 	close CLU;
 }

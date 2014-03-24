@@ -91,10 +91,10 @@ int main(int argc, char* argv[])
 	LocationVecMap alignRegionPairs;
 	if (!align1String.empty() && !align2String.empty())
 	{
-		alignRegionPairs["commandline"] = LocationVec(2);
+		alignRegionPairs[0] = LocationVec(2);
 		
-		IntepretAlignString(align1String, alignRegionPairs["commandline"][0]);
-		IntepretAlignString(align2String, alignRegionPairs["commandline"][1]);
+		IntepretAlignString(align1String, alignRegionPairs[0][0]);
+		IntepretAlignString(align2String, alignRegionPairs[0][1]);
 	}
 	else if (!alignFilename.empty())
 	{
@@ -137,7 +137,7 @@ int main(int argc, char* argv[])
 	{
 		DeNovoFusion deNovoFusion(discordant, anchored, reads, reference, exonRegions, fragmentLengthMean, fragmentLengthStdDev, minReadLength, maxReadLength, logFile);
 
-		const string& pairID = pairIter->first;
+		int pairID = pairIter->first;
 		const LocationVec& alignRegionPair = pairIter->second;
 
 		logFile << "id: " << pairID << endl;

@@ -45,7 +45,7 @@ my $cdna_gene_regions = $config->get_value("cdna_gene_regions");
 
 my $bin_spacing = 200000;
 
-my $clusters_sc_filename = $output_directory."/clusters.sc.sam";
+my $clusters_sc_filename = $output_directory."/clusters.sc.txt";
 my $discordant_bam = $output_directory."/discordant.aligned.bam";
 
 my %solution_clusters;
@@ -87,11 +87,7 @@ sub read_solution_clusters
 	while (<SC>)
 	{
 		chomp;
-		my ($cluster_id,$read_id) = split /\t/;		
-		
-		$read_id =~ /(.*)\/([12])/;
-		my $fragment_index = $1;
-		my $read_end = $2;
+		my ($cluster_id,$cluster_end,$fragment_index,$read_end) = split /\t/;
 		
 		$solution_clusters_ref->{$fragment_index}{cluster_id} = $cluster_id;
 	}

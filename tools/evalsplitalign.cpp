@@ -65,22 +65,13 @@ int main(int argc, char* argv[])
 
 	for (SplitAlignment::SplitAlignmentMapIter splitAlignIter = splitAlignments.begin(); splitAlignIter != splitAlignments.end(); splitAlignIter++)
 	{
-		int id = splitAlignIter->first;
 		SplitAlignment& splitAlignment = splitAlignIter->second;		
 
-		IntegerVec breakPos;
-		string sequence;
-		int splitReadCount;
-		double splitPosAvg;
-		double splitMinAvg;
-		splitAlignment.Evaluate(breakPos, sequence, splitReadCount, splitPosAvg, splitMinAvg);
-		
-		int interLen = 0;
-		
-		seqFile << id << "\t" << sequence << "\t" << interLen << "\t" << splitReadCount << "\t" << splitPosAvg << "\t" << splitMinAvg << endl;
-		breakFile << id << "\t" << splitAlignment.GetRefName(0) << "\t" << (splitAlignment.GetStrand(0) == PlusStrand ? "+" : "-") << "\t" << breakPos[0] << endl;
-		breakFile << id << "\t" << splitAlignment.GetRefName(1) << "\t" << (splitAlignment.GetStrand(1) == PlusStrand ? "+" : "-") << "\t" << breakPos[1] << endl;
+		splitAlignment.Evaluate();
 	}
+	
+	SplitAlignment::WriteSequences(seqFile, splitAlignments);
+	SplitAlignment::WriteBreaks(breakFile, splitAlignments);	
 	
 	candidateRegionsFile.close();
 	splitAlignmentsFile.close();

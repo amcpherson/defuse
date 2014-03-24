@@ -9,7 +9,6 @@
 #define MATEPAIRCOMBINATORIAL_H_
 
 #include "IMatePairClusterer.h"
-#include "Clusters.h"
 
 #include <vector>
 #include <string.h>
@@ -22,7 +21,7 @@ public:
 	void Initialize(const Parameters& parameters);
 	void CreateMatePair(int id, const Region& alignment1, int strand1, const Region& alignment2, int strand2, MatePair& matePair) const;
 	void CalcBreakRegion(const Region& alignment, int strand, Region& breakRegion) const;
-	void DoClustering(const MatePairVec& matePairs, Clusters& clusters) const;
+	void DoClustering(const MatePairVec& matePairs, IntegerTable& clusters) const;
 	
 private:
 	struct FeatureRegion
@@ -83,11 +82,14 @@ private:
 	void CalcBreakRegion(const Region& alignment, Region& breakRegion) const;
 	void CreateBreakRegion(int matePairIndex, const Region& alignment, FeatureRegion& breakRegion) const;
 	void CreateLengthRange(int matePairIndex, const Region& alignment1, const Region& alignment2, FeatureRegion& lengthRange) const;
-	void CreateOverlapClusters(FeatureRegionVec& regions, Clusters& overlapClusters) const;
-
+	void CreateOverlapClusters(FeatureRegionVec& regions, IntegerTable& overlapClusters) const;
+	void RemoveRedundant(IntegerTable& clusters) const;
+	void SelectFeatureRegions(const IntegerVec& indices, const FeatureRegionVec& features, FeatureRegionVec& selected) const;
+	
 	int mMaxFragmentLength;
 	int mMaxFragmentLengthDiff;
 	int mMinClusterSize;
+	int mResolution;
 };
 
 #endif
