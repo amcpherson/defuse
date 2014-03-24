@@ -151,7 +151,7 @@ void SplitReadAligner::ReverseMatches(int refLength, int readLength, IntegerPair
 	reverse(matches.begin(), matches.end());
 }
 
-void SplitReadAligner::GetAlignments(SplitReadAlignVec& alignments, int minScore, bool forceSplit, bool firstOnly)
+void SplitReadAligner::GetAlignments(SplitReadAlignVec& alignments, int minScore, bool forceSplit, bool firstOnly, bool backTrace)
 {
 	int maxScore = 0;
 
@@ -272,26 +272,25 @@ void SplitReadAligner::GetAlignments(SplitReadAlignVec& alignments, int minScore
 		const Cell& startCell1 = startCells1[startIndex];
 		const Cell& startCell2 = startCells2[startIndex];
 		
-		IntegerPairVec matches1;
-		IntegerPairVec matches2;
-		
-		BackTracePath(mBackTrace1, startCell1, matches1);
-		BackTracePath(mBackTrace2, startCell2, matches2);
-		
-		ReverseMatches(mReference2.length(), mRead2.length(), matches2);
-		
 		SplitReadAlignment splitReadAlignment;
 		
-		splitReadAlignment.split.first = matches1.back().first + 1;
-		splitReadAlignment.split.second = matches2.front().first - 1;
-		splitReadAlignment.matches1 = matches1;
-		splitReadAlignment.matches2 = matches2;
+		splitReadAlignment.refSplit.first = startCell1.i;
+		splitReadAlignment.refSplit.second = mReference2.length() - startCell2.i - 1;
+		splitReadAlignment.readSplit.first = startCell1.j;
+		splitReadAlignment.readSplit.second = startCell2.j;
 		splitReadAlignment.score = maxScore;
 		splitReadAlignment.score1 = mMatrix1(startCell1);
 		splitReadAlignment.score2 = mMatrix2(startCell2);
 		
 		DebugCheck(splitReadAlignment.score == splitReadAlignment.score1 + splitReadAlignment.score2);
-
+		
+		if (backTrace)
+		{
+			BackTracePath(mBackTrace1, startCell1, splitReadAlignment.matches1);
+			BackTracePath(mBackTrace2, startCell2, splitReadAlignment.matches2);
+			ReverseMatches(mReference2.length(), mRead2.length(), splitReadAlignment.matches2);
+		}
+		
 		alignments.push_back(splitReadAlignment);
 	}
 }

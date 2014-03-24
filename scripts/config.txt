@@ -1,7 +1,10 @@
 #
 # Configuration file for defuse
 #
-# At a minimum, change all values enclused by []
+# At a minimum, replace all values enclosed by []
+#
+# For example:
+# source_directory = /path/to/defuse
 #
 
 # Directory where the defuse code was unpacked

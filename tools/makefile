@@ -14,12 +14,14 @@ BAMDIR = ../external/samtools-0.1.8
 BAMLIB = libbam.a
 ZDIR = ../external/zlib-1.2.5
 ZLIB = libz.a
+BAMTOOLSDIR = ../external/BamTools
+BAMTOOLSLIB = libbamtools.a
 
-INCLUDE = -I. -I../include -I$(BAMDIR) -I$(ZDIR)
+INCLUDE = -I. -I../include -I$(BAMDIR) -I$(ZDIR) -I$(BAMTOOLSDIR)
 CC = /usr/bin/g++
 CXX = /usr/bin/g++
 CXXFLAGS = -O3 -DDEBUG_CHECKS $(INCLUDE)
-LDFLAGS = -O3 -L$(BAMDIR) -lbam -L$(ZDIR) -lz
+LDFLAGS = -O3 -L$(BAMDIR) -lbam -L$(ZDIR) -lz -L$(BAMTOOLSDIR) -lbamtools
 
 all: tools $(BAMDIR)/samtools
 
@@ -40,6 +42,8 @@ $(ZDIR)/$(ZLIB) :
 $(BAMDIR)/$(BAMLIB) :
 		$(MAKE) --no-print-directory -C $(BAMDIR) $(BAMLIB)
 
+$(BAMTOOLSDIR)/$(BAMTOOLSLIB) :
+		$(MAKE) --no-print-directory -C $(BAMTOOLSDIR) $(BAMTOOLSLIB)
 
 #
 # Build tools
@@ -52,17 +56,18 @@ clustermatepairs_stdin : \
 		./asa136.o\
 		./asa241.o\
 		./clustermatepairs_stdin.o\
-		$(BAMDIR)/$(BAMLIB)\
+		$(BAMTOOLSDIR)/$(BAMTOOLSLIB)\
 		$(ZDIR)/$(ZLIB)
 
 clustermatepairs : \
+		./AlignmentStream.o\
 		./Common.o\
 		./DebugCheck.o\
 		./MatePairEM.o\
 		./asa136.o\
 		./asa241.o\
 		./clustermatepairs.o\
-		./FragmentAlignmentsIterator.o\
+		$(BAMTOOLSDIR)/$(BAMTOOLSLIB)\
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
 
@@ -71,11 +76,11 @@ setcover: \
 		./DebugCheck.o\
 		./Parsers.o\
 		./setcover.o\
-		$(BAMDIR)/$(BAMLIB)\
+		$(BAMTOOLSDIR)/$(BAMTOOLSLIB)\
 		$(ZDIR)/$(ZLIB)
 
-findcandidatereads: \
-		./AlignmentIndex.o\
+initsplitalign: \
+		./AlignmentStream.o\
 		./FastaIndex.o\
 		./Common.o\
 		./DebugCheck.o\
@@ -84,12 +89,13 @@ findcandidatereads: \
 		./SplitAlignment.o\
 		./SplitReadAligner.o\
 		./Parsers.o\
-		./findcandidatereads.o\
+		./initsplitalign.o\
+		$(BAMTOOLSDIR)/$(BAMTOOLSLIB)\
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
 
 dosplitalign: \
-		./AlignmentIndex.o\
+		./AlignmentStream.o\
 		./FastaIndex.o\
 		./Common.o\
 		./DebugCheck.o\
@@ -100,6 +106,7 @@ dosplitalign: \
 		./Parsers.o\
 		./ReadStream.o\
 		./dosplitalign.o\
+		$(BAMTOOLSDIR)/$(BAMTOOLSLIB)\
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
 
@@ -114,11 +121,12 @@ evalsplitalign: \
 		./SplitReadAligner.o\
 		./ReadStream.o\
 		./evalsplitalign.o\
+		$(BAMTOOLSDIR)/$(BAMTOOLSLIB)\
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
 
 splitseq: \
-		./AlignmentIndex.o\
+		./AlignmentStream.o\
 		./FastaIndex.o\
 		./Common.o\
 		./DebugCheck.o\
@@ -129,6 +137,7 @@ splitseq: \
 		./Parsers.o\
 		./PathFinder.o\
 		./splitseq.o\
+		$(BAMTOOLSDIR)/$(BAMTOOLSLIB)\
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
 
@@ -144,22 +153,23 @@ denovoseq: \
 		./PathFinder.o\
 		./DeNovoFusion.o\
 		./denovoseq.o\
-		$(BAMDIR)/$(BAMLIB)\
+		$(BAMTOOLSDIR)/$(BAMTOOLSLIB)\
 		$(ZDIR)/$(ZLIB)
 
 calccov: \
-		./AlignmentIndex.o\
+		./AlignmentStream.o\
 		./Common.o\
 		./DebugCheck.o\
 		./ExonRegions.o\
 		./calccov.o\
+		$(BAMTOOLSDIR)/$(BAMTOOLSLIB)\
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
 
 estislands : \
 		./estislands.o\
 		./EstCatalog.o\
-		$(BAMDIR)/$(BAMLIB)\
+		$(BAMTOOLSDIR)/$(BAMTOOLSLIB)\
 		$(ZDIR)/$(ZLIB)
 
 localalign : \
@@ -168,7 +178,15 @@ localalign : \
 		./DebugCheck.o\
 		./Common.o
 
-tools : clustermatepairs setcover calccov estislands findcandidatereads dosplitalign evalsplitalign localalign splitseq
+matealign : \
+		./matealign.o\
+		./Common.o\
+		./DebugCheck.o\
+		./ReadStream.o\
+		./Sequences.o\
+		./SimpleAligner.o
+
+tools : clustermatepairs setcover calccov estislands initsplitalign dosplitalign evalsplitalign localalign splitseq matealign
 	
 
 clean : 

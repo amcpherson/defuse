@@ -23,8 +23,9 @@ using namespace std;
 
 int main(int argc, char* argv[])
 {
-	string candidateReadsFilename;
-	string candidateRegionsFilename;
+	string alignmentsFilename;
+	string candidateRefSeqsFilename;
+	string candidateMateRegionsFilename;
 	string splitAlignmentsFilename;
 	string readSeqs1Filename;
 	string readSeqs2Filename;
@@ -32,15 +33,17 @@ int main(int argc, char* argv[])
 	try
 	{
 		TCLAP::CmdLine cmd("Fusion sequence prediction by split reads");
-		TCLAP::ValueArg<string> candidateReadsFilenameArg("r","reads","Candidate Reads Filename",true,"","string",cmd);
-		TCLAP::ValueArg<string> candidateRegionsFilenameArg("c","cseqs","Candidate Reference Sequences Filename",true,"","string",cmd);
-		TCLAP::ValueArg<string> splitAlignmentsFilenameArg("a","align","Split Alignments Filename",true,"","string",cmd);
+		TCLAP::ValueArg<string> alignmentsFilenameArg("a","align","Alignments Sam Filename",true,"","string",cmd);
+		TCLAP::ValueArg<string> candidateRefSeqsFilenameArg("r","refseqs","Candidate Reference Sequences Filename",true,"","string",cmd);
+		TCLAP::ValueArg<string> candidateMateRegionsFilenameArg("m","materegions","Candidate Mate Regions Filename",true,"","string",cmd);
+		TCLAP::ValueArg<string> splitAlignmentsFilenameArg("s","splits","Split Alignments Filename",true,"","string",cmd);
 		TCLAP::ValueArg<string> readSeqs1FilenameArg("1","seq1","End 1 Sequences",true,"","string",cmd);
 		TCLAP::ValueArg<string> readSeqs2FilenameArg("2","seq2","End 2 Sequences",true,"","string",cmd);
 		cmd.parse(argc,argv);
-
-		candidateReadsFilename = candidateReadsFilenameArg.getValue();
-		candidateRegionsFilename = candidateRegionsFilenameArg.getValue();
+		
+		alignmentsFilename = alignmentsFilenameArg.getValue();
+		candidateRefSeqsFilename = candidateRefSeqsFilenameArg.getValue();
+		candidateMateRegionsFilename = candidateMateRegionsFilenameArg.getValue();
 		splitAlignmentsFilename = splitAlignmentsFilenameArg.getValue();
 		readSeqs1Filename = readSeqs1FilenameArg.getValue();
 		readSeqs2Filename = readSeqs2FilenameArg.getValue();
@@ -51,18 +54,22 @@ int main(int argc, char* argv[])
 		exit(1);
 	}
 	
-	ifstream candidateReadsFile(candidateReadsFilename.c_str());
-	ifstream candidateRegionsFile(candidateRegionsFilename.c_str());
+	ifstream candidateRefSeqsFile(candidateRefSeqsFilename.c_str());
+	ifstream candidateMateRegionsFile(candidateMateRegionsFilename.c_str());
 	ofstream splitAlignmentsFile(splitAlignmentsFilename.c_str());
 	
-	CheckFile(candidateReadsFile, candidateReadsFilename);
-	CheckFile(candidateRegionsFile, candidateRegionsFilename);
+	CheckFile(candidateRefSeqsFile, candidateRefSeqsFilename);
+	CheckFile(candidateMateRegionsFile, candidateMateRegionsFilename);
 	CheckFile(splitAlignmentsFile, splitAlignmentsFilename);
 	
 	SplitAlignment::SplitAlignmentMap splitAlignments;
 	
-	SplitAlignment::ReadCandidateReads(candidateReadsFile, splitAlignments);
-	SplitAlignment::ReadCandidateRegions(candidateRegionsFile, splitAlignments);
+	SplitAlignment::ReadCandidateRefSeqs(candidateRefSeqsFile, splitAlignments);
+	SplitAlignment::ReadCandidateMateRegions(candidateMateRegionsFile, splitAlignments);
+	
+	AlignmentStream* alignmentStream = new SamAlignmentStream(alignmentsFilename);
+	
+	SplitAlignment::FindCandidates(alignmentStream, splitAlignments);
 	
 	IReadStream* readSeqs1Stream = IReadStream::Create(readSeqs1Filename);
 	IReadStream* readSeqs2Stream = IReadStream::Create(readSeqs2Filename);
@@ -84,8 +91,8 @@ int main(int argc, char* argv[])
 	
 	SplitAlignment::WriteAlignments(splitAlignmentsFile, splitAlignments);
 
-	candidateReadsFile.close();
-	candidateRegionsFile.close();
+	candidateRefSeqsFile.close();
+	candidateMateRegionsFile.close();
 	splitAlignmentsFile.close();
 }
 

@@ -8,8 +8,7 @@ my $fraglength_sum = 0;
 my $fraglength_sum_sq = 0;
 my $fraglength_num = 0;
 
-my $readlength_min;
-my $readlength_max;
+my %readlengths;
 
 my $line = 0;
 while (my $sam_line = <>)
@@ -61,15 +60,13 @@ while (my $sam_line = <>)
 	$fraglength_sum += $fraglength;
 	$fraglength_sum_sq += $fraglength ** 2;
 	$fraglength_num++;
-
-	$readlength_min = $seq_length_1 if not defined $readlength_min;
-	$readlength_max = $seq_length_1 if not defined $readlength_max;
-
-	$readlength_min = min($readlength_min,$seq_length_1);
-	$readlength_min = min($readlength_min,$seq_length_2);
-	$readlength_max = max($readlength_max,$seq_length_1);
-	$readlength_max = max($readlength_max,$seq_length_2);
+	
+	$readlengths{$seq_length_1} = 1;
+	$readlengths{$seq_length_2} = 1;
 }
+
+my $readlength_min = min(keys %readlengths);
+my $readlength_max = max(keys %readlengths);
 
 $readlength_min = 0 if not defined $readlength_min;
 $readlength_max = 0 if not defined $readlength_max;
@@ -85,8 +82,10 @@ if ($fraglength_num > 0)
 	$fraglength_stddev = $fraglength_variance ** 0.5;
 }
 
-print "frag_count\tfraglength_mean\tfraglength_stddev\treadlength_min\treadlength_max\n";
-print "$fraglength_num\t$fraglength_mean\t$fraglength_stddev\t$readlength_min\t$readlength_max\n";
+my $readlengths_list = join ",", keys %readlengths;
+
+print "frag_count\tfraglength_mean\tfraglength_stddev\treadlength_min\treadlength_max\treadlengths_list\n";
+print "$fraglength_num\t$fraglength_mean\t$fraglength_stddev\t$readlength_min\t$readlength_max\t$readlengths_list\n";
 
 
 

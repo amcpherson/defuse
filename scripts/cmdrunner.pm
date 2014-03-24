@@ -5,7 +5,6 @@ use warnings FATAL => 'all';
 use List::Util qw[min max];
 use File::stat;
 use Sys::Hostname;
-use Cwd 'abs_path';
 
 sub new
 {
@@ -14,8 +13,8 @@ sub new
 	my $self = {};
 	
 	$self->{name} = "cmdrunner";
-	$self->{prefix} = abs_path("cmdrunner");
-	$self->{logfilename} = abs_path($self->{prefix}.".log");
+	$self->{prefix} = "cmdrunner";
+	$self->{logfilename} = $self->{prefix}.".log";
 	$self->{submitter} = \&submitter_direct;
 	$self->{maxparallel} = 200;
 	$self->{filetimeout} = 100;
@@ -35,8 +34,8 @@ sub name
 sub prefix
 {
 	my $self = shift;
-	$self->{prefix} = abs_path(shift);
-	$self->{logfilename} = abs_path($self->{prefix}.".log");
+	$self->{prefix} = shift;
+	$self->{logfilename} = $self->{prefix}.".log";
 }
 
 sub submitter

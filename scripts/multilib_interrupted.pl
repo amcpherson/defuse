@@ -68,6 +68,9 @@ if (not defined $max_parallel)
 	}
 }
 
+-e $config_filename or die "Error: Unable to find config file $config_filename\n";
+-d $output_directory or die "Error: Unable to find output directory $output_directory\n";
+
 $config_filename = abs_path($config_filename);
 $output_directory = abs_path($output_directory);
 

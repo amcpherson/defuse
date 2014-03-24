@@ -10,28 +10,25 @@
 
 #include "Common.h"
 #include "Indexer.h"
-#include "bam.h"
-#include "sam.h"
+
+#include "api/BamReader.h"
 
 #include <map>
 #include <string>
 #include <iostream>
 
 using namespace std;
+using namespace BamTools;
 
 class AlignmentIndex
 {
 public:
-	AlignmentIndex();
-	
 	void Open(const string& bamFilename);
 	void Find(const string& reference, int strand, int start, int end, NameIndex& referenceNames, CompAlignVec& alignments) const;
 	void Close();
 	
 private:
-	samfile_t* mBamFile;
-	bam_index_t* mBamIndexFile;
-	unordered_map<string,int> mReferenceIndexMap;
+	mutable BamReader mReader;
 };
 
 #endif

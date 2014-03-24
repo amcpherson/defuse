@@ -5,7 +5,6 @@ use warnings FATAL => 'all';
 use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
-use Cwd qw[abs_path];
 
 use lib dirname($0);
 use configdata;
@@ -65,8 +64,8 @@ close CID;
 
 # Read in cluster sam file
 my %clusters;
-my $clusters_sam = $output_directory."/clusters.sc";
-read_sam_clusters($clusters_sam, \%clusters);
+my $clusters_sc = $output_directory."/clusters.sc";
+read_clusters($clusters_sc, \%clusters);
 
 # Find cluster spanning read count and strands
 my %fusion_span_count;
@@ -85,38 +84,27 @@ foreach my $cluster_id (keys %clusters)
 # Read in annotations file
 my %annotations;
 my $annotations_filename = $output_directory."/annotations";
-my $mapping_stats_filename = $output_directory."/mapping.stats";
 read_annotations($annotations_filename, \%annotations);
-read_annotations($mapping_stats_filename, \%annotations);
 
-# Read in split read and denovo break predictions
-my %splitr_break;
-my %denovo_break;
-my $splitr_break_filename = $output_directory."/splitr.break";
-my $denovo_break_filename = $output_directory."/denovo.break";
-read_breaks($splitr_break_filename, \%splitr_break);
-read_breaks($denovo_break_filename, \%denovo_break);
+# Read in split read break predictions
+my %splitreads_break;
+my $splitreads_break_filename = $output_directory."/splitreads.break";
+read_breaks($splitreads_break_filename, \%splitreads_break);
 
-# Read in split read and denovo seq predictions
-my %splitr_seq;
-my %denovo_seq;
-my $splitr_seq_filename = $output_directory."/splitr.seq";
-my $denovo_seq_filename = $output_directory."/denovo.seq";
-read_splitr_seq($splitr_seq_filename, \%splitr_seq);
-read_denovo_seq($denovo_seq_filename, \%denovo_seq);
+# Read in split read seq predictions
+my %splitreads_seq;
+my $splitreads_seq_filename = $output_directory."/splitreads.seq";
+read_seq($splitreads_seq_filename, \%splitreads_seq);
 
 # Read in spanning pvalue file for split and denovo predictions
-my %splitr_span_pval;
-my %denovo_span_pval;
-my $splitr_span_pval_filename = $output_directory."/splitr.span.pval";
-my $denovo_span_pval_filename = $output_directory."/denovo.span.pval";
-read_span_pval($splitr_span_pval_filename, \%splitr_span_pval);
-read_span_pval($denovo_span_pval_filename, \%denovo_span_pval);
+my %splitreads_span_pval;
+my $splitreads_span_pval_filename = $output_directory."/splitreads.span.pval";
+read_span_pval($splitreads_span_pval_filename, \%splitreads_span_pval);
 
 # Read in split pvalue file for split predictions
-my %splitr_split_pval;
-my $splitr_split_pval_filename = $output_directory."/splitr.split.pval";
-read_split_pval($splitr_split_pval_filename, \%splitr_split_pval);
+my %splitreads_split_pval;
+my $splitreads_split_pval_filename = $output_directory."/splitreads.split.pval";
+read_split_pval($splitreads_split_pval_filename, \%splitreads_split_pval);
 
 # Collect a list of all annotation types
 my %anno_types_hash;
@@ -154,19 +142,12 @@ foreach my $cluster_id (keys %cluster_ids)
 {
 	print $cluster_id."\t";
 
-	print $splitr_seq{$cluster_id}{sequence}."\t";
-	print $splitr_seq{$cluster_id}{split_count}."\t";
-	print $splitr_span_pval{$cluster_id}{pvalue}."\t";
-	print $splitr_split_pval{$cluster_id}{pos_pvalue}."\t";
-	print $splitr_split_pval{$cluster_id}{min_pvalue}."\t";
-
-	if (lc($denovo_assembly) eq "yes")
-	{
-		print $denovo_seq{$cluster_id}{sequence}."\t";
-		print $denovo_seq{$cluster_id}{min_count}."\t";
-		print $denovo_span_pval{$cluster_id}{pvalue}."\t";
-	}
-
+	print $splitreads_seq{$cluster_id}{sequence}."\t";
+	print $splitreads_seq{$cluster_id}{split_count}."\t";
+	print $splitreads_span_pval{$cluster_id}{pvalue}."\t";
+	print $splitreads_split_pval{$cluster_id}{pos_pvalue}."\t";
+	print $splitreads_split_pval{$cluster_id}{min_pvalue}."\t";
+	
 	foreach my $anno_type (@anno_types)
 	{
 		my $anno_value = $annotations{$cluster_id}{$anno_type};
@@ -177,7 +158,7 @@ foreach my $cluster_id (keys %cluster_ids)
 	print "\n";
 }
 
-sub read_sam_clusters
+sub read_clusters
 {
 	my $clusters_filename = shift;
 	my $clusters_hash_ref = shift;
@@ -243,7 +224,7 @@ sub read_split_pval
 	close SPP;
 }
 
-sub read_splitr_seq
+sub read_seq
 {
 	my $seqs_filename = shift;
 	my $seqs_hash_ref = shift;
@@ -284,26 +265,6 @@ sub read_breaks
 		push @{$breaks_hash_ref->{$cluster_id}{breakpos}}, [$reference,$strand,$breakpos];
 	}
 	close BR;
-}
-
-sub read_denovo_seq
-{
-	my $seqs_filename = shift;
-	my $seqs_hash_ref = shift;
-	
-	open SEQ, $seqs_filename or die "Error: Unable to find $seqs_filename: $!\n";
-	while (<SEQ>)
-	{
-		chomp;
-		my @fields = split /\t/;
-		
-		my $cluster_id = $fields[0];
-		
-		$seqs_hash_ref->{$cluster_id}{sequence} = $fields[1];
-		$seqs_hash_ref->{$cluster_id}{inter_length} = $fields[2];
-		$seqs_hash_ref->{$cluster_id}{min_count} = $fields[3];
-	}
-	close SEQ;
 }
 
 sub read_annotations

@@ -5,7 +5,6 @@ use warnings FATAL => 'all';
 use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
-use Cwd qw[abs_path];
 use List::Util qw[min max];
 
 $| = 1;
@@ -120,6 +119,7 @@ sub calc_edit_dist
 }
 
 my $estislandsbin = $tools_directory."/estislands";
+my $calc_map_stats_script = $scripts_directory."/calculate_mapping_stats.pl";
 my $break_concordant_script = $scripts_directory."/calc_break_concordant.pl";
 my $interrupted_script = $scripts_directory."/calc_interrupted.pl";
 
@@ -142,17 +142,14 @@ my $breakpoints_est_psl = $output_directory."/breakpoints.est.psl";
 my $breakpoints_exons_psl = $output_directory."/breakpoints.exons.psl";
 my $breakpoints_cds_psl = $output_directory."/breakpoints.cds.psl";
 
-my $break_filename = $output_directory."/break";
-my $seq_filename = $output_directory."/seq";
-my $break_predict_filename = $output_directory."/break.predict";
+my $break_filename = $output_directory."/splitreads.break";
+my $seq_filename = $output_directory."/splitreads.seq";
 
 my %break;
 my %seq;
-my %break_predict;
 
 read_breaks($break_filename, \%break);
 read_seq($seq_filename, \%seq);
-read_break_predict($break_predict_filename, \%break_predict);
 
 # Read in the read stats
 my $read_stats = $output_directory."/concordant.read.stats";
@@ -191,7 +188,6 @@ my %genomic_strand1;
 my %genomic_strand2;
 my %gene_location1;
 my %gene_location2;
-my %fusion_break_predict;
 my %break_adj_entropy1;
 my %break_adj_entropy2;
 my %fusion_seq_length;
@@ -292,7 +288,6 @@ foreach my $cluster_id (keys %break)
 	
 	# Select the breakpoint prediction with the highest spanning pvalue
 	my $break_sequence = $seq{$cluster_id}{sequence};
-	my $break_predict = $break_predict{$cluster_id}{break_predict};
 	
 	# Skip if no breakpoint sequence was predicted
 	next if $break_sequence eq "N" or $break_sequence eq "";
@@ -328,8 +323,6 @@ foreach my $cluster_id (keys %break)
 	$fusion_strand1{$cluster_id} = $strand1;
 	$fusion_strand2{$cluster_id} = $strand2;
 	
-	$fusion_break_predict{$cluster_id} = $break_predict;
-
 	my $break_adj_seq1 = substr $break_sequence, max(0, $break_in_seq - $entropy_breakpoint_adjacent_size), min($break_in_seq, $entropy_breakpoint_adjacent_size);
 	my $break_adj_seq2 = substr $break_sequence, $break_in_seq, min(length($break_sequence) - $break_in_seq, $entropy_breakpoint_adjacent_size);
 	
@@ -362,6 +355,18 @@ foreach my $cluster_id (keys %cluster_ids)
 		$fusion_span_count{$cluster_id} = scalar keys %{$clusters{$cluster_id}{$cluster_end}};
 	}
 }
+
+my $cdna_fasta_index = $cdna_fasta.".fai";
+my $cdna_pair_sam = $output_directory."/cdna.pair.sam";
+my $cdna_pair_bam = $output_directory."/cdna.pair.bam";
+my $cdna_pair_bam_bai = $cdna_pair_bam.".bai";
+my $cdna_pair_bam_prefix = $cdna_pair_bam.".sort";
+$runner->run("$samtools_bin view -bt $cdna_fasta_index #<1 | $samtools_bin sort -o - $cdna_pair_bam_prefix > #>1", [$cdna_pair_sam], [$cdna_pair_bam]);
+$runner->padd("$samtools_bin index #<1 #>1", [$cdna_pair_bam], [$cdna_pair_bam_bai]);
+
+# Calculate break concordant counts
+my %mapping_stats;
+calculate_mapping_stats(\%mapping_stats);
 
 # Calculate break concordant counts
 my %break_concordant;
@@ -842,7 +847,6 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\tcdna_breakseqs_percident\t".$breakseqs_percident{cdna}{$cluster_id}."\n";
 	print $cluster_id."\test_breakseqs_percident\t".$breakseqs_percident{est}{$cluster_id}."\n";
 	print $cluster_id."\tbreakseqs_estislands_percident\t".$breakseqs_percident{estisland}{$cluster_id}."\n";
-	print $cluster_id."\tbreak_predict\t".$fusion_break_predict{$cluster_id}."\n";
 
 	print $cluster_id."\tbreak_adj_entropy1\t".$break_adj_entropy1{$cluster_id}."\n";
 	print $cluster_id."\tbreak_adj_entropy2\t".$break_adj_entropy2{$cluster_id}."\n";
@@ -857,6 +861,11 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\tmax_repeat_proportion\t".max($fusion_repeat_proportion1{$cluster_id},$fusion_repeat_proportion2{$cluster_id})."\n";
 	print $cluster_id."\tsplice_score\t".$fusion_splice_score{$cluster_id}."\n";
 	print $cluster_id."\tnum_splice_variants\t".$num_splice_variants."\n";
+	
+	print $cluster_id."\tmin_map_count\t".$mapping_stats{$cluster_id}{min_map_count}."\n";
+	print $cluster_id."\tmax_map_count\t".$mapping_stats{$cluster_id}{max_map_count}."\n";
+	print $cluster_id."\tmean_map_count\t".$mapping_stats{$cluster_id}{mean_map_count}."\n";
+	print $cluster_id."\tnum_multi_map\t".$mapping_stats{$cluster_id}{num_multi_map}."\n";
 }
 
 sub read_seq
@@ -1174,6 +1183,28 @@ sub read_expression
 		$expression_ref->{$ensgene}{expression} = $fields[1];
 	}
 	close EXPR;
+}
+
+sub calculate_mapping_stats
+{
+	my $mapping_stats_ref = shift;
+	
+	my $mapping_stats_filename = $output_directory."/mapping.stats";
+	$runner->run("$calc_map_stats_script -c $config_filename -o $output_directory > #>1", [$clusters_sc], [$mapping_stats_filename]);
+	
+	open MPS, $mapping_stats_filename or die "Error: Unable to find $mapping_stats_filename: $!\n";
+	while (<MPS>)
+	{
+		chomp;
+		my @fields = split /\t/;
+		
+		my $cluster_id = $fields[0];
+		my $anno_type = $fields[1];
+		my $anno_value = $fields[2];
+		
+		$mapping_stats_ref->{$cluster_id}{$anno_type} = $anno_value;
+	}
+	close MPS;
 }
 
 sub calculate_break_concordant

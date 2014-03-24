@@ -67,7 +67,6 @@ $num_sequences = 10000 if not defined $num_sequences;
 
 $reference_2bit = abs_path($reference_2bit);
 $sequences_fasta = abs_path($sequences_fasta);
-$output_psl = abs_path($output_psl);
 
 my $script_directory = abs_path(dirname($0));
 my $split_fasta_script = $script_directory."/split_fasta.pl";

@@ -20,12 +20,13 @@ using namespace std;
 
 struct SplitReadAlignment
 {
-	IntegerPairVec matches1;
-	IntegerPairVec matches2;
-	IntegerPair split;
+	IntegerPair refSplit;
+	IntegerPair readSplit;
 	int score;
 	int score1;
 	int score2;
+	IntegerPairVec matches1;
+	IntegerPairVec matches2;
 };
 
 typedef vector<SplitReadAlignment> SplitReadAlignVec;
@@ -36,7 +37,7 @@ public:
 	SplitReadAligner(int matchScore, int misMatchScore, int gapScore, bool endGaps, int minSplitScore, const string& reference1, const string& reference2);
 	
 	void Align(const string& read);
-	void GetAlignments(SplitReadAlignVec& alignments, int minScore, bool forceSplits, bool firstOnly);
+	void GetAlignments(SplitReadAlignVec& alignments, int minScore, bool forceSplits, bool firstOnly, bool backtrace);
 	
 private:
 	void FillMatrix(const string& seq1, const string& seq2, Matrix<int>& matrix, Matrix<Cell>& backTrace);

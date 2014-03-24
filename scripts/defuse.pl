@@ -52,6 +52,7 @@ defined $config_filename or die @usage;
 defined $output_directory or die @usage;
 
 mkdir $output_directory if not -d $output_directory;
+-e $config_filename or die "Error: Unable to find config file $config_filename\n";
 
 $output_directory = abs_path($output_directory);
 $config_filename = abs_path($config_filename);
@@ -189,37 +190,24 @@ verify_directory_exists($scripts_directory);
 
 # Script and binary paths
 my $retreive_fastq_script = "$scripts_directory/retreive_fastq.pl";
-my $remove_end_sed_command = "sed 's#/[12]\$##g'";
 my $alignjob_script = "$scripts_directory/alignjob.pl";
-my $samtools_merge_script = "$scripts_directory/samtools_merge.pl";
-my $filter_bowtie_script = "$scripts_directory/filter_bowtie.pl";
-my $filter_reference_script = "$scripts_directory/filter_bowtie_reference.pl";
 my $read_stats_script = "$scripts_directory/read_stats.pl";
 my $expression_script = "$scripts_directory/calculate_expression_simple.pl";
 my $split_fastq_script = "$scripts_directory/split_fastq.pl";
-my $split_regions_script = "$scripts_directory/split_regions.pl";
-my $split_candidate_reads_script = "$scripts_directory/split_candidate_reads.pl";
 my $get_align_regions_script = "$scripts_directory/get_align_regions.pl";
 my $merge_read_stats_script = "$scripts_directory/merge_read_stats.pl";
+my $merge_cov_samples_script = "$scripts_directory/merge_cov_samples.pl";
 my $merge_expression_script = "$scripts_directory/merge_expression.pl";
-my $split_seq_merge_script = "$scripts_directory/splitseqmerge.pl";
-my $get_cluster_alignments_script = "$scripts_directory/get_cluster_alignments.pl";
-my $bowtie2sam_script = "$scripts_directory/bowtie2sam.pl";
-my $calccov_bin = "$tools_directory/calccov";
+my $merge_clusters_script = "$scripts_directory/merge_clusters.pl";
 my $clustermatepairs_bin = "$tools_directory/clustermatepairs";
 my $segregate_mitochondrial_script = "$scripts_directory/segregate_mitochondrial.pl";
 my $select_fusion_clusters_script = "$scripts_directory/select_fusion_clusters.pl";
 my $prep_local_alignment_seqs_script = "$scripts_directory/prep_local_alignment_seqs.pl";
-my $get_fusion_sequences_script = "$scripts_directory/get_fusion_sequences.pl";
-my $filter_psl_concordant_script = "$scripts_directory/filter_psl_concordant.pl";
 my $filter_column_script = "$scripts_directory/filter_column.pl";
-my $select_breakpoint_seq_script = "$scripts_directory/select_breakpoint_seq.pl";
 my $remove_duplicates_script = "$scripts_directory/remove_duplicates.pl";
 my $setcover_bin = "$tools_directory/setcover";
 my $localalign_bin = "$tools_directory/localalign";
-my $split_seq_bin = "$tools_directory/splitseq";
-my $denovo_seq_bin = "$tools_directory/denovoseq";
-my $findcandidatereads_bin = "$tools_directory/findcandidatereads";
+my $initsplitalign_bin = "$tools_directory/initsplitalign";
 my $dosplitalign_bin = "$tools_directory/dosplitalign";
 my $evalsplitalign_bin = "$tools_directory/evalsplitalign";
 my $calc_span_stats_script = "$scripts_directory/calc_span_stats.pl";
@@ -227,7 +215,6 @@ my $create_read_fasta_script = "$scripts_directory/create_read_fasta.pl";
 my $make_fasta_script = "$scripts_directory/make_fasta.pl";
 my $split_fasta_script = "$scripts_directory/split_fasta.pl";
 my $annotate_fusions_script = "$scripts_directory/annotate_fusions.pl";
-my $calc_map_stats_script = "$scripts_directory/calculate_mapping_stats.pl";
 my $filter_script = "$scripts_directory/filter.pl";
 my $coallate_fusions_script = "$scripts_directory/coallate_fusions.pl";
 my $evaluate_fraglength_rscript = "$rscript_bin ".$scripts_directory."/evaluate_fraglength_mean.R";
@@ -275,28 +262,76 @@ $runner->run("$split_fastq_script $reads_prefix $reads_per_job $reads_split_pref
 # Read split catalog
 my @split_fastq_prefixes = readsplitcatalog($reads_split_catalog);
 
-# Products of the alignment process
-my $read_stats = $output_directory."/concordant.read.stats";
-my $expression = $output_directory."/expression.txt";
-my $cdna_pair_bam = $output_directory."/cdna.pair.bam";
-my $spanning_bam = $output_directory."/spanning.bam";
-my $spanning_byread_bam = $output_directory."/spanning.byread.bam";
-my $anchored_bam = $output_directory."/anchored.bam";
-
-print "Split align merge for discordant alignments\n";
-if (not cmdrunner::uptodate([$reads_end_1_fastq,$reads_end_2_fastq], [$read_stats,$cdna_pair_bam,$spanning_bam,$spanning_byread_bam,$anchored_bam,$expression]))
+# Create job info
+my @job_infos;
+foreach my $split_fastq_prefix (@split_fastq_prefixes)
 {
-	splitalignmerge(@split_fastq_prefixes);
+	my %job_info;
+	$job_info{prefix} = $split_fastq_prefix;
+	$job_info{name} = basename($split_fastq_prefix);
+	$job_info{fastq1} = $split_fastq_prefix.".1.fastq";
+	$job_info{fastq2} = $split_fastq_prefix.".2.fastq";
+	
+	push @job_infos, \%job_info;
 }
 
-print "Indexing discordant bam files\n";
-my $cdna_pair_bam_bai = $cdna_pair_bam.".bai";
-my $spanning_bam_bai = $spanning_bam.".bai";
-my $anchored_bam_bai = $anchored_bam.".bai";
-$runner->padd("$samtools_bin index #<1 #>1", [$cdna_pair_bam], [$cdna_pair_bam_bai]);
-$runner->padd("$samtools_bin index #<1 #>1", [$spanning_bam], [$spanning_bam_bai]);
-$runner->padd("$samtools_bin index #<1 #>1", [$anchored_bam], [$anchored_bam_bai]);
+print "Discordant alignments\n";
+my @job_read_stats;
+my @job_spanlength_samples;
+my @job_splitpos_samples;
+my @job_splitmin_samples;
+my @job_expression;
+foreach my $job_info (@job_infos)
+{
+	# Names of job products
+	$job_info->{read_stats} = $job_info->{prefix}.".concordant.read.stats";
+	$job_info->{spanlength_samples} = $job_info->{prefix}.".spanlength.samples";
+	$job_info->{splitpos_samples} = $job_info->{prefix}.".splitpos.samples";
+	$job_info->{splitmin_samples} = $job_info->{prefix}.".splitmin.samples";
+	$job_info->{expression} = $job_info->{prefix}.".expression.txt";
+	$job_info->{cdna_pair_sam} = $job_info->{prefix}.".cdna.pair.sam";
+	$job_info->{improper_sam} = $job_info->{prefix}.".improper.sam";
+	$job_info->{spanning_filelist} = $job_info->{prefix}.".spanning.filelist";
+	
+	my $job_cmd = $alignjob_script." ";
+	$job_cmd .= "-c ".$config_filename." ";
+	$job_cmd .= "-j ".$job_info->{name}." ";
+	$job_cmd .= "-l ".$joblocal_directory." ";
+	$job_cmd .= "-o ".$output_directory." ";
+	$job_cmd .= "-n ".$library_name." ";
+	$job_cmd .= "-p ".$job_info->{prefix}." ";
+	
+	my @job_products;
+	push @job_products, $job_info->{read_stats};
+	push @job_products, $job_info->{spanlength_samples};
+	push @job_products, $job_info->{splitpos_samples};
+	push @job_products, $job_info->{splitmin_samples};
+	push @job_products, $job_info->{expression};
+	push @job_products, $job_info->{cdna_pair_sam};
+	push @job_products, $job_info->{improper_sam};
+	push @job_products, $job_info->{spanning_filelist};
+	
+	$runner->padd("$job_cmd", [$job_info->{fastq1}, $job_info->{fastq2}], [@job_products]); 
+	
+	push @job_read_stats, $job_info->{read_stats};
+	push @job_spanlength_samples, $job_info->{spanlength_samples};
+	push @job_splitpos_samples, $job_info->{splitpos_samples};
+	push @job_splitmin_samples, $job_info->{splitmin_samples};
+	push @job_expression, $job_info->{expression};
+}
 $runner->prun();
+
+# Merge read stats and expression
+my $read_stats = $output_directory."/concordant.read.stats";
+my $spanlength_cov = $output_directory."/spanlength.cov";
+my $splitpos_cov = $output_directory."/splitpos.cov";
+my $splitmin_cov = $output_directory."/splitmin.cov";
+my $expression = $output_directory."/expression.txt";
+$runner->run("$merge_read_stats_script #<A > #>1", [@job_read_stats], [$read_stats]);
+$runner->run("$merge_cov_samples_script #<A > #>1", [@job_spanlength_samples], [$spanlength_cov]);
+$runner->run("$merge_cov_samples_script #<A > #>1", [@job_splitpos_samples], [$splitpos_cov]);
+$runner->run("$merge_cov_samples_script #<A > #>1", [@job_splitmin_samples], [$splitmin_cov]);
+$runner->run("$merge_expression_script #<A > #>1", [@job_expression], [$expression]);
 
 # Read in the read stats
 my %read_stat_values;
@@ -325,17 +360,34 @@ if ($fragment_mean / $discord_read_trim < 3)
 	}
 }
 
-print "Finding paired end alignment covariance\n";
-my $cov_stats = $output_directory."/covariance.stats";
-$runner->jobmem(10000000000);
-$runner->run("$calccov_bin -m $fragment_max -a $split_min_anchor -d $cov_samp_density -g $cdna_regions -c #<1 -v #>1", [$cdna_pair_bam], [$cov_stats]);
-$runner->jobmem(3000000000);
+# Read divided spanning alignment lists
+my %spanning_filenames;
+foreach my $job_info (@job_infos)
+{
+	open SFL, $job_info->{spanning_filelist} or die;
+	while (<SFL>)
+	{
+		chomp;
+		my ($chr1,$chr2,$filename) = split /\t/;
+		push @{$spanning_filenames{$chr1}{$chr2}}, $filename;
+	}
+	close SFL;
+}
 
-print "Generating maximal valid clusters\n";
+print "Generating discordant alignment clusters\n";
+my @chr_cluster_filenames;
+foreach my $chr1 (keys %spanning_filenames)
+{
+	foreach my $chr2 (keys %{$spanning_filenames{$chr1}})
+	{
+		my $chr_cluster_filename = $output_directory."/clusters.".$chr1."-".$chr2;
+		$runner->padd("cat #<A | $clustermatepairs_bin -m $span_count_threshold -p $clustering_precision -u $fragment_mean -s $fragment_stddev -a - -c #>1", [@{$spanning_filenames{$chr1}{$chr2}}], [$chr_cluster_filename]);
+		push @chr_cluster_filenames, $chr_cluster_filename;
+	}
+}
+$runner->prun();
 my $clusters_all = $output_directory."/clusters.all";
-$runner->jobmem(10000000000);
-$runner->run("$clustermatepairs_bin -m $span_count_threshold -p $clustering_precision -u $fragment_mean -s $fragment_stddev -r #<1 -c #>1", [$spanning_byread_bam], [$clusters_all]);
-$runner->jobmem(3000000000);
+$runner->run("$merge_clusters_script #<A > #>1", [@chr_cluster_filenames], [$clusters_all]);
 
 print "Remove mitochondrial-genomic clusters\n";
 my $clusters = $output_directory."/clusters";
@@ -367,71 +419,47 @@ print "Generating spanning alignment regions file\n";
 my $clusters_sc_regions = $output_directory."/clusters.sc.regions";
 $runner->run("$get_align_regions_script < #<1 > #>1", [$clusters_sc], [$clusters_sc_regions]);
 
-print "Finding candidate split reads\n";
-my $candidate_sequences = $output_directory."/candidate.seqs";
-my $candidate_reads = $output_directory."/candidate.reads";
-$runner->jobmem(10000000000);
-$runner->run("$findcandidatereads_bin -i #<1 -c #>1 -r #>2 -m $read_length_min -x $read_length_max -u $fragment_mean -s $fragment_stddev -e $cdna_regions -f $reference_fasta -d $spanning_bam -a $anchored_bam", [$clusters_sc_regions], [$candidate_sequences,$candidate_reads]);
-$runner->jobmem(3000000000);
+print "Initializing split read alignments\n";
+my $splitreads_refseqs = $output_directory."/splitreads.refseqs";
+my $splitreads_materegions = $output_directory."/splitreads.materegions";
+$runner->run("$initsplitalign_bin -i #<1 -r #>1 -m #>2 -n $read_length_min -x $read_length_max -u $fragment_mean -s $fragment_stddev -e $cdna_regions -f $reference_fasta", [$clusters_sc_regions], [$splitreads_refseqs,$splitreads_materegions]);
 
-print "Calculating split reads\n";
-my $candidate_alignments = $output_directory."/candidate.alignments";
-if (not cmdrunner::uptodate([$candidate_sequences,$candidate_reads], [$candidate_alignments]))
+print "Calculating split read alignments\n";
+my @job_splitreads_alignments;
+foreach my $job_info (@job_infos)
 {
-	dosplitalignments(\@split_fastq_prefixes, $candidate_alignments);
+	$job_info->{splitalign} = $job_info->{prefix}.".splitreads.alignments";
+	$runner->padd("$dosplitalign_bin -1 #<1 -2 #<2 -r #<3 -m #<4 -a #<5 -s #>1", [$job_info->{fastq1},$job_info->{fastq2},$splitreads_refseqs,$splitreads_materegions,$job_info->{improper_sam}], [$job_info->{splitalign}]);
+	push @job_splitreads_alignments, $job_info->{splitalign};
 }
+$runner->prun();
+my $splitreads_alignments = $output_directory."/splitreads.alignments";
+$runner->run("cat #<A > #>1", [@job_splitreads_alignments], [$splitreads_alignments]);
 
 print "Evaluating split reads\n";
-my $splitr_break = $output_directory."/splitr.break";
-my $splitr_seq = $output_directory."/splitr.seq";
-my $splitr_log = $output_directory."/splitr.log";
-$runner->run("$evalsplitalign_bin -c #<1 -a #<2 -b #>1 -q #>2", [$candidate_sequences,$candidate_alignments], [$splitr_break,$splitr_seq]);
-
-my $denovo_break = $output_directory."/denovo.break";
-my $denovo_seq = $output_directory."/denovo.seq";
-my $denovo_log = $output_directory."/denovo.log";
-if (lc($denovo_assembly) eq "yes")
-{
-	print "Denovo Breakpoint sequence prediction\n";
-	$runner->submitter("direct");
-	$runner->run("$split_seq_merge_script -c $config_filename -o $output_directory -s $submitter_type -p $max_parallel", [$clusters_sc_regions,$spanning_bam,$anchored_bam], [$splitr_break,$splitr_seq,$denovo_break,$denovo_seq]);
-	$runner->submitter($submitter_type);
-}
-else
-{
-	$runner->run("touch #>1 #>2", [$clusters_sc_regions,$spanning_bam,$anchored_bam], [$denovo_break,$denovo_seq]);
-}
+my $splitreads_break = $output_directory."/splitreads.break";
+my $splitreads_seq = $output_directory."/splitreads.seq";
+$runner->run("$evalsplitalign_bin -r #<1 -a #<2 -b #>1 -q #>2", [$splitreads_refseqs,$splitreads_alignments], [$splitreads_break,$splitreads_seq]);
 
 print "Calculating spanning stats\n";
-my $splitr_span_stats = $output_directory."/splitr.span.stats";
-my $denovo_span_stats = $output_directory."/denovo.span.stats";
-$runner->padd("$calc_span_stats_script -c #<1 -b #<2 -s #<3 > #>1", [$clusters_sc,$splitr_break,$splitr_seq], [$splitr_span_stats]);
-$runner->padd("$calc_span_stats_script -c #<1 -b #<2 -s #<3 > #>1", [$clusters_sc,$denovo_break,$denovo_seq], [$denovo_span_stats]);
+my $splitreads_span_stats = $output_directory."/splitreads.span.stats";
+$runner->padd("$calc_span_stats_script -c #<1 -b #<2 -s #<3 > #>1", [$clusters_sc,$splitreads_break,$splitreads_seq], [$splitreads_span_stats]);
 $runner->prun();
 
 print "Calculating spanning p-values\n";
-my $splitr_span_pval = $output_directory."/splitr.span.pval";
-my $denovo_span_pval = $output_directory."/denovo.span.pval";
-$runner->padd("$evaluate_fraglength_rscript #<1 #<2 $discord_read_trim #<3 #>1", [$read_stats,$cov_stats,$splitr_span_stats], [$splitr_span_pval]);
-$runner->padd("$evaluate_fraglength_rscript #<1 #<2 $discord_read_trim #<3 #>1", [$read_stats,$cov_stats,$denovo_span_stats], [$denovo_span_pval]);
+my $splitreads_span_pval = $output_directory."/splitreads.span.pval";
+$runner->padd("$evaluate_fraglength_rscript #<1 #<2 $discord_read_trim #<3 #>1", [$read_stats,$spanlength_cov,$splitreads_span_stats], [$splitreads_span_pval]);
 $runner->prun();
 
 print "Calculating split read pvalues\n";
-my $splitr_split_pval = $output_directory."/splitr.split.pval";
-$runner->run("$evaluate_split_rscript #<1 #<2 #>1", [$cov_stats,$splitr_seq], [$splitr_split_pval]);
-
-print "Selecting breakpoint sequence\n";
-my $break = $output_directory."/break";
-my $seq = $output_directory."/seq";
-my $span_pval = $output_directory."/span.pval";
-my $break_predict = $output_directory."/break.predict";
-$runner->run("$select_breakpoint_seq_script -o $output_directory", [$splitr_span_pval,$splitr_break,$splitr_seq,$denovo_span_pval,$denovo_break,$denovo_seq], [$span_pval,$break,$seq,$break_predict]);
+my $splitreads_split_pval = $output_directory."/splitreads.split.pval";
+$runner->run("$evaluate_split_rscript #<1 #<2 #<3 #>1", [$splitpos_cov,$splitmin_cov,$splitreads_seq], [$splitreads_split_pval]);
 
 print "Creating fastas\n";
 my $fusionreads_fasta = $output_directory."/fusionreads.fa";
 my $breakpoints_fasta = $output_directory."/breakpoints.fa";
 $runner->run("$create_read_fasta_script #<1 $reads_prefix > #>1", [$clusters_sc], [$fusionreads_fasta]);
-$runner->run("cut -f1,2 #<1 | $make_fasta_script > #>1", [$seq], [$breakpoints_fasta]);
+$runner->run("cut -f1,2 #<1 | $make_fasta_script > #>1", [$splitreads_seq], [$breakpoints_fasta]);
 
 print "Splitting fastas\n";
 my $fusionreads_split_prefix = $job_directory."/fusionreads";
@@ -469,13 +497,11 @@ doblatjobs(@blat_jobs);
 
 print "Annotating fusions\n";
 my $annotations_filename = $output_directory."/annotations";
-my $mapping_stats_filename = $output_directory."/mapping.stats";
-$runner->run("$annotate_fusions_script -c $config_filename -o $output_directory -n $library_name > #>1", [$span_pval,$break,$seq,$break_predict,$clusters_sc], [$annotations_filename]);
-$runner->run("$calc_map_stats_script -c $config_filename -o $output_directory > #>1", [$clusters_sc], [$mapping_stats_filename]);
+$runner->run("$annotate_fusions_script -c $config_filename -o $output_directory -n $library_name > #>1", [$splitreads_span_pval,$splitreads_break,$splitreads_seq,$clusters_sc], [$annotations_filename]);
 
 print "Coallating fusions\n";
 my $results_filename = $output_directory."/results.tsv";
-$runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$annotations_filename,$mapping_stats_filename], [$results_filename]);
+$runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$annotations_filename], [$results_filename]);
 
 print "Running adaboost classifier\n";
 my $results_classify = $output_directory."/results.classify.tsv";
@@ -517,207 +543,6 @@ sub readsplitcatalog
 	close SC;
 
 	return @split_prefixes;
-}
-
-sub splitalignmerge
-{
-	# Names of job products
-	my @all_jobs_read_stats;
-	my @all_jobs_cdna_pair_bam;
-	my @all_jobs_spanning_bam;
-	my @all_jobs_spanning_byread_bam;
-	my @all_jobs_anchored_bam;
-	my @all_jobs_expression;
-	
-	foreach my $split_fastq_prefix (@_)
-	{
-		# Job name
-		my $job_name = basename($split_fastq_prefix);
-
-		# Fastq files from split
-		my $reads_end_1_split_fastq = $split_fastq_prefix.".1.fastq";
-		my $reads_end_2_split_fastq = $split_fastq_prefix.".2.fastq";
-		
-		# Names of job products
-		my $job_read_stats = $split_fastq_prefix.".concordant.read.stats";
-		my $job_cdna_pair_bam = $split_fastq_prefix.".cdna.pair.bam";
-		my $job_spanning_bam = $split_fastq_prefix.".spanning.bam";
-		my $job_spanning_byread_bam = $split_fastq_prefix.".spanning.byread.bam";
-		my $job_anchored_bam = $split_fastq_prefix.".anchored.bam";
-		my $job_expression = $split_fastq_prefix.".expression.txt";
-		
-		push @all_jobs_read_stats, $job_read_stats;
-		push @all_jobs_cdna_pair_bam, $job_cdna_pair_bam;
-		push @all_jobs_spanning_bam, $job_spanning_bam;
-		push @all_jobs_spanning_byread_bam, $job_spanning_byread_bam;
-		push @all_jobs_anchored_bam, $job_anchored_bam;
-		push @all_jobs_expression, $job_expression;
-	
-		my $job_cmd = $alignjob_script." ";
-		$job_cmd .= "-c ".$config_filename." ";
-		$job_cmd .= "-j ".$job_name." ";
-		$job_cmd .= "-l ".$joblocal_directory." ";
-		$job_cmd .= "-o ".$output_directory." ";
-		$job_cmd .= "-n ".$library_name." ";
-		$job_cmd .= "-p ".$split_fastq_prefix." ";
-		
-		$runner->padd("$job_cmd", [$reads_end_1_split_fastq, $reads_end_2_split_fastq], [$job_read_stats, $job_cdna_pair_bam, $job_spanning_bam, $job_spanning_byread_bam, $job_anchored_bam, $job_expression]); 
-	}
-	$runner->prun();
-	
-	# Merge products of the alignment process
-	my $read_stats = $output_directory."/concordant.read.stats";
-	my $expression = $output_directory."/expression.txt";
-	my $cdna_pair_bam = $output_directory."/cdna.pair.bam";
-	my $spanning_bam = $output_directory."/spanning.bam";
-	my $spanning_byread_bam = $output_directory."/spanning.byread.bam";
-	my $anchored_bam = $output_directory."/anchored.bam";
-	
-	# Maximum number of files to merge at once
-	my $merge_max = 100;
-	
-	# Merge merge_max at a time
-	my @merge_jobs_read_stats;
-	my @merge_jobs_expression;
-	my @merge_jobs_cdna_pair_bam;
-	my @merge_jobs_spanning_bam;
-	my @merge_jobs_spanning_byread_bam;
-	my @merge_jobs_anchored_bam;
-	my @all_intermediate_read_stats;
-	my @all_intermediate_expression;
-	my @all_intermediate_cdna_pair_bam;
-	my @all_intermediate_spanning_bam;
-	my @all_intermediate_spanning_byread_bam;
-	my @all_intermediate_anchored_bam;
-	foreach my $job_index (0..$#all_jobs_read_stats)
-	{
-		my $job_read_stats = $all_jobs_read_stats[$job_index];
-		my $job_expression = $all_jobs_expression[$job_index];
-		my $job_cdna_pair_bam = $all_jobs_cdna_pair_bam[$job_index];
-		my $job_spanning_bam = $all_jobs_spanning_bam[$job_index];
-		my $job_spanning_byread_bam = $all_jobs_spanning_byread_bam[$job_index];
-		my $job_anchored_bam = $all_jobs_anchored_bam[$job_index];
-		
-		push @merge_jobs_read_stats, $job_read_stats;
-		push @merge_jobs_expression, $job_expression;
-		push @merge_jobs_cdna_pair_bam, $job_cdna_pair_bam;
-		push @merge_jobs_spanning_bam, $job_spanning_bam;
-		push @merge_jobs_spanning_byread_bam, $job_spanning_byread_bam;
-		push @merge_jobs_anchored_bam, $job_anchored_bam;
-		
-		if (scalar @merge_jobs_read_stats == $merge_max or $job_index == $#all_jobs_read_stats)
-		{
-			my $intermediate_index = scalar(@all_intermediate_read_stats) + 1;
-			my $intermediate_prefix = "intermediate.".$intermediate_index;
-			
-			my $intermediate_read_stats = $job_directory."/$intermediate_prefix.concordant.read.stats";
-			my $intermediate_expression = $job_directory."/$intermediate_prefix.expression.txt";
-			my $intermediate_cdna_pair_bam = $job_directory."/$intermediate_prefix.cdna.pair.bam";
-			my $intermediate_spanning_bam = $job_directory."/$intermediate_prefix.spanning.bam";
-			my $intermediate_spanning_byread_bam = $job_directory."/$intermediate_prefix.spanning.byread.bam";
-			my $intermediate_anchored_bam = $job_directory."/$intermediate_prefix.anchored.bam";
-			
-			# Merge read statistics
-			$runner->padd("$merge_read_stats_script #<A > #>1", [@merge_jobs_read_stats], [$intermediate_read_stats]);
-			
-			# Merge expression statistics
-			$runner->padd("$merge_expression_script #<A > #>1", [@merge_jobs_expression], [$intermediate_expression]);
-			
-			# Merge bam files
-			$runner->padd("$samtools_merge_script $samtools_bin #>1 #<A", [@merge_jobs_cdna_pair_bam], [$intermediate_cdna_pair_bam]);
-			$runner->padd("$samtools_merge_script $samtools_bin #>1 #<A", [@merge_jobs_spanning_bam], [$intermediate_spanning_bam]);
-			$runner->padd("$samtools_merge_script $samtools_bin -n #>1 #<A", [@merge_jobs_spanning_byread_bam], [$intermediate_spanning_byread_bam]);
-			$runner->padd("$samtools_merge_script $samtools_bin #>1 #<A", [@merge_jobs_anchored_bam], [$intermediate_anchored_bam]);
-			
-			push @all_intermediate_read_stats, $intermediate_read_stats;
-			push @all_intermediate_expression, $intermediate_expression;
-			push @all_intermediate_cdna_pair_bam, $intermediate_cdna_pair_bam;
-			push @all_intermediate_spanning_bam, $intermediate_spanning_bam;
-			push @all_intermediate_spanning_byread_bam, $intermediate_spanning_byread_bam;
-			push @all_intermediate_anchored_bam, $intermediate_anchored_bam;
-			
-			@merge_jobs_read_stats = ();
-			@merge_jobs_expression = ();
-			@merge_jobs_cdna_pair_bam = ();
-			@merge_jobs_spanning_bam = ();
-			@merge_jobs_spanning_byread_bam = ();
-			@merge_jobs_anchored_bam = ();	
-		}
-	}
-	$runner->prun();
-	
-	# Merge intermediate read statistics
-	$runner->run("$merge_read_stats_script #<A > #>1", [@all_intermediate_read_stats], [$read_stats]);
-	
-	# Merge intermediate expression statistics
-	$runner->run("$merge_expression_script #<A > #>1", [@all_intermediate_expression], [$expression]);
-	
-	# Merge bam files
-	$runner->padd("$samtools_merge_script $samtools_bin #>1 #<A", [@all_intermediate_cdna_pair_bam], [$cdna_pair_bam]);
-	$runner->padd("$samtools_merge_script $samtools_bin #>1 #<A", [@all_intermediate_spanning_bam], [$spanning_bam]);
-	$runner->padd("$samtools_merge_script $samtools_bin -n #>1 #<A", [@all_intermediate_spanning_byread_bam], [$spanning_byread_bam]);
-	$runner->padd("$samtools_merge_script $samtools_bin #>1 #<A", [@all_intermediate_anchored_bam], [$anchored_bam]);
-	$runner->prun();
-
-	if (lc($remove_job_files) eq "yes")	
-	{
-		unlink @all_jobs_read_stats;
-		unlink @all_jobs_expression;
-		unlink @all_jobs_cdna_pair_bam;
-		unlink @all_jobs_spanning_bam;
-		unlink @all_jobs_spanning_byread_bam;
-		unlink @all_jobs_anchored_bam;
-		unlink @all_intermediate_read_stats;
-		unlink @all_intermediate_expression;
-		unlink @all_intermediate_cdna_pair_bam;
-		unlink @all_intermediate_spanning_bam;
-		unlink @all_intermediate_spanning_byread_bam;
-		unlink @all_intermediate_anchored_bam;
-	}
-}
-
-sub dosplitalignments
-{
-	my @split_fastq_prefixes = @{$_[0]};
-	my $candidate_alignments = $_[1];
-	
-	my $candidate_reads_split_catalog = $output_directory."/candidates.split.catalog";
-	$runner->run("$split_candidate_reads_script #<1 #<2 > #>1", [$reads_split_catalog,$candidate_reads], [$candidate_reads_split_catalog]);
-	my @candidate_reads_split_filenames = readsplitcatalog($candidate_reads_split_catalog);
-
-	scalar @split_fastq_prefixes == scalar @candidate_reads_split_filenames or die "Error: problem with candidate reads: $!\n";
-	
-	# Split alignments for each job
-	my @all_job_candidate_alignments;
-	
-	foreach my $split_fastq_index (0..$#split_fastq_prefixes)
-	{
-		# Fastq files from split
-		my $split_fastq_prefix = $split_fastq_prefixes[$split_fastq_index];
-		my $reads_end_1_split_fastq = $split_fastq_prefix.".1.fastq";
-		my $reads_end_2_split_fastq = $split_fastq_prefix.".2.fastq";
-		
-		# Candidate reads for each split
-		my $candidate_reads_split_filename = $candidate_reads_split_filenames[$split_fastq_index];
-		
-		# Candidate read alignments
-		my $job_candidate_alignments = $candidate_reads_split_filename.".alignments";
-		push @all_job_candidate_alignments, $job_candidate_alignments;
-		
-		# Calculate split read alignment
-		$runner->padd("$dosplitalign_bin -1 #<1 -2 #<2 -c #<3 -r #<4 -a #>1", [$reads_end_1_split_fastq,$reads_end_2_split_fastq,$candidate_sequences,$candidate_reads_split_filename], [$job_candidate_alignments]);
-	}
-	$runner->prun();
-
-	# Merge the alignments
-	if (scalar @all_job_candidate_alignments > 0)
-	{
-		$runner->run("cat #<A > #>1", [@all_job_candidate_alignments], [$candidate_alignments]);
-	}
-	else
-	{
-		$runner->run("touch #>1", [], [$candidate_alignments]);
-	}
 }
 
 sub doblatjobs

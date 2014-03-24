@@ -5,7 +5,6 @@ use warnings FATAL => 'all';
 use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
-use Cwd qw[abs_path];
 use List::Util qw[min max];
 
 

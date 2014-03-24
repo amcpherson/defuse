@@ -13,6 +13,7 @@ parser.add_option("-f", "--fragment_length", type="string", dest="fragment_lengt
 parser.add_option("-r", "--remove_split", type="string", dest="remove_split", help="Remove split files when finished", default=False)
 parser.add_option("-w", "--working_dir", type="string", dest="working_dir", help="Working directory for temp files", default="./")
 parser.add_option("-t", "--submit_type", type="string", dest="submit_type", help="Type of job submission", default="direct")
+parser.add_option("-m", "--max_parallel", type="int", dest="max_parallel", help="Maximum number of parallel jobs", default=200)
 
 (options, args) = parser.parse_args()
 
@@ -30,7 +31,7 @@ options.working_dir = os.path.abspath(options.working_dir)
 
 job_name = os.path.basename(reads_end_1_fastq) + "." + os.path.basename(reference_fasta)
 log_filename = options.working_dir + "/" + job_name + ".log"
-cmdrun = cmdrun.cmdrun(job_name, options.working_dir, log_filename, options.submit_type)
+cmdrun = cmdrun.cmdrun(job_name, options.working_dir, log_filename, options.submit_type, options.max_parallel)
 
 def remove_files(filenames):
 	for filename in filenames:

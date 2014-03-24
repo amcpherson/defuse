@@ -14,66 +14,68 @@
 
 using namespace boost;
 
-AlignmentIndex::AlignmentIndex() : mBamFile(0), mBamIndexFile(0) {}
-
 void AlignmentIndex::Open(const string& bamFilename)
 {
-	mBamFile = samopen(bamFilename.c_str(), "rb", 0);
-	mBamIndexFile = bam_index_load(bamFilename.c_str());
-
-	if (mBamFile == 0)
+	if (!mReader.Open(bamFilename))
 	{
 		cerr << "Error: Unable to open bam file " << bamFilename << endl;
 		exit(1);
 	}
 	
-	if (mBamIndexFile == 0)
+	if (!mReader.LocateIndex())
 	{
 		cerr << "Error: Unable to open bam index for file " << bamFilename << endl;
 		exit(1);
 	}
-	
-	mReferenceIndexMap.clear();
-	for (int targetIndex = 0; targetIndex < mBamFile->header->n_targets; targetIndex++)
-	{
-		mReferenceIndexMap[mBamFile->header->target_name[targetIndex]] = targetIndex;
-	}
 }
 
-struct FetchData
+void AlignmentIndex::Find(const string& reference, int strand, int start, int end, NameIndex& referenceNames, CompAlignVec& alignments) const
 {
-	FetchData(int strand, int referenceIndex, CompAlignVec& alignments) : strand(strand), referenceIndex(referenceIndex), alignments(alignments)
-	{}
-	
-	int strand;
-	int referenceIndex;
-	CompAlignVec& alignments;
-};
-
-int FetchCallback(const bam1_t* b, void* data)
-{
-	FetchData* fetchData = (FetchData*)data;
-
-	int alignmentStrand = (b->core.flag & 0x10) ? MinusStrand : PlusStrand;
-	
-	if (alignmentStrand == fetchData->strand)
+	if (start > end)
 	{
+		cerr << "Error: start " << start << " end " << end << " for alignments query" << endl;
+		exit(1);
+	}
+	
+	// Bam indexing is 0 based with end being 1 after the last base
+	start = max(0, start - 1);
+	
+	int referenceIndex = mReader.GetReferenceID(reference);
+	
+	mReader.SetRegion(referenceIndex, start, referenceIndex, end);
+	
+	BamAlignment alignment;
+	while (mReader.GetNextAlignment(alignment))
+	{
+		if ((strand == MinusStrand) != alignment.IsReverseStrand())
+		{
+			continue;
+		}
+		
 		// Try to split qname into id and end
-		string qname = string((char*)b->data);
 		vector<string> qnameFields;
-		split(qnameFields, qname, is_any_of("/"));
-
+		split(qnameFields, alignment.Name, is_any_of("/"));
+		
 		// Fragment index encoded in query name
-		int fragmentIndex = lexical_cast<int>(qnameFields[0]);
+		int fragmentIndex;
+		try
+		{
+			fragmentIndex = lexical_cast<int>(qnameFields[0]);
+		}
+		catch (boost::exception_detail::clone_impl<boost::exception_detail::error_info_injector<boost::bad_lexical_cast> > e)
+		{
+			cout << "Failed to interpret fragment:" << endl << qnameFields[0] << endl;
+			exit(1);
+		}
 		
 		// Read end encoded in query name or flag
 		int readEnd;
-		if (b->core.flag & 0x40)
+		if (alignment.IsFirstMate())
 		{
 			// Read is end 1
 			readEnd = 0;
 		}
-		else if (b->core.flag & 0x80)
+		else if (alignment.IsSecondMate())
 		{
 			// Read is end 2
 			readEnd = 1;
@@ -85,50 +87,23 @@ int FetchCallback(const bam1_t* b, void* data)
 		}
 		else
 		{
-			cerr << "Error: Unable to determine read end for qname " << qname << endl;
+			cerr << "Error: Unable to determine read end for qname " << alignment.Name << endl;
 			exit(1);
 		}
 		
 		CompactAlignment compactAlignment;
 		compactAlignment.readID.fragmentIndex = fragmentIndex;
 		compactAlignment.readID.readEnd = readEnd;
-		compactAlignment.refStrand.referenceIndex = fetchData->referenceIndex;
-		compactAlignment.refStrand.strand = alignmentStrand;
-		compactAlignment.region.start = b->core.pos + 1;
-		compactAlignment.region.end = b->core.pos + b->core.l_qseq;
+		compactAlignment.refStrand.referenceIndex = referenceIndex;
+		compactAlignment.refStrand.strand = strand;
+		compactAlignment.region.start = alignment.Position + 1;
+		compactAlignment.region.end = alignment.GetEndPosition();
 		
-		fetchData->alignments.push_back(compactAlignment);
+		alignments.push_back(compactAlignment);
 	}
-	
-	return 0;
-}
-
-void AlignmentIndex::Find(const string& reference, int strand, int start, int end, NameIndex& referenceNames, CompAlignVec& alignments) const
-{
-	if (mReferenceIndexMap.find(reference) == mReferenceIndexMap.end())
-	{
-		cerr << "Error: Unable to find alignments to reference " << reference << endl;
-		exit(1);
-	}
-	
-	if (start > end)
-	{
-		cerr << "Error: start " << start << " end " << end << " for alignments query" << endl;
-		exit(1);
-	}
-	
-	// Bam indexing is 0 based with end being 1 after the last base
-	start = max(0, start - 1);
-	
-	int referenceIndex = referenceNames.Index(reference);
-	
-	FetchData fetchData(strand,referenceIndex,alignments);
-	
-	bam_fetch(mBamFile->x.bam, mBamIndexFile, mReferenceIndexMap.find(reference)->second, start, end, &fetchData, FetchCallback);
 }
 
 void AlignmentIndex::Close()
 {
-	bam_index_destroy(mBamIndexFile);
-	samclose(mBamFile);
+	mReader.Close();
 }

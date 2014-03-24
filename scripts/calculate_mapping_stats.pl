@@ -5,7 +5,6 @@ use warnings FATAL => 'all';
 use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
-use Cwd qw[abs_path];
 use List::Util qw[min max];
 
 $| = 1;
@@ -41,7 +40,6 @@ my $config = configdata->new();
 $config->read($config_filename);
 
 # Config values
-my $samtools_bin = $config->get_value("samtools_bin");
 my $gene_models_filename = $config->get_value("gene_models");
 
 my $bin_spacing = 200000;
@@ -49,12 +47,13 @@ my $bin_spacing = 200000;
 # Read in the gene models
 my $gene_models = gene_models->new($gene_models_filename);
 
-my $clusters_sc_filename = $output_directory."/clusters.sc";
-my $discordant_bam = $output_directory."/spanning.bam";
-
 my %solution_clusters;
+my $clusters_sc_filename = $output_directory."/clusters.sc";
 read_solution_clusters($clusters_sc_filename, \%solution_clusters);
-count_alignments($discordant_bam, \%solution_clusters);
+
+my $reads_split_catalog = $output_directory."/reads.split.catalog";
+my @split_fastq_prefixes = readsplitcatalog($reads_split_catalog);
+count_alignments(\@split_fastq_prefixes, \%solution_clusters);
 
 my %alignment_counts;
 foreach my $fragment_index (keys %solution_clusters)
@@ -100,42 +99,50 @@ sub read_solution_clusters
 
 sub count_alignments
 {
-	my $bam_filename = shift;
+	my $split_fastq_prefixes_ref = shift;
 	my $cluster_reads_hash_ref = shift;
 	
 	my %genome_positions;
-	open SAM, "$samtools_bin view $bam_filename |" or die "Error: Unable to view $bam_filename with samtools: $!\n";
-	while (<SAM>)
+	foreach my $split_fastq_prefix (@{$split_fastq_prefixes_ref})
 	{
-		chomp;
-		my @fields = split /\t/;
-		
-		my $read_id = $fields[0];
-		my $rname = $fields[2];
-		my $pos = $fields[3];
-		my $seq = $fields[9];
-
-		$read_id =~ /(.*)\/([12])/;
-		my $fragment_index = $1;
-		my $read_end = $2;
-		
-		next unless defined $cluster_reads_hash_ref->{$fragment_index};
-		
-		my $start = $pos;
-		my $end = $pos + length($seq) - 1;
-		
-		my $chromosome = $gene_models->calc_genomic_chromosome($rname);
-		my $genome_start = $gene_models->calc_genomic_position($rname, $start);
-		my $genome_end = $gene_models->calc_genomic_position($rname, $end);
-		
-		if ($genome_start > $genome_end)
+		my $spanning_filelist = $split_fastq_prefix.".spanning.filelist";
+		open SFL, $spanning_filelist or die;
+		while (<SFL>)
 		{
-			($genome_start,$genome_end) = ($genome_end,$genome_start);
+			chomp;
+			my ($chr1,$chr2,$filename) = split /\t/;
+			
+			open SAL, $filename or die "Error: Unable to open $filename: $!\n";
+			while (<SAL>)
+			{
+				chomp;
+				my @fields = split /\t/;
+				
+				my $fragment_index = $fields[0];
+				my $read_end = $fields[1];
+				my $rname = $fields[2];
+				my $strand = $fields[3];
+				my $start = $fields[4];
+				my $end = $fields[5];
+				
+				next unless defined $cluster_reads_hash_ref->{$fragment_index};
+				
+				my $read_id = $fragment_index."/".$read_end;
+				my $chromosome = $gene_models->calc_genomic_chromosome($rname);
+				my $genome_start = $gene_models->calc_genomic_position($rname, $start);
+				my $genome_end = $gene_models->calc_genomic_position($rname, $end);
+				
+				if ($genome_start > $genome_end)
+				{
+					($genome_start,$genome_end) = ($genome_end,$genome_start);
+				}
+				
+				push @{$genome_positions{$read_id}}, [$chromosome,$genome_start,$genome_end];
+			}
+			close SAL;
 		}
-		
-		push @{$genome_positions{$read_id}}, [$chromosome,$genome_start,$genome_end];
+		close SFL;
 	}
-	close SAM;
 	
 	foreach my $read_id (keys %genome_positions)
 	{
@@ -190,6 +197,24 @@ sub count_alignments
 		
 		$cluster_reads_hash_ref->{$fragment_index}{alignment_counts}{$read_end} = $alignment_count;
 	}
+}
+
+sub readsplitcatalog
+{
+	my $split_catalog = shift;
+	my @split_prefixes;
+
+	open SC, $split_catalog or die "Error: Unable to open $split_catalog: $!\n";
+	while (<SC>)
+	{
+		chomp;
+		my @fields = split /\t/;
+
+		push @split_prefixes, $fields[0];
+	}
+	close SC;
+
+	return @split_prefixes;
 }
 
 sub calc_mean

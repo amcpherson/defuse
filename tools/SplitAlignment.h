@@ -8,7 +8,7 @@
 #ifndef SPLITALIGNMENT_H_
 #define SPLITALIGNMENT_H_
 
-#include "AlignmentIndex.h"
+#include "AlignmentStream.h"
 #include "ExonRegions.h"
 #include "FastaIndex.h"
 #include "ReadStream.h"
@@ -27,16 +27,18 @@ public:
 	typedef unordered_map<int,SplitAlignment>::iterator SplitAlignmentMapIter;
 	typedef unordered_map<int,SplitAlignment>::const_iterator SplitAlignmentMapConstIter;
 
-	bool FindCandidates(const LocationVec& alignPair, const AlignmentIndex& discordant, const AlignmentIndex& anchored, 
-						const FastaIndex& reference, const ExonRegions& exonRegions, double fragmentLengthMean, 
-						double fragmentLengthStdDev, int maxReadLength, int minReadLength);
+	bool Initialize(const LocationVec& alignPair, const FastaIndex& reference, 
+					const ExonRegions& exonRegions, double fragmentLengthMean, 
+					double fragmentLengthStdDev, int maxReadLength, int minReadLength);
 	
-	static void WriteCandidateReads(ostream& out, SplitAlignmentMap& splitAlignments);
-	static void WriteCandidateRegions(ostream& out, SplitAlignmentMap& splitAlignments);
+	static void WriteCandidateRefSeqs(ostream& out, SplitAlignmentMap& splitAlignments);
+	static void WriteCandidateMateRegions(ostream& out, SplitAlignmentMap& splitAlignments);
 	
-	static void ReadCandidateReads(istream& in, SplitAlignmentMap& splitAlignments);
-	static void ReadCandidateRegions(istream& in, SplitAlignmentMap& splitAlignments);
-
+	static void ReadCandidateRefSeqs(istream& in, SplitAlignmentMap& splitAlignments);
+	static void ReadCandidateMateRegions(istream& in, SplitAlignmentMap& splitAlignments);
+	
+	static bool FindCandidates(AlignmentStream* alignments, SplitAlignmentMap& splitAlignments);
+	
 	static void ReadCandidateSequences(IReadStream* readStream, SplitAlignmentMap& splitAlignments);
 	static void ReadCandidateSequences(const ReadIndex& readIndex, SplitAlignmentMap& splitAlignments);
 
@@ -52,8 +54,6 @@ public:
 	static void WriteAlignText(ostream& out, SplitAlignmentMap& splitAlignments);
 	
 private:	
-	inline void AddAnchoredReads(const AlignmentIndex& discordant, const AlignmentIndex& anchored, const string& transcript, int strand, int revComp, int start, int end);
-		
 	inline void CalculateBreakRegion(int minReadLength, int maxReadLength, int maxFragmentLength, int alignStart, 
 									 int alignEnd, int strand, int& breakStart, int& breakLength);
 	inline void CalculateSplitMateRegion(int minReadLength, int maxReadLength, int minFragmentLength, 
@@ -71,15 +71,16 @@ private:
 	string mSplitAlignSeq[2];
 	string mSplitRemainderSeq[2];
 	
-	unordered_set<IntegerPair> mCandidateUnique;	
+	LocationVec mMateRegions[2];
+	
 	IntegerVec mCandidateReadID;
 	IntegerVec mCandidateRevComp;
 	
 	StringVec mCandidateSequence;
 	
 	IntegerVec mAlignmentReadID;
-	IntegerPairVec mAlignmentSplit;
-	IntegerPairVec mAlignmentMatches;
+	IntegerPairVec mAlignmentRefSplit;
+	IntegerPairVec mAlignmentReadSplit;
 	IntegerVec mAlignmentScore;
 	StringVec mAlignmentText;
 	

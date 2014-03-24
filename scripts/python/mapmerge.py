@@ -5,7 +5,10 @@ import os
 import sys
 import hashlib
 
-usage = "usage: %prog [options] input output command"
+usage = """usage: %prog [options] input output command
+
+command must include %(input)s and %(output)s""";
+
 parser = optparse.OptionParser(usage)
 parser.add_option("-s", "--split_size", type="int", dest="split_size", help="Split size in lines", default="1000")
 parser.add_option("-w", "--working_dir", type="string", dest="working_dir", help="Working directory", default="./")

@@ -28,7 +28,7 @@ bool ExonRegions::Read(istream& in)
 	while (getline(in, line))
 	{
 		lineNumber++;
-		
+					
 		if (line.length() == 0)
 		{
 			continue;
@@ -50,11 +50,19 @@ bool ExonRegions::Read(istream& in)
 		RegionVec exons;
 		for (int fieldIndex = 5; fieldIndex < exonRegionsFields.size(); fieldIndex += 2)
 		{
-			Region exon;
-			exon.start = lexical_cast<int>(exonRegionsFields[fieldIndex - 1]);
-			exon.end = lexical_cast<int>(exonRegionsFields[fieldIndex]);
-			
-			exons.push_back(exon);
+			try 
+			{
+				Region exon;
+				exon.start = lexical_cast<int>(exonRegionsFields[fieldIndex - 1]);
+				exon.end = lexical_cast<int>(exonRegionsFields[fieldIndex]);
+				
+				exons.push_back(exon);
+			}
+			catch (boost::exception_detail::clone_impl<boost::exception_detail::error_info_injector<boost::bad_lexical_cast> > e)
+			{
+				cout << "Failed to interpret exon:" << endl << line << endl;
+				exit(1);
+			}
 		}
 		
 		int strandEnum;

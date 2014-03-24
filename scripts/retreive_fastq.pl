@@ -5,7 +5,6 @@ use warnings FATAL => 'all';
 use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
-use Cwd qw[abs_path];
 
 $| = 1;
 
@@ -63,9 +62,7 @@ $config->read($config_filename);
 # Config
 my $scripts_directory = $config->get_value("scripts_directory");
 
-$source_directory = abs_path($source_directory);
-
--e $source_directory or die "Error: Source directory $source_directory does not exist.\n";
+-d $source_directory or die "Error: Source directory $source_directory does not exist.\n";
 
 # Read in all data regex's and conversion scripts
 my @data_lane_regexs;
@@ -306,22 +303,12 @@ foreach my $lane (keys %convert_command)
 		
 		my $filepos1 = pack('q',tell(FQ1));
 		my $filepos2 = pack('q',tell(FQ2));
-	
-		$readid1 =~ /^\@(.*)\/([12])$/ or die "Fastq error, unable to interpret readid $readid1\n";
-		my $fragment1 = $1;
-		my $end1 = $2;
 		
-		$readid2 =~ /^\@(.*)\/([12])$/ or die "Fastq error, unable to interpret readid $readid2\n";
-		my $fragment2 = $1;
-		my $end2 = $2;
-		
-		die "Fastq error: read id mismatch for $readid1 and $readid2\n" if $fragment1 ne $fragment2 or $end1 ne '1' or $end2 ne '2';
-	
 		print FQI $filepos1;
 		print FQI $filepos2;
 		print FQ1 "\@$current_fragment_index/1\n$sequence1\n$comment1\n$quality1\n";
 		print FQ2 "\@$current_fragment_index/2\n$sequence2\n$comment2\n$quality2\n";
-		print NAM "$current_fragment_index\t$fragment1\n";
+		print NAM "$current_fragment_index\t$readid1\t$readid2\n";
 		
 		$current_fragment_index++;
 	}

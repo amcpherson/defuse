@@ -5,11 +5,12 @@
  *
  */
 
-#include "AlignmentIndex.h"
+#include "AlignmentStream.h"
 #include "DebugCheck.h"
 #include "ExonRegions.h"
 #include "FragmentAlignmentsIterator.h"
 #include "IMatePairClusterer.h"
+#include "Indexer.h"
 #include "MatePairEM.h"
 
 #include <fstream>
@@ -390,7 +391,7 @@ void OutputClusterMember(ostream& out, int clusterID, int clusterEnd, const Comp
 
 int main(int argc, char* argv[])
 {
-	string readSortedBamFilename;
+	string alignmentsFilename;
 	string clustersFilename;
 	double fragmentLengthMean;
 	double fragmentLengthStdDev;
@@ -400,7 +401,7 @@ int main(int argc, char* argv[])
 	try
 	{
 		TCLAP::CmdLine cmd("Mate Pair Clustering Tool");
-		TCLAP::ValueArg<string> readSortedBamFilenameArg("r","readsorted","Read Sorted Bam Filename",true,"","string",cmd);
+		TCLAP::ValueArg<string> alignmentsFilenameArg("a","align","Alignments Filename",true,"","string",cmd);
 		TCLAP::ValueArg<string> clustersFilenameArg("c","clusters","Output Clusters Filename",true,"","string",cmd);
 		TCLAP::ValueArg<double> fragmentLengthMeanArg("u","fragmentmean","Fragment Length Mean",true,-1,"integer",cmd);
 		TCLAP::ValueArg<double> fragmentLengthStdDevArg("s","fragmentstddev","Fragment Length Standard Deviation",true,-1,"integer",cmd);
@@ -408,7 +409,7 @@ int main(int argc, char* argv[])
 		TCLAP::ValueArg<int> minClusterSizeArg("m","minclustersize","Minimum Cluster Size",true,-1,"integer",cmd);
 		cmd.parse(argc,argv);
 
-		readSortedBamFilename = readSortedBamFilenameArg.getValue();
+		alignmentsFilename = alignmentsFilenameArg.getValue();
 		clustersFilename = clustersFilenameArg.getValue();
 		fragmentLengthMean = fragmentLengthMeanArg.getValue();
 		fragmentLengthStdDev = fragmentLengthStdDevArg.getValue();
@@ -425,19 +426,28 @@ int main(int argc, char* argv[])
 	const int binLength = 1<<15;
 		
 	cout << "Finding pairs of reference sequences connected by pairs of alignments" << endl;
-		
-	FragmentAlignmentsIterator fragmentsIter;
-	StringVec referenceNames;
 	
-	fragmentsIter.Open(readSortedBamFilename, referenceNames);
-
-	NameIndex refNameIndex(referenceNames);
-
+	AlignmentStream* alignmentStream = new CompactAlignmentStream(alignmentsFilename);
+	FragmentAlignmentStream fragmentAlignmentStream(alignmentStream);
+	
+	NameIndex refNameIndex;
+	
 	RefBinPairMap binPairs;
 	Binning binning(binLength, minFusionRange);
-	CompAlignVec alignments;
-	while (fragmentsIter.GetNext(alignments))
+	RawAlignmentVec rawAlignments;
+	while (fragmentAlignmentStream.GetNextAlignments(rawAlignments))
 	{
+		CompAlignVec alignments;
+		for (int alignIndex = 0; alignIndex < rawAlignments.size(); alignIndex++)
+		{
+			alignments.push_back(CompactAlignment());
+			alignments.back().readID.fragmentIndex = lexical_cast<int>(rawAlignments[alignIndex].fragment);
+			alignments.back().readID.readEnd = rawAlignments[alignIndex].readEnd;
+			alignments.back().refStrand.referenceIndex = refNameIndex.Index(rawAlignments[alignIndex].reference);
+			alignments.back().refStrand.strand = rawAlignments[alignIndex].strand;
+			alignments.back().region = rawAlignments[alignIndex].region;
+		}
+		
 		if (CheckConcordant(alignments, minFusionRange))
 		{
 			continue;
@@ -445,7 +455,6 @@ int main(int argc, char* argv[])
 		
 		AddBinPairs(alignments, binning, binPairs);
 	}
-	fragmentsIter.Close();
 	
 	// Initialize clusterer
 	cout << "Initializing clusterer" << endl;
@@ -478,10 +487,7 @@ int main(int argc, char* argv[])
 		{
 			continue;
 		}
-		
-		const string& refName1 = referenceNames[refBin1.referenceIndex];
-		const string& refName2 = referenceNames[refBin2.referenceIndex];
-		
+				
 		CompAlignVec alignments1;
 		CompAlignVec alignments2;
 		
@@ -572,8 +578,8 @@ int main(int argc, char* argv[])
 				const CompactAlignment& alignment1 = alignments1[alignIndex1];
 				const CompactAlignment& alignment2 = alignments2[alignIndex2];
 				
-				OutputClusterMember(clustersFile, clusterID, 0, alignment1, referenceNames);
-				OutputClusterMember(clustersFile, clusterID, 1, alignment2, referenceNames);
+				OutputClusterMember(clustersFile, clusterID, 0, alignment1, refNameIndex.Get());
+				OutputClusterMember(clustersFile, clusterID, 1, alignment2, refNameIndex.Get());
 			}
 
 			clusterID++;

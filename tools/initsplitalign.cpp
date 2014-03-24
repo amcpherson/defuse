@@ -1,11 +1,10 @@
 /*
- *  splitseq.cpp
+ *  initsplitalign.cpp
  *
  *  Created by Andrew McPherson on 28/09/09.
  *
  */
 
-#include "AlignmentIndex.h"
 #include "Common.h"
 #include "DebugCheck.h"
 #include "ExonRegions.h"
@@ -29,8 +28,6 @@ using namespace std;
 
 int main(int argc, char* argv[])
 {
-	string discordantBamFilename;
-	string anchoredBamFilename;
 	string referenceFasta;
 	string exonRegionsFilename;
 	double fragmentLengthMean;
@@ -38,27 +35,23 @@ int main(int argc, char* argv[])
 	int minReadLength;
 	int maxReadLength;
 	string alignFilename;
-	string readsFilename;
-	string seqsFilename;
+	string candidateRefSeqsFilename;
+	string candidateMateRegionsFilename;
 	
 	try
 	{
-		TCLAP::CmdLine cmd("Fusion sequence prediction by split reads");
-		TCLAP::ValueArg<string> discordantBamFilenameArg("d","discordant","Discordant Alignments Bam Filename",true,"","string",cmd);
-		TCLAP::ValueArg<string> anchoredBamFilenameArg("a","anchored","Anchored Alignments Bam Filename",true,"","string",cmd);
+		TCLAP::CmdLine cmd("Initialize Fusion sequence prediction by split reads");
 		TCLAP::ValueArg<string> referenceFastaArg("f","fasta","Reference Fasta",true,"","string",cmd);
 		TCLAP::ValueArg<string> exonRegionsFilenameArg("e","exons","Exon Regions Filename",true,"","string",cmd);
 		TCLAP::ValueArg<double> fragmentLengthMeanArg("u","ufrag","Fragment Length Mean",true,0.0,"float",cmd);
 		TCLAP::ValueArg<double> fragmentLengthStdDevArg("s","sfrag","Fragment Length Standard Deviation",true,0.0,"float",cmd);
-		TCLAP::ValueArg<int> minReadLengthArg("m","minread","Minimum Read Length",true,-1,"integer",cmd);
+		TCLAP::ValueArg<int> minReadLengthArg("n","minread","Minimum Read Length",true,-1,"integer",cmd);
 		TCLAP::ValueArg<int> maxReadLengthArg("x","maxread","Maximum Read Length",true,-1,"integer",cmd);
 		TCLAP::ValueArg<string> alignFilenameArg("i","input","Input Alignment Regions Filename",true,"","string",cmd);
-		TCLAP::ValueArg<string> readsFilenameArg("r","reads","Candidate Reads Filename",true,"","string",cmd);
-		TCLAP::ValueArg<string> seqsFilenameArg("c","cseqs","Candidate Reference Sequences Filename",true,"","string",cmd);
+		TCLAP::ValueArg<string> candidateRefSeqsFilenameArg("r","refseqs","Candidate Reference Sequences Filename",true,"","string",cmd);
+		TCLAP::ValueArg<string> candidateMateRegionsFilenameArg("m","materegions","Candidate Mate Regions Filename",true,"","string",cmd);
 		cmd.parse(argc,argv);
 
-		discordantBamFilename = discordantBamFilenameArg.getValue();
-		anchoredBamFilename = anchoredBamFilenameArg.getValue();
 		referenceFasta = referenceFastaArg.getValue();
 		exonRegionsFilename = exonRegionsFilenameArg.getValue();
 		fragmentLengthMean = fragmentLengthMeanArg.getValue();
@@ -66,8 +59,8 @@ int main(int argc, char* argv[])
 		minReadLength = minReadLengthArg.getValue();
 		maxReadLength = maxReadLengthArg.getValue();
 		alignFilename = alignFilenameArg.getValue();
-		readsFilename = readsFilenameArg.getValue();
-		seqsFilename = seqsFilenameArg.getValue();
+		candidateRefSeqsFilename = candidateRefSeqsFilenameArg.getValue();
+		candidateMateRegionsFilename = candidateMateRegionsFilenameArg.getValue();
 	}
 	catch (TCLAP::ArgException &e)
 	{
@@ -77,14 +70,10 @@ int main(int argc, char* argv[])
 	
 	LocationVecMap alignRegionPairs;
 	ReadAlignRegionPairs(alignFilename, alignRegionPairs);
-		
-	AlignmentIndex discordant;
-	AlignmentIndex anchored;
+	
 	FastaIndex reference;
 	ExonRegions exonRegions;
-		
-	discordant.Open(discordantBamFilename);
-	anchored.Open(anchoredBamFilename);
+	
 	reference.Open(referenceFasta);
 	
 	ifstream exonRegionsFile(exonRegionsFilename.c_str());
@@ -95,26 +84,26 @@ int main(int argc, char* argv[])
 	}
 	exonRegionsFile.close();
 	
-	ofstream readsFile(readsFilename.c_str());
-	ofstream seqsFile(seqsFilename.c_str());
+	ofstream candidateRefSeqsFile(candidateRefSeqsFilename.c_str());
+	ofstream candidateMateRegionsFile(candidateMateRegionsFilename.c_str());
 	
-	CheckFile(readsFile, readsFilename);
-	CheckFile(seqsFile, seqsFilename);
+	CheckFile(candidateRefSeqsFile, candidateRefSeqsFilename);
+	CheckFile(candidateMateRegionsFile, candidateMateRegionsFilename);
 
 	for (LocationVecMapConstIter pairIter = alignRegionPairs.begin(); pairIter != alignRegionPairs.end(); pairIter++)
 	{
 		int id = pairIter->first;
 		const LocationVec& alignRegionPair = pairIter->second;
-
+		
 		SplitAlignment::SplitAlignmentMap splitAlignments;
 		
-		splitAlignments[id].FindCandidates(alignRegionPair, discordant, anchored, reference, exonRegions, fragmentLengthMean, fragmentLengthStdDev, minReadLength, maxReadLength);
-
-		SplitAlignment::WriteCandidateReads(readsFile, splitAlignments);
-		SplitAlignment::WriteCandidateRegions(seqsFile, splitAlignments);
+		splitAlignments[id].Initialize(alignRegionPair, reference, exonRegions, fragmentLengthMean, fragmentLengthStdDev, minReadLength, maxReadLength);
+		
+		SplitAlignment::WriteCandidateRefSeqs(candidateRefSeqsFile, splitAlignments);
+		SplitAlignment::WriteCandidateMateRegions(candidateMateRegionsFile, splitAlignments);
 	}
 	
-	readsFile.close();
-	seqsFile.close();
+	candidateRefSeqsFile.close();
+	candidateMateRegionsFile.close();
 }
 

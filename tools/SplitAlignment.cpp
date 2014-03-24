@@ -27,8 +27,9 @@ const int mismatchScore = -1;
 const int gapScore = -2;
 const int minAnchor = 4;
 
-bool SplitAlignment::FindCandidates(const LocationVec& alignPair, const AlignmentIndex& discordant, const AlignmentIndex& anchored, const FastaIndex& reference, 
-							        const ExonRegions& exonRegions, double fragmentLengthMean, double fragmentLengthStdDev, int minReadLength, int maxReadLength)
+bool SplitAlignment::Initialize(const LocationVec& alignPair, const FastaIndex& reference, 
+							    const ExonRegions& exonRegions, double fragmentLengthMean, 
+								double fragmentLengthStdDev, int minReadLength, int maxReadLength)
 {
 	int minFragmentLength = (int)(fragmentLengthMean - 3 * fragmentLengthStdDev);
 	int maxFragmentLength = (int)(fragmentLengthMean + 3 * fragmentLengthStdDev);
@@ -134,7 +135,11 @@ bool SplitAlignment::FindCandidates(const LocationVec& alignPair, const Alignmen
 			genomeMateRegion.end = genomeBreakRegionStart + mateMax;
 		}
 		
-		AddAnchoredReads(discordant, anchored, chromosome, genomeAlignStrand, revCompReads, genomeMateRegion.start, genomeMateRegion.end);
+		mMateRegions[clusterEnd].push_back(Location());
+		mMateRegions[clusterEnd].back().refName = chromosome;
+		mMateRegions[clusterEnd].back().strand = genomeAlignStrand;
+		mMateRegions[clusterEnd].back().start = genomeMateRegion.start;
+		mMateRegions[clusterEnd].back().end = genomeMateRegion.end;
 		
 		// Find overlapping genes
 		StringVec transcripts;
@@ -153,7 +158,12 @@ bool SplitAlignment::FindCandidates(const LocationVec& alignPair, const Alignmen
 			if (exonRegions.RemapThroughTranscript(remapTranscript, genomeBreakRegionStart, 1-genomeAlignStrand, mateMin, mateMax, remapAlignStrand, mateRegionStart, mateRegionEnd))
 			{
 				remapAlignStrand = 1-remapAlignStrand;
-				AddAnchoredReads(discordant, anchored, remapTranscriptID, remapAlignStrand, revCompReads, mateRegionStart, mateRegionEnd);
+				
+				mMateRegions[clusterEnd].push_back(Location());
+				mMateRegions[clusterEnd].back().refName = remapTranscriptID;
+				mMateRegions[clusterEnd].back().strand = remapAlignStrand;
+				mMateRegions[clusterEnd].back().start = mateRegionStart;
+				mMateRegions[clusterEnd].back().end = mateRegionEnd;
 			}
 		}
 	}
@@ -161,28 +171,7 @@ bool SplitAlignment::FindCandidates(const LocationVec& alignPair, const Alignmen
 	return true;
 }
 
-void SplitAlignment::WriteCandidateReads(ostream& out, SplitAlignmentMap& splitAlignments)
-{
-	for (SplitAlignmentMapConstIter splitAlignIter = splitAlignments.begin(); splitAlignIter != splitAlignments.end(); splitAlignIter++)
-	{
-		int id = splitAlignIter->first;
-		const SplitAlignment& splitAlignment = splitAlignIter->second;
-
-		for (int candidateIndex = 0; candidateIndex < splitAlignment.mCandidateReadID.size(); candidateIndex++)
-		{
-			ReadID readID;
-			readID.id = splitAlignment.mCandidateReadID[candidateIndex];
-
-			out << id << "\t";
-			out << readID.fragmentIndex << "\t";
-			out << readID.readEnd << "\t";
-			out << splitAlignment.mCandidateRevComp[candidateIndex] << "\t";
-			out << endl;
-		}
-	}
-}
-
-void SplitAlignment::WriteCandidateRegions(ostream& out, SplitAlignmentMap& splitAlignments)
+void SplitAlignment::WriteCandidateRefSeqs(ostream& out, SplitAlignmentMap& splitAlignments)
 {
 	for (SplitAlignmentMapConstIter splitAlignIter = splitAlignments.begin(); splitAlignIter != splitAlignments.end(); splitAlignIter++)
 	{
@@ -205,35 +194,30 @@ void SplitAlignment::WriteCandidateRegions(ostream& out, SplitAlignmentMap& spli
 	}
 }
 		
-void SplitAlignment::ReadCandidateReads(istream& in, SplitAlignmentMap& splitAlignments)
+void SplitAlignment::WriteCandidateMateRegions(ostream& out, SplitAlignmentMap& splitAlignments)
 {
-	string line;
-	while (getline(in, line))
+	for (SplitAlignmentMapConstIter splitAlignIter = splitAlignments.begin(); splitAlignIter != splitAlignments.end(); splitAlignIter++)
 	{
-		vector<string> fields;
-		split(fields, line, is_any_of("\t"));
+		int id = splitAlignIter->first;
+		const SplitAlignment& splitAlignment = splitAlignIter->second;
 		
-		if (fields.size() < 4)
+		for (int clusterEnd = 0; clusterEnd <= 1; clusterEnd++)
 		{
-			cerr << "Error: Format error for candidate reads line:" << endl << line << endl;
-			exit(1);
+			for (int mateRegionIndex = 0; mateRegionIndex < splitAlignment.mMateRegions[clusterEnd].size(); mateRegionIndex++)
+			{
+				out << id << "\t";
+				out << clusterEnd << "\t";
+				out << splitAlignment.mMateRegions[clusterEnd][mateRegionIndex].refName << "\t";
+				out << splitAlignment.mMateRegions[clusterEnd][mateRegionIndex].strand << "\t";
+				out << splitAlignment.mMateRegions[clusterEnd][mateRegionIndex].start << "\t";
+				out << splitAlignment.mMateRegions[clusterEnd][mateRegionIndex].end << "\t";
+				out << endl;
+			}
 		}
-		
-		int id = lexical_cast<int>(fields[0]);
-		int fragmentIndex = lexical_cast<int>(fields[1]);
-		int readEnd = lexical_cast<int>(fields[2]);
-		int revComp = lexical_cast<int>(fields[3]);
-		
-		ReadID readID;
-		readID.fragmentIndex = fragmentIndex;
-		readID.readEnd = readEnd;
-
-		splitAlignments[id].mCandidateReadID.push_back(readID.id);
-		splitAlignments[id].mCandidateRevComp.push_back(revComp);
 	}
 }
 
-void SplitAlignment::ReadCandidateRegions(istream& in, SplitAlignmentMap& splitAlignments)
+void SplitAlignment::ReadCandidateRefSeqs(istream& in, SplitAlignmentMap& splitAlignments)
 {
 	string line;
 	while (getline(in, line))
@@ -264,6 +248,140 @@ void SplitAlignment::ReadCandidateRegions(istream& in, SplitAlignmentMap& splitA
 		splitAlignments[id].mSplitSeqStrand[clusterEnd] = seqStrand;
 		splitAlignments[id].mSplitAlignSeq[clusterEnd] = alignSeq;
 		splitAlignments[id].mSplitRemainderSeq[clusterEnd] = remainderSeq;
+	}
+}
+
+void SplitAlignment::ReadCandidateMateRegions(istream& in, SplitAlignmentMap& splitAlignments)
+{
+	string line;
+	while (getline(in, line))
+	{
+		vector<string> fields;
+		split(fields, line, is_any_of("\t"));
+		
+		if (fields.size() < 6)
+		{
+			cerr << "Error: Format error for candidate mate regions line:" << endl << line << endl;
+			exit(1);
+		}
+		
+		int id = lexical_cast<int>(fields[0]);
+		int clusterEnd = lexical_cast<int>(fields[1]);
+		string refName = fields[2];
+		int strand = lexical_cast<int>(fields[3]);
+		int start = lexical_cast<int>(fields[4]);
+		int end = lexical_cast<int>(fields[5]);
+		
+		splitAlignments[id].mMateRegions[clusterEnd].push_back(Location());
+		splitAlignments[id].mMateRegions[clusterEnd].back().refName = refName;
+		splitAlignments[id].mMateRegions[clusterEnd].back().strand = strand;
+		splitAlignments[id].mMateRegions[clusterEnd].back().start = start;
+		splitAlignments[id].mMateRegions[clusterEnd].back().end = end;
+	}
+}
+
+class BinnedLocations
+{
+public:
+	BinnedLocations(int binSpacing) : mBinSpacing(binSpacing) {}
+	
+	void Add(int id, const Location& location)
+	{
+		int startBin = location.start / mBinSpacing;
+		int endBin = location.end / mBinSpacing;
+		
+		for (int bin = startBin; bin <= endBin; bin++)
+		{
+			mBinned[location.strand][location.refName][bin].push_back(id);
+		}
+		
+		mRegions[id].start = location.start;
+		mRegions[id].end = location.end;		
+	}
+	
+	void Overlapping(const RawAlignment& alignment, unordered_set<int>& indices) const
+	{
+		unordered_map<string,unordered_map<int,IntegerVec> >::const_iterator findRefIter = mBinned[alignment.strand].find(alignment.reference);
+		if (findRefIter != mBinned[alignment.strand].end())
+		{
+			int startBin = alignment.region.start / mBinSpacing;
+			int endBin = alignment.region.end / mBinSpacing;
+			
+			for (int bin = startBin; bin <= endBin; bin++)
+			{
+				unordered_map<int,IntegerVec>::const_iterator findBinIter = findRefIter->second.find(bin);
+				if (findBinIter != findRefIter->second.end())
+				{
+					for (IntegerVecConstIter iter = findBinIter->second.begin(); iter != findBinIter->second.end(); iter++)
+					{
+						const Region& region = mRegions.find(*iter)->second;
+						
+						if (region.start <= alignment.region.end && region.end >= alignment.region.start)
+						{
+							indices.insert(*iter);
+						}
+					}
+				}
+			}
+		}
+	}
+	
+private:	
+	int mBinSpacing;
+	unordered_map<string,unordered_map<int,IntegerVec> > mBinned[2];
+	unordered_map<int,Region> mRegions;
+};
+
+bool SplitAlignment::FindCandidates(AlignmentStream* alignments, SplitAlignmentMap& splitAlignments)
+{
+	BinnedLocations binnedMateRegions(2000);
+	
+	IntegerVec ids;
+	IntegerVec revComps;
+	for (SplitAlignmentMapConstIter splitAlignIter = splitAlignments.begin(); splitAlignIter != splitAlignments.end(); splitAlignIter++)
+	{
+		int id = splitAlignIter->first;
+		const SplitAlignment& splitAlignment = splitAlignIter->second;
+		
+		for (int clusterEnd = 0; clusterEnd <= 1; clusterEnd++)
+		{
+			int revCompReads = (clusterEnd == 0) ? 1 : 0;
+			
+			for (int mateRegionIndex = 0; mateRegionIndex < splitAlignment.mMateRegions[clusterEnd].size(); mateRegionIndex++)
+			{
+				int mateRegionID = ids.size();
+				
+				ids.push_back(id);
+				revComps.push_back(revCompReads);
+				
+				binnedMateRegions.Add(mateRegionID, splitAlignment.mMateRegions[clusterEnd][mateRegionIndex]);
+			}
+		}
+	}
+	
+	unordered_map<int,unordered_set<IntegerPair> > candidateUnique;
+	
+	RawAlignment alignment;
+	while (alignments->GetNextAlignment(alignment))
+	{
+		unordered_set<int> overlapping;
+		binnedMateRegions.Overlapping(alignment, overlapping);
+		
+		for (unordered_set<int>::const_iterator olapIter = overlapping.begin(); olapIter != overlapping.end(); olapIter++)
+		{
+			int id = ids[*olapIter];
+			int revComp = revComps[*olapIter];
+			
+			ReadID candidateReadID;
+			candidateReadID.fragmentIndex = lexical_cast<int>(alignment.fragment);
+			candidateReadID.readEnd = (alignment.readEnd == 0) ? 1 : 0;
+			
+			if (candidateUnique[id].insert(IntegerPair(candidateReadID.id,revComp)).second)
+			{
+				splitAlignments[id].mCandidateReadID.push_back(candidateReadID.id);
+				splitAlignments[id].mCandidateRevComp.push_back(revComp);
+			}
+		}
 	}
 }
 
@@ -355,7 +473,7 @@ bool SplitAlignment::Align(bool generateAlignmentText)
 		splitReadAligner.Align(readSeq);
 		
 		SplitReadAlignVec splitAlignments;
-		splitReadAligner.GetAlignments(splitAlignments, (int)((float)readSeq.length() * (float)matchScore * 0.90), true, false);
+		splitReadAligner.GetAlignments(splitAlignments, (int)((float)readSeq.length() * (float)matchScore * 0.90), true, false, generateAlignmentText);
 		
 		unordered_set<IntegerPair> readSplits;
 		
@@ -363,16 +481,16 @@ bool SplitAlignment::Align(bool generateAlignmentText)
 		{
 			const SplitReadAlignment& splitAlignment = splitAlignments[splitAlignIndex];
 			
-			if (readSplits.find(splitAlignment.split) != readSplits.end())
+			if (readSplits.find(splitAlignment.refSplit) != readSplits.end())
 			{
 				continue;
 			}
 			
-			readSplits.insert(splitAlignment.split);
+			readSplits.insert(splitAlignment.refSplit);
 			
 			mAlignmentReadID.push_back(readID.id);
-			mAlignmentSplit.push_back(splitAlignment.split);
-			mAlignmentMatches.push_back(IntegerPair(splitAlignment.matches1.size(),splitAlignment.matches2.size()));
+			mAlignmentRefSplit.push_back(splitAlignment.refSplit);
+			mAlignmentReadSplit.push_back(splitAlignment.readSplit);
 			mAlignmentScore.push_back(min(splitAlignment.score1,splitAlignment.score2));
 			
 			if (generateAlignmentText)
@@ -429,8 +547,8 @@ void SplitAlignment::WriteAlignments(ostream& out, SplitAlignmentMap& splitAlign
 		{
 			out << id << "\t";
 			out << splitAlignment.mAlignmentReadID[alignmentIndex] << "\t";
-			out << splitAlignment.mAlignmentSplit[alignmentIndex].first << "\t" << splitAlignment.mAlignmentSplit[alignmentIndex].second << "\t";
-			out << splitAlignment.mAlignmentMatches[alignmentIndex].first << "\t" << splitAlignment.mAlignmentMatches[alignmentIndex].second << "\t";
+			out << splitAlignment.mAlignmentRefSplit[alignmentIndex].first << "\t" << splitAlignment.mAlignmentRefSplit[alignmentIndex].second << "\t";
+			out << splitAlignment.mAlignmentReadSplit[alignmentIndex].first << "\t" << splitAlignment.mAlignmentReadSplit[alignmentIndex].second << "\t";
 			out << splitAlignment.mAlignmentScore[alignmentIndex] << "\t";
 			out << endl;
 		}
@@ -453,15 +571,15 @@ void SplitAlignment::ReadAlignments(istream& in, SplitAlignmentMap& splitAlignme
 		
 		int id = lexical_cast<int>(fields[0]);
 		int readID = lexical_cast<int>(fields[1]);
-		int splitFirst = lexical_cast<int>(fields[2]);
-		int splitSecond = lexical_cast<int>(fields[3]);
-		int matchFirst = lexical_cast<int>(fields[4]);
-		int matchSecond = lexical_cast<int>(fields[5]);
+		int refSplitFirst = lexical_cast<int>(fields[2]);
+		int refSplitSecond = lexical_cast<int>(fields[3]);
+		int readSplitFirst = lexical_cast<int>(fields[4]);
+		int readSplitSecond = lexical_cast<int>(fields[5]);
 		int score = lexical_cast<int>(fields[6]);
 		
 		splitAlignments[id].mAlignmentReadID.push_back(readID);
-		splitAlignments[id].mAlignmentSplit.push_back(IntegerPair(splitFirst,splitSecond));
-		splitAlignments[id].mAlignmentMatches.push_back(IntegerPair(matchFirst,matchSecond));
+		splitAlignments[id].mAlignmentRefSplit.push_back(IntegerPair(refSplitFirst,refSplitSecond));
+		splitAlignments[id].mAlignmentReadSplit.push_back(IntegerPair(readSplitFirst,readSplitSecond));
 		splitAlignments[id].mAlignmentScore.push_back(score);
 	}
 }
@@ -491,11 +609,11 @@ bool SplitAlignment::Evaluate()
 
 	for (int alignmentIndex = 0; alignmentIndex < mAlignmentReadID.size(); alignmentIndex++)
 	{
-		const IntegerPair& split = mAlignmentSplit[alignmentIndex];
+		const IntegerPair& split = mAlignmentRefSplit[alignmentIndex];
 		
 		splitReadIDsMap[split].push_back(mAlignmentReadID[alignmentIndex]);
-		leftBaseCounts[split].push_back(mAlignmentMatches[alignmentIndex].first);
-		rightBaseCounts[split].push_back(mAlignmentMatches[alignmentIndex].second);
+		leftBaseCounts[split].push_back(mAlignmentReadSplit[alignmentIndex].first);
+		rightBaseCounts[split].push_back(mAlignmentReadSplit[alignmentIndex].second);
 		splitScoreMap[split] += mAlignmentScore[alignmentIndex];
 		splitCountMap[split]++;
 	}
@@ -558,7 +676,7 @@ bool SplitAlignment::Evaluate()
 		double posRange = (double)(leftBaseCount[splitIndex] + rightBaseCount[splitIndex] - 2*minAnchor);
 		double posValue = max(0, leftBaseCount[splitIndex] - minAnchor);
 		
-		double minRange = 0.5 * (double)(leftBaseCount[splitIndex] + rightBaseCount[splitIndex] - 2*minAnchor);
+		double minRange = floor(0.5 * (double)(leftBaseCount[splitIndex] + rightBaseCount[splitIndex] - 2*minAnchor));
 		double minValue = max(0, min(leftBaseCount[splitIndex] - minAnchor, rightBaseCount[splitIndex] - minAnchor));
 		
 		posSum += posValue / posRange;
@@ -609,34 +727,12 @@ void SplitAlignment::WriteAlignText(ostream& out, SplitAlignmentMap& splitAlignm
 		out << splitAlignment.mSplitAlignSeq[0] << "|" << splitAlignment.mSplitAlignSeq[1] << endl;
 		for (int alignmentIndex = 0; alignmentIndex < splitAlignment.mAlignmentReadID.size(); alignmentIndex++)
 		{
-			const IntegerPair& split = splitAlignment.mAlignmentSplit[alignmentIndex];
+			const IntegerPair& split = splitAlignment.mAlignmentRefSplit[alignmentIndex];
 			
 			if (split == splitAlignment.mBestSplit)
 			{
 				out << splitAlignment.mAlignmentText[alignmentIndex];
 			}
-		}
-	}
-}
-
-void SplitAlignment::AddAnchoredReads(const AlignmentIndex& discordant, const AlignmentIndex& anchored, const string& transcript, int strand, int revComp, int start, int end)
-{
-	CompAlignVec candidateMates;
-	
-	NameIndex referenceNames;
-	discordant.Find(transcript, strand, start, end, referenceNames, candidateMates);
-	anchored.Find(transcript, strand, start, end, referenceNames, candidateMates);
-	
-	for (int candidateIndex = 0; candidateIndex < candidateMates.size(); candidateIndex++)
-	{
-		ReadID candidateReadID;
-		candidateReadID.fragmentIndex = candidateMates[candidateIndex].readID.fragmentIndex;
-		candidateReadID.readEnd = (candidateMates[candidateIndex].readID.readEnd == 0) ? 1 : 0;
-		
-		if (mCandidateUnique.insert(IntegerPair(candidateReadID.id,revComp)).second)
-		{
-			mCandidateReadID.push_back(candidateReadID.id);
-			mCandidateRevComp.push_back(revComp);
 		}
 	}
 }

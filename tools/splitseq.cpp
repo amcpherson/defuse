@@ -29,8 +29,7 @@ using namespace std;
 
 int main(int argc, char* argv[])
 {
-	string discordantBamFilename;
-	string anchoredBamFilename;
+	string alignmentsFilename;
 	string readsPrefix;
 	string referenceFasta;
 	string exonRegionsFilename;
@@ -45,8 +44,7 @@ int main(int argc, char* argv[])
 	try
 	{
 		TCLAP::CmdLine cmd("Fusion sequence prediction by split reads");
-		TCLAP::ValueArg<string> discordantBamFilenameArg("d","discordant","Discordant Alignments Bam Filename",true,"","string",cmd);
-		TCLAP::ValueArg<string> anchoredBamFilenameArg("a","anchored","Anchored Alignments Bam Filename",true,"","string",cmd);
+		TCLAP::ValueArg<string> alignmentsFilenameArg("a","align","Alignments Sam Filename",true,"","string",cmd);
 		TCLAP::ValueArg<string> referenceFastaArg("f","fasta","Reference Fasta",true,"","string",cmd);
 		TCLAP::ValueArg<string> readsPrefixArg("r","reads","Reads Filename Prefix",true,"","string",cmd);
 		TCLAP::ValueArg<string> exonRegionsFilenameArg("e","exons","Exon Regions Filename",true,"","string",cmd);
@@ -59,8 +57,7 @@ int main(int argc, char* argv[])
 		TCLAP::ValueArg<string> alignFilenameArg("i","input","Input Alignment Regions Filename",false,"","string",cmd);
 		cmd.parse(argc,argv);
 
-		discordantBamFilename = discordantBamFilenameArg.getValue();
-		anchoredBamFilename = anchoredBamFilenameArg.getValue();
+		alignmentsFilename = alignmentsFilenameArg.getValue();
 		readsPrefix = readsPrefixArg.getValue();
 		referenceFasta = referenceFastaArg.getValue();
 		exonRegionsFilename = exonRegionsFilenameArg.getValue();
@@ -96,14 +93,10 @@ int main(int argc, char* argv[])
 		exit(1);
 	}
 	
-	AlignmentIndex discordant;
-	AlignmentIndex anchored;
 	ReadIndex reads;
 	FastaIndex reference;
 	ExonRegions exonRegions;
 		
-	discordant.Open(discordantBamFilename);
-	anchored.Open(anchoredBamFilename);
 	reads.Open(readsPrefix);
 	reference.Open(referenceFasta);
 	
@@ -121,9 +114,12 @@ int main(int argc, char* argv[])
 		int id = pairIter->first;
 		const LocationVec& alignRegionPair = pairIter->second;
 		
-		splitAlignments[id].FindCandidates(alignRegionPair, discordant, anchored, reference, exonRegions, fragmentLengthMean, fragmentLengthStdDev, minReadLength, maxReadLength);
+		splitAlignments[id].Initialize(alignRegionPair, reference, exonRegions, fragmentLengthMean, fragmentLengthStdDev, minReadLength, maxReadLength);
 	}
 	
+	AlignmentStream* alignmentStream = new SamAlignmentStream(alignmentsFilename);
+	
+	SplitAlignment::FindCandidates(alignmentStream, splitAlignments);
 	SplitAlignment::ReadCandidateSequences(reads, splitAlignments);
 	
 	for (LocationVecMapConstIter pairIter = alignRegionPairs.begin(); pairIter != alignRegionPairs.end(); pairIter++)

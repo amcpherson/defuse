@@ -1,9 +1,5 @@
 /*
  *  AlignmentStream.h
- *  findbreaks
- *
- *  Created by Andrew McPherson on 12/10/09.
- *  Copyright 2009 __MyCompanyName__. All rights reserved.
  *
  */
 
@@ -11,11 +7,14 @@
 #define ALIGNMENTSTREAM_H_
 
 #include "Common.h"
+#include "bam.h"
+#include "sam.h"
 
 #include <iostream>
 #include <fstream>
 
 using namespace std;
+
 
 struct RawAlignment
 {
@@ -25,39 +24,74 @@ struct RawAlignment
 	int strand;
 	Region region;
 	string sequence;
-	int numMis;
 };
 
-class IAlignmentStream
+typedef vector<RawAlignment> RawAlignmentVec;
+
+
+class AlignmentStream
 {
-public:	
-	virtual ~IAlignmentStream() {};
+public:
+	virtual ~AlignmentStream() {}
 	
-	virtual bool Good();
 	virtual bool GetNextAlignment(RawAlignment& alignment) = 0;
-	virtual void Reset();
+};
+
+
+class SamAlignmentStream : public AlignmentStream
+{
+public:
+	SamAlignmentStream(const string& samFilename);
+	~SamAlignmentStream();
 	
-	static IAlignmentStream* Create(const string& filename);
+	bool GetNextAlignment(RawAlignment& alignment);
 	
 protected:
-	IAlignmentStream(const string& filename);
-
-	ifstream mStream;
+	istream* mStream;
 	int mLineNumber;
 };
 
-class BowtieAlignmentStream : public IAlignmentStream
+
+class BamAlignmentStream : public AlignmentStream
 {
 public:
-	explicit BowtieAlignmentStream(const string& filename);
-	virtual bool GetNextAlignment(RawAlignment& alignment);
+	BamAlignmentStream(const string& bamFilename);
+	~BamAlignmentStream();
+	
+	bool GetNextAlignment(RawAlignment& alignment);
+	
+private:
+	samfile_t* mBamFile;
+	bam1_t mCurrentEntry;
 };
 
-class NovoAlignmentStream : public IAlignmentStream
+
+class CompactAlignmentStream : public AlignmentStream
 {
 public:
-	explicit NovoAlignmentStream(const string& filename);
-	virtual bool GetNextAlignment(RawAlignment& alignment);
+	CompactAlignmentStream(const string& alignFilename);
+	~CompactAlignmentStream();
+	
+	bool GetNextAlignment(RawAlignment& alignment);
+	
+protected:
+	istream* mStream;
+	int mLineNumber;
 };
+
+
+class FragmentAlignmentStream
+{
+public:
+	FragmentAlignmentStream(AlignmentStream* alignmentStream);
+	
+	bool GetNextAlignments(RawAlignmentVec& alignments);
+	
+protected:
+	AlignmentStream* mAlignmentStream;
+	RawAlignment mNextAlignment;
+	bool mGood;
+};
+
 
 #endif

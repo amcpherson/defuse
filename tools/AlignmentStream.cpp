@@ -1,9 +1,5 @@
 /*
  *  AlignmentStream.cpp
- *  findbreaks
- *
- *  Created by Andrew McPherson on 12/10/09.
- *  Copyright 2009 __MyCompanyName__. All rights reserved.
  *
  */
 
@@ -14,66 +10,46 @@
 #include <boost/algorithm/string.hpp>
 
 using namespace boost;
+using namespace std;
 
-IAlignmentStream* IAlignmentStream::Create(const string& alignmentFilename)
+
+SamAlignmentStream::SamAlignmentStream(const string& samFilename) : mStream(0), mLineNumber(0)
 {
-	string::size_type extStart = alignmentFilename.find_last_of('.');
-	string alignmentExt = alignmentFilename.substr(extStart + 1);
-
-	IAlignmentStream* alignmentStream = 0;
-	if (alignmentExt == "bwtout")
+	if (samFilename == "-")
 	{
-		alignmentStream = new BowtieAlignmentStream(alignmentFilename);
-	}
-	else if (alignmentExt == "novo")
-	{
-		alignmentStream = new NovoAlignmentStream(alignmentFilename);
+		mStream = &cin;
 	}
 	else
 	{
-		cerr << "Error: unrecognized extension " << alignmentExt << endl;
-		return 0;
-	}
-	
-	if (alignmentStream->Good())
-	{
-		return alignmentStream;
-	}
-	else
-	{
-		cerr << "Error: unable to open file " << alignmentFilename << endl;
-		delete alignmentStream;
-		return 0;
+		mStream = new ifstream(samFilename.c_str());
+		
+		if (!mStream->good())
+		{
+			cerr << "Error: Unable to open sam file " << samFilename << endl;
+			exit(1);
+		}
 	}
 }
 
-IAlignmentStream::IAlignmentStream(const string& alignmentFilename) : mStream(alignmentFilename.c_str()), mLineNumber(0)
+SamAlignmentStream::~SamAlignmentStream()
 {
+	delete mStream;
 }
 
-bool IAlignmentStream::Good()
-{
-	return mStream.good();
-}
-
-void IAlignmentStream::Reset()
-{
-	mStream.seekg(0);
-}
-
-BowtieAlignmentStream::BowtieAlignmentStream(const string& filename) : IAlignmentStream(filename)
-{
-}
-
-bool BowtieAlignmentStream::GetNextAlignment(RawAlignment& alignment)
+bool SamAlignmentStream::GetNextAlignment(RawAlignment& alignment)
 {
 	string line;
-	
-	while (getline(mStream, line))
+	while (getline(*mStream, line))
 	{
 		mLineNumber++;
 		
 		if (line.length() == 0)
+		{
+			cerr << "Error: Empty alignment line " << mLineNumber << endl;
+			exit(1);
+		}
+		
+		if (line[0] == '@')
 		{
 			continue;
 		}
@@ -81,189 +57,214 @@ bool BowtieAlignmentStream::GetNextAlignment(RawAlignment& alignment)
 		vector<string> alignmentFields;
 		split(alignmentFields, line, is_any_of("\t"));
 		
-		if (alignmentFields.size() < 7)
+		if (alignmentFields.size() < 10)
 		{
-			continue;
+			cerr << "Error: Format error for alignment line " << mLineNumber << endl;
+			exit(1);
 		}
 		
-		alignmentFields.push_back("");
+		const string& qname = alignmentFields[0];
+		int flag = lexical_cast<int>(alignmentFields[1]);
+		const string& rname = alignmentFields[2];
+		int pos = lexical_cast<int>(alignmentFields[3]);
+		const string& seq = alignmentFields[9];
 		
-		string readName = alignmentFields[0];
-		string strandName = alignmentFields[1];
-		string referenceName = alignmentFields[2];
-		string startPosition = alignmentFields[3];
-		string sequence = alignmentFields[4];
-		string mismatches = alignmentFields[7];
-		
-		// Count mismatches
-		int numMismatches = count(mismatches.begin(),mismatches.end(),':');
-		
-		// Interpret strand
-		int strand;
-		if (strandName == "+")
-		{
-			strand = PlusStrand;
-		}
-		else if (strandName == "-")
-		{
-			strand = MinusStrand;
-		}
-		else
-		{
-			cerr << "Error: Unable to interpret strand" << endl;
-			return false;
-		}
-		
-		// Reverse complement sequence if aligned to minus strand
-		if (strand == MinusStrand)
-		{
-			ReverseComplement(sequence);
-		}
-		
-		// Split read name into id and end
-		string::size_type readEndStart = readName.find_first_of('/');
-		if(readEndStart == std::string::npos && readEndStart + 1 >= readName.length())
-		{
-			cerr << "Error: Unable to interpret read name" << endl;
-			return false;
-		}
-		
-		string fragmentName = readName.substr(0, readEndStart);
-		char readEndName = readName.substr(readEndStart + 1, 1)[0];
-		
-		// Check read end
-		if (readEndName != '1' && readEndName != '2')
-		{
-			cerr << "Error: Unable to interpret read end" << endl;
-			return false;
-		}
-	
-		int readEnd = (readEndName == '1') ? 0 : 1;
-		
-		alignment.fragment = fragmentName;
-		alignment.readEnd = readEnd;
-		alignment.reference = referenceName;
-		alignment.strand = strand;
-		alignment.region.start = lexical_cast<int>(startPosition) + 1;
-		alignment.region.end = alignment.region.start + sequence.length() - 1;
-		alignment.sequence = sequence;
-		alignment.numMis = numMismatches;
-
-		return true;
-	}
-	
-	return false;	
-}
-
-NovoAlignmentStream::NovoAlignmentStream(const string& filename) : IAlignmentStream(filename)
-{
-}
-
-bool NovoAlignmentStream::GetNextAlignment(RawAlignment& alignment)
-{
-	string line;
-	
-	while (getline(mStream, line))
-	{
-		mLineNumber++;
-		
-		if (line.length() == 0)
-		{
-			continue;
-		}
-		
-		if (line[0] == '#')
-		{
-			continue;
-		}
-		
-		vector<string> alignmentFields;
-		split(alignmentFields, line, is_any_of("\t"));
-		
-		if (alignmentFields.size() < 13)
-		{
-			continue;
-		}
-		
-		alignmentFields.push_back("");
-		
-		string readName = alignmentFields[0];
-		string sequence = alignmentFields[2];
-		string status = alignmentFields[4];
-		string referenceName = alignmentFields[7];
-		string startPosition = alignmentFields[8];
-		string strandName = alignmentFields[9];
-		string mismatches = alignmentFields[13];
-		
-		// Split read name into id and end
-		string::size_type fragmentNameStart = readName.find_first_of('@');
-		if(fragmentNameStart == std::string::npos)
-		{
-			fragmentNameStart = 0;
-		}
-		else
-		{
-			fragmentNameStart++;
-		}
-		
-		string::size_type readEndStart = readName.find_first_of('/');
-		if(readEndStart == std::string::npos && readEndStart + 1 >= readName.length())
-		{
-			cerr << "Error: Unable to interpret read name" << endl;
-			return false;
-		}
-		
-		string fragmentName = readName.substr(fragmentNameStart, readEndStart - fragmentNameStart);
-		char readEndName = readName.substr(readEndStart + 1, 1)[0];
-		
-		// Check read end
-		if (readEndName != '1' && readEndName != '2')
-		{
-			cerr << "Error: Unable to interpret read end" << endl;
-			return false;
-		}
-		
-		// Filter poor quality and non mapping alignments
-		if (status == "NM" or status == "QC")
+		if (rname == "*")
 		{
 			continue;
 		}
 		
 		// Interpret strand
 		int strand;
-		if (strandName == "F")
+		if ((flag & 0x0010) == 0)
 		{
 			strand = PlusStrand;
 		}
-		else if (strandName == "R")
+		else
 		{
 			strand = MinusStrand;
 		}
+		
+		string fragment;
+		int readEnd;
+		
+		// Split qname into id and end
+		vector<string> qnameFields;
+		split(qnameFields, qname, is_any_of("/"));
+		if (qnameFields.size() == 2)
+		{
+			if (qnameFields[1] != "1" && qnameFields[1] != "2")
+			{
+				cerr << "Error: Unable to interpret qname for alignment line " << mLineNumber << endl;
+				exit(1);
+			}
+			
+			fragment = qnameFields[0];
+			readEnd = (qnameFields[1] == "1") ? 0 : 1;
+		}
 		else
 		{
-			cerr << "Error: Unable to interpret strand" << endl;
-			return false;
+			fragment = qname;
+			if (flag & 0x0040)
+			{
+				readEnd = 0;
+			}
+			else if (flag & 0x0080)
+			{
+				readEnd = 1;
+			}
 		}
 		
-		// Calculate position
-		int numInsertions = count(mismatches.begin(), mismatches.end(), '+');
-		int numDeletions = count(mismatches.begin(), mismatches.end(), '-');
-		int matchLength = sequence.length() - numInsertions + numDeletions;
-
-		int readEnd = (readEndName == '1') ? 0 : 1;
-
-		alignment.fragment = fragmentName;
+		alignment.fragment = fragment;
 		alignment.readEnd = readEnd;
-		alignment.reference = referenceName;
+		alignment.reference = rname;
 		alignment.strand = strand;
-		alignment.region.start = lexical_cast<int>(startPosition);
-		alignment.region.end = alignment.region.start + matchLength - 1;
-		alignment.sequence = sequence;
-		alignment.numMis = mismatches.size();
+		alignment.region.start = lexical_cast<int>(pos);
+		alignment.region.end = alignment.region.start + seq.length() - 1;
+		alignment.sequence = seq;
 		
 		return true;
 	}
 	
 	return false;
 }
+
+
+BamAlignmentStream::BamAlignmentStream(const string& bamFilename) : mBamFile(0)
+{
+	mCurrentEntry.data = 0;
+	
+	mBamFile = samopen(bamFilename.c_str(), "rb", 0);
+	
+	if (mBamFile == 0)
+	{
+		cerr << "Error: Unable to open bam file " << bamFilename << endl;
+		exit(1);
+	}
+	
+	memset(&mCurrentEntry, 0, sizeof(bam1_t));
+}
+
+BamAlignmentStream::~BamAlignmentStream()
+{
+	samclose(mBamFile);
+	mBamFile = 0;
+	free(mCurrentEntry.data);
+}
+
+bool BamAlignmentStream::GetNextAlignment(RawAlignment& alignment)
+{
+	if (bam_read1(mBamFile->x.bam, &mCurrentEntry) <= 0)
+	{
+		return false;
+	}
+	
+	// Split qname into id and end
+	// Fragment index encoded in fragment name
+	string qname = string((char*)mCurrentEntry.data);
+	vector<string> qnameFields;
+	split(qnameFields, qname, is_any_of("/"));
+	
+	alignment.fragment = qnameFields[0];
+	alignment.readEnd = (qnameFields[1] == "1") ? 0 : 1;
+	alignment.reference = mBamFile->header->target_name[mCurrentEntry.core.tid];
+	alignment.strand = (mCurrentEntry.core.flag & 0x10) ? MinusStrand : PlusStrand;
+	alignment.region.start = mCurrentEntry.core.pos + 1;
+	alignment.region.end = mCurrentEntry.core.pos + mCurrentEntry.core.l_qseq;
+	
+	return true;
+}
+
+
+
+CompactAlignmentStream::CompactAlignmentStream(const string& alignFilename) : mStream(NULL), mLineNumber(0)
+{
+	if (alignFilename == "-")
+	{
+		mStream = &cin;
+	}
+	else
+	{
+		mStream = new ifstream(alignFilename.c_str());
+		
+		if (!mStream->good())
+		{
+			cerr << "Error: Unable to open alignment file " << alignFilename << endl;
+			exit(1);
+		}
+	}
+}
+
+CompactAlignmentStream::~CompactAlignmentStream()
+{
+	delete mStream;
+}
+
+bool CompactAlignmentStream::GetNextAlignment(RawAlignment& alignment)
+{
+	string line;
+	while (getline(*mStream, line))
+	{
+		mLineNumber++;
+		
+		if (line.length() == 0)
+		{
+			cerr << "Error: Empty alignment line " << mLineNumber << endl;
+			exit(1);
+		}
+		
+		vector<string> alignmentFields;
+		split(alignmentFields, line, is_any_of("\t"));
+		
+		if (alignmentFields.size() < 6)
+		{
+			cerr << "Error: Format error for alignment line " << mLineNumber << endl;
+			exit(1);
+		}
+		
+		alignment.fragment = alignmentFields[0];
+		alignment.readEnd = (alignmentFields[1] == "1") ? 0 : 1;
+		alignment.reference = alignmentFields[2];
+		alignment.strand = (alignmentFields[3] == "-") ? MinusStrand : PlusStrand;
+		alignment.region.start = lexical_cast<int>(alignmentFields[4]);
+		alignment.region.end = lexical_cast<int>(alignmentFields[5]);
+		
+		return true;
+	}
+	
+	return false;	
+}
+
+
+
+FragmentAlignmentStream::FragmentAlignmentStream(AlignmentStream* alignmentStream) : mAlignmentStream(alignmentStream)
+{
+	mGood = mAlignmentStream->GetNextAlignment(mNextAlignment);
+}
+
+bool FragmentAlignmentStream::GetNextAlignments(RawAlignmentVec& alignments)
+{
+	if (!mGood)
+	{
+		return false;
+	}
+	
+	alignments.clear();
+	alignments.push_back(mNextAlignment);
+	
+	while (mGood = mAlignmentStream->GetNextAlignment(mNextAlignment))
+	{
+		if (alignments.front().fragment != mNextAlignment.fragment)
+		{
+			break;
+		}
+		else
+		{
+			alignments.push_back(mNextAlignment);
+		}
+	}
+	
+	return true;
+}
+
 

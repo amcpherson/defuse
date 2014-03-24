@@ -35,41 +35,49 @@ void ReadClusters(const string& clustersFilename, IntegerTable& clusters)
 	int lineNumber = 0;
 	while (getline(clustersFile, line))
 	{
-		lineNumber++;
-		
-		if (line.length() == 0)
+		try
 		{
-			cerr << "Error: Empty clusters line " << lineNumber << " of " << clustersFilename << endl;
-			exit(1);
-		}
-		
-		vector<string> clusterFields;
-		split(clusterFields, line, is_any_of("\t"));
-		
-		if (clusterFields.size() < 3)
-		{
-			cerr << "Error: Format error for clusters line " << lineNumber << " of " << clustersFilename << endl;
-			exit(1);
-		}
-		
-		int clusterID = lexical_cast<int>(clusterFields[0]);
-		int clusterEnd = lexical_cast<int>(clusterFields[1]);
-		int fragmentIndex = lexical_cast<int>(clusterFields[2]);
+			lineNumber++;
+			
+			if (line.length() == 0)
+			{
+				cerr << "Error: Empty clusters line " << lineNumber << " of " << clustersFilename << endl;
+				exit(1);
+			}
+			
+			vector<string> clusterFields;
+			split(clusterFields, line, is_any_of("\t"));
+			
+			if (clusterFields.size() < 3)
+			{
+				cerr << "Error: Format error for clusters line " << lineNumber << " of " << clustersFilename << endl;
+				exit(1);
+			}
+			
+			int clusterID = lexical_cast<int>(clusterFields[0]);
+			int clusterEnd = lexical_cast<int>(clusterFields[1]);
+			int fragmentIndex = lexical_cast<int>(clusterFields[2]);
 
-		// Only read in cluster end 0
-		if (clusterEnd != 0)
-		{
-			continue;
-		}		
+			// Only read in cluster end 0
+			if (clusterEnd != 0)
+			{
+				continue;
+			}		
 
-		if (clusterID < 0)
+			if (clusterID < 0)
+			{
+				cerr << "Error: Invalid cluster ID for line " << lineNumber << " of " << clustersFilename << endl;
+				exit(1);
+			}
+			
+			clusters.resize(max(clusterID + 1, (int)clusters.size()));
+			clusters[clusterID].push_back(fragmentIndex);
+		}
+		catch (boost::exception_detail::clone_impl<boost::exception_detail::error_info_injector<boost::bad_lexical_cast> > e)
 		{
-			cerr << "Error: Invalid cluster ID for line " << lineNumber << " of " << clustersFilename << endl;
+			cerr << "Failed to interpret line:" << endl << line << endl;
 			exit(1);
 		}
-		
-		clusters.resize(max(clusterID + 1, (int)clusters.size()));
-		clusters[clusterID].push_back(fragmentIndex);
 	}
 	
 	clustersFile.close();
@@ -116,36 +124,44 @@ void WriteClusters(const string& inClustersFilename, const string& outClustersFi
 	int lineNumber = 0;
 	while (getline(inClustersFile, line))
 	{
-		lineNumber++;
-		
-		if (line.length() == 0)
+		try
 		{
-			cerr << "Error: Empty clusters line " << lineNumber << " of " << outClustersFilename << endl;
-			exit(1);
+			lineNumber++;
+			
+			if (line.length() == 0)
+			{
+				cerr << "Error: Empty clusters line " << lineNumber << " of " << outClustersFilename << endl;
+				exit(1);
+			}
+			
+			vector<string> clusterFields;
+			split(clusterFields, line, is_any_of("\t"));
+			
+			if (clusterFields.size() < 3)
+			{
+				cerr << "Error: Format error for clusters line " << lineNumber << " of " << outClustersFilename << endl;
+				exit(1);
+			}
+			
+			int clusterID = lexical_cast<int>(clusterFields[0]);
+			int fragmentIndex = lexical_cast<int>(clusterFields[2]);
+			
+			if (clusterID < 0)
+			{
+				cerr << "Error: Invalid cluster ID for line " << lineNumber << " of " << outClustersFilename << endl;
+				exit(1);
+			}
+			
+			// Output cluster line if the fragment index is in this output cluster
+			if (clusterFragments[clusterID].find(fragmentIndex) != clusterFragments[clusterID].end())
+			{
+				outClustersFile << line << endl;
+			}
 		}
-		
-		vector<string> clusterFields;
-		split(clusterFields, line, is_any_of("\t"));
-		
-		if (clusterFields.size() < 3)
+		catch (boost::exception_detail::clone_impl<boost::exception_detail::error_info_injector<boost::bad_lexical_cast> > e)
 		{
-			cerr << "Error: Format error for clusters line " << lineNumber << " of " << outClustersFilename << endl;
+			cerr << "Failed to interpret line:" << endl << line << endl;
 			exit(1);
-		}
-		
-		int clusterID = lexical_cast<int>(clusterFields[0]);
-		int fragmentIndex = lexical_cast<int>(clusterFields[2]);
-		
-		if (clusterID < 0)
-		{
-			cerr << "Error: Invalid cluster ID for line " << lineNumber << " of " << outClustersFilename << endl;
-			exit(1);
-		}
-		
-		// Output cluster line if the fragment index is in this output cluster
-		if (clusterFragments[clusterID].find(fragmentIndex) != clusterFragments[clusterID].end())
-		{
-			outClustersFile << line << endl;
 		}
 	}
 	
@@ -206,34 +222,42 @@ void ReadAlignRegionPairs(const string& filename, LocationVecMap& alignRegionPai
 	
 	while (getline(alignRegionPairsFile, line))
 	{
-		lineNumber++;
-		
-		if (line.length() == 0)
+		try 
 		{
-			continue;
+			lineNumber++;
+					
+			if (line.length() == 0)
+			{
+				continue;
+			}
+			
+			vector<string> alignRegionFields;
+			split(alignRegionFields, line, is_any_of("\t"));
+			
+			if (alignRegionFields.size() < 5)
+			{
+				continue;
+			}
+			
+			int pairID = lexical_cast<int>(alignRegionFields[0]);
+			int pairEnd = lexical_cast<int>(alignRegionFields[1]);
+			
+			DebugCheck(pairEnd == 0 || pairEnd == 1);
+			
+			Location alignRegion;
+			alignRegion.refName = alignRegionFields[2];
+			alignRegion.strand = InterpretStrand(alignRegionFields[3]);
+			alignRegion.start = lexical_cast<int>(alignRegionFields[4]);
+			alignRegion.end = lexical_cast<int>(alignRegionFields[5]);
+			
+			alignRegionPairs[pairID].resize(2);
+			alignRegionPairs[pairID][pairEnd] = alignRegion;
 		}
-		
-		vector<string> alignRegionFields;
-		split(alignRegionFields, line, is_any_of("\t"));
-		
-		if (alignRegionFields.size() < 5)
+		catch (boost::exception_detail::clone_impl<boost::exception_detail::error_info_injector<boost::bad_lexical_cast> > e)
 		{
-			continue;
+			cout << "Failed to interpret region:" << endl << line << endl;
+			exit(1);
 		}
-		
-		int pairID = lexical_cast<int>(alignRegionFields[0]);
-		int pairEnd = lexical_cast<int>(alignRegionFields[1]);
-		
-		DebugCheck(pairEnd == 0 || pairEnd == 1);
-		
-		Location alignRegion;
-		alignRegion.refName = alignRegionFields[2];
-		alignRegion.strand = InterpretStrand(alignRegionFields[3]);
-		alignRegion.start = lexical_cast<int>(alignRegionFields[4]);
-		alignRegion.end = lexical_cast<int>(alignRegionFields[5]);
-		
-		alignRegionPairs[pairID].resize(2);
-		alignRegionPairs[pairID][pairEnd] = alignRegion;
 	}
 	
 	alignRegionPairsFile.close();
