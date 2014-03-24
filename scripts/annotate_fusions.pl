@@ -105,13 +105,13 @@ sub calc_edit_dist
 	my $seq1 = shift;
 	my $seq2 = shift;
 	
-	die "Error: expected $seq1 and $seq2 to be same size\n" if length($seq1) != length$seq2;
+	warn "Error: expected $seq1 and $seq2 to be same size\n" if length($seq1) != length$seq2;
 	
 	my @nt1 = split //, $seq1;
 	my @nt2 = split //, $seq2;
 	
 	my $dist = 0;
-	foreach my $ntindex (0..$#nt1)
+	foreach my $ntindex (0..min($#nt1,$#nt2))
 	{
 		$dist++ if $nt1[$ntindex] ne $nt2[$ntindex];
 	}
@@ -788,6 +788,9 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	
 	my $num_splice_variants = scalar keys %{$fusion_splice_variants{$gene_strand_a}{$gene_strand_b}};
 	
+	my $gene_align_strand1 = ($genome_strand1 eq $gene_models->{genes}{$gene1}{strand}) ? "+" : "-";
+	my $gene_align_strand2 = ($genome_strand2 eq $gene_models->{genes}{$gene2}{strand}) ? "+" : "-";
+	
 	print $cluster_id."\tlibrary_name\t".$library_name."\n";
 
 	print $cluster_id."\tgene1\t".$gene1."\n";
@@ -804,8 +807,8 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\tgene_start2\t".$gene_models->{genes}{$gene2}{region}->[0]."\n";
 	print $cluster_id."\tgene_end2\t".$gene_models->{genes}{$gene2}{region}->[1]."\n";
 	
-	print $cluster_id."\tgene_align_strand1\t".$fusion_strand1{$cluster_id}."\n";
-	print $cluster_id."\tgene_align_strand2\t".$fusion_strand2{$cluster_id}."\n";
+	print $cluster_id."\tgene_align_strand1\t".$gene_align_strand1."\n";
+	print $cluster_id."\tgene_align_strand2\t".$gene_align_strand2."\n";
 	
 	print $cluster_id."\tgenomic_break_pos1\t".$genomic_breakpos1{$cluster_id}."\n";
 	print $cluster_id."\tgenomic_break_pos2\t".$genomic_breakpos2{$cluster_id}."\n";	
@@ -973,9 +976,7 @@ sub find_concordant_reads
 
 		my $percent_identity = $matches / $qsize;
 		next if $percent_identity < $percident_threshold;
-
-		$align_chr =~ s/ENST\d+//g;
-
+		
 		push @{$read_align{$fragment_id}{$read_end}}, [$align_chr,$align_strand,$align_start,$align_end];
 	}
 	close PSL;

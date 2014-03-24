@@ -12,6 +12,7 @@
 
 #include <vector>
 #include <boost/unordered_map.hpp>
+#include <boost/unordered_set.hpp>
 
 using namespace std;
 using namespace boost;
@@ -129,10 +130,6 @@ typedef vector<IntegerVec> IntegerTable;
 typedef vector<IntegerVec>::iterator IntegerTableIter;
 typedef vector<IntegerVec>::const_iterator IntegerTableConstIter;
 
-typedef unordered_map<int,IntegerVec> IntegerVecMap;
-typedef unordered_map<int,IntegerVec>::iterator IntegerVecMapIter;
-typedef unordered_map<int,IntegerVec>::const_iterator IntegerVecMapConstIter;
-
 typedef vector<float> FloatVec;
 typedef vector<float>::iterator FloatVecIter;
 typedef vector<float>::const_iterator FloatVecConstIter;
@@ -158,6 +155,22 @@ typedef vector<IntegerPair>::const_iterator IntegerPairVecConstIter;
 typedef vector<IntegerPairVec> IntegerPairTable;
 typedef vector<IntegerPairVec>::iterator IntegerPairTableIter;
 typedef vector<IntegerPairVec>::const_iterator IntegerPairTableConstIter;
+
+typedef unordered_set<int> IntegerSet;
+typedef unordered_set<int>::iterator IntegerSetIter;
+typedef unordered_set<int>::const_iterator IntegerSetConstIter;
+
+typedef unordered_map<int,int> IntegerMap;
+typedef unordered_map<int,int>::iterator IntegerMapIter;
+typedef unordered_map<int,int>::const_iterator IntegerMapConstIter;
+
+typedef unordered_map<int,IntegerVec> IntegerVecMap;
+typedef unordered_map<int,IntegerVec>::iterator IntegerVecMapIter;
+typedef unordered_map<int,IntegerVec>::const_iterator IntegerVecMapConstIter;
+
+typedef unordered_map<IntegerPair,int> IntegerPairMap;
+typedef unordered_map<IntegerPair,int>::iterator IntegerPairMapIter;
+typedef unordered_map<IntegerPair,int>::const_iterator IntegerPairMapConstIter;
 
 void ReverseComplement(string& sequence);
 
@@ -210,9 +223,15 @@ bool FragmentLessThan(const CompactAlignment& a1, const CompactAlignment& a2);
 double normalpdf(double x, double mu, double sigma);
 
 int FindMaxElement(const IntegerTable& clusters);
+int FindMaxElement(const IntegerVecMap& clusters);
 
 void CheckFile(const ios& file, const string& filename);
 
 bool ParseTranscriptID(const string& transcriptID, string& gene, string& transcript);
+
+void Transpose(const IntegerVecMap& clusters, IntegerVecMap& elements);
+
+void Print(const IntegerVecMap& clusters);
+void Print(const IntegerVec& cluster);
 
 #endif

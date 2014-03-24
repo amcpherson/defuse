@@ -130,3 +130,54 @@ bool ParseTranscriptID(const string& transcriptID, string& gene, string& transcr
 	return true;
 }
 
+int FindMaxElement(const IntegerVecMap& clusters)
+{
+	int maxElement = -1;
+	for (IntegerVecMapConstIter clusterIter = clusters.begin(); clusterIter != clusters.end(); clusterIter++)
+	{
+		for (IntegerVecConstIter elementIter = clusterIter->second.begin(); elementIter != clusterIter->second.end(); elementIter++)
+		{
+			if (*elementIter < 0)
+			{
+				cerr << "Error: negative elements not permitted" << endl;
+				exit(1);
+			}
+			
+			maxElement = max(maxElement, *elementIter);
+		}
+	}
+	
+	return maxElement;
+}
+
+void Transpose(const IntegerVecMap& clusters, IntegerVecMap& elements)
+{
+	for (IntegerVecMapConstIter clusterIter = clusters.begin(); clusterIter != clusters.end(); clusterIter++)
+	{
+		for (IntegerVecConstIter elementIter = clusterIter->second.begin(); elementIter != clusterIter->second.end(); elementIter++)
+		{
+			elements[*elementIter].push_back(clusterIter->first);
+		}
+	}
+}
+
+void Print(const IntegerVecMap& clusters)
+{
+	for (IntegerVecMapConstIter clusterIter = clusters.begin(); clusterIter != clusters.end(); clusterIter++)
+	{
+		for (IntegerVecConstIter elementIter = clusterIter->second.begin(); elementIter != clusterIter->second.end(); elementIter++)
+		{
+			cout << clusterIter->first << "\t" << *elementIter << endl;
+		}
+	}
+}
+
+void Print(const IntegerVec& cluster)
+{
+	for (IntegerVecConstIter elementIter = cluster.begin(); elementIter != cluster.end(); elementIter++)
+	{
+		cout << *elementIter << endl;
+	}
+}
+
+

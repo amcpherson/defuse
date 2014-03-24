@@ -850,7 +850,7 @@ sub uptodate
 	my @intimes;
 	foreach my $arg (@{$inargs})
 	{
-		die "Error: Input $arg not found\n" if not -e $arg;
+		next if not -e $arg;
 
 		my $modtime = 0;
 		$modtime = stat($arg)->mtime;
@@ -874,6 +874,8 @@ sub uptodate
 			push @{$remarks}, $arg." out of date";
 		}
 	}
+
+	return 1 if scalar @intimes == 0;
 
 	# Return 1 if up to date
 	return 1 if max(@intimes) <= min(@outtimes) and min(@outtimes) != 0;

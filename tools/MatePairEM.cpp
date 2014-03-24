@@ -85,7 +85,7 @@ void MatePairEM::StrandRemap(const Region& region, int strand, Region& remapped)
 void MatePairEM::CalcBreakRegion(const Region& alignment, Region& breakRegion) const
 {
 	breakRegion.start = alignment.end + 1;
-	breakRegion.end = 2 * alignment.start - alignment.end - 2 + mMaxFragmentLength;
+	breakRegion.end = 2 * alignment.start - alignment.end - 2 + (int)mMaxFragmentLength;
 }
 
 double MatePairEM::PairProbability(double x, double y, double u, double a, double b) const

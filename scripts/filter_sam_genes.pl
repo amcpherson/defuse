@@ -27,7 +27,7 @@ while (<>)
 	my @fields = split /\t/;
 
 	my $reference = $fields[2];
-	$reference =~ /(ENSG\d+)/;
+	$reference =~ /^([^|]*)/;
 	my $gene = $1;
 
 	if ($genes{$gene})

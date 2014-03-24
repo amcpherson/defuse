@@ -8,7 +8,6 @@
 
 #include "Common.h"
 #include "DebugCheck.h"
-#include "ReweightSetCover.h"
 #include "Parsers.h"
 
 #include <fstream>

@@ -34,32 +34,16 @@ $(BAMDIR)/samtools :
 # Build libs
 # 
 
-$(ZDIR)/$(ZLIB) : 
+$(ZDIR)/$(ZLIB) :
 		$(MAKE) --no-print-directory -C $(ZDIR) $(ZLIB)
 
-$(BAMDIR)/$(BAMLIB) : 
+$(BAMDIR)/$(BAMLIB) :
 		$(MAKE) --no-print-directory -C $(BAMDIR) $(BAMLIB)
+
 
 #
 # Build tools
 #
-
-connectivity : \
-		./Common.o\
-		./QuaterpartiteEdges.o\
-		./DebugCheck.o\
-		./Parsers.o\
-		./connectivity.o\
-		$(BAMDIR)/$(BAMLIB)\
-		$(ZDIR)/$(ZLIB)
-
-overlapclusters : \
-		./Common.o\
-		./CompactBreakRegion.o\
-		./DebugCheck.o\
-		./overlapclusters.o\
-		$(BAMDIR)/$(BAMLIB)\
-		$(ZDIR)/$(ZLIB)
 
 clustermatepairs_stdin : \
 		./Common.o\
@@ -82,23 +66,10 @@ clustermatepairs : \
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
 
-maximalvalidclusters : \
-		./Common.o\
-		./DebugCheck.o\
-		./MatePairEM.o\
-		./asa136.o\
-		./asa241.o\
-		./maximalvalidclusters.o\
-		./FragmentAlignmentsIterator.o\
-		./AlignmentIndex.o\
-		$(BAMDIR)/$(BAMLIB)\
-		$(ZDIR)/$(ZLIB)
-
 setcover: \
 		./Common.o\
 		./DebugCheck.o\
 		./Parsers.o\
-		./ReweightSetCover.o\
 		./setcover.o\
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
@@ -109,6 +80,7 @@ findcandidatereads: \
 		./Common.o\
 		./DebugCheck.o\
 		./ExonRegions.o\
+		./ReadIndex.o\
 		./SplitAlignment.o\
 		./SplitReadAligner.o\
 		./Parsers.o\
@@ -118,11 +90,11 @@ findcandidatereads: \
 
 dosplitalign: \
 		./AlignmentIndex.o\
-		./ReadIndex.o\
 		./FastaIndex.o\
 		./Common.o\
 		./DebugCheck.o\
 		./ExonRegions.o\
+		./ReadIndex.o\
 		./SplitAlignment.o\
 		./SplitReadAligner.o\
 		./Parsers.o\
@@ -133,11 +105,11 @@ dosplitalign: \
 
 evalsplitalign: \
 		./AlignmentIndex.o\
-		./ReadIndex.o\
 		./FastaIndex.o\
 		./Common.o\
 		./DebugCheck.o\
 		./ExonRegions.o\
+		./ReadIndex.o\
 		./SplitAlignment.o\
 		./SplitReadAligner.o\
 		./ReadStream.o\
@@ -147,15 +119,15 @@ evalsplitalign: \
 
 splitseq: \
 		./AlignmentIndex.o\
-		./ReadIndex.o\
 		./FastaIndex.o\
 		./Common.o\
 		./DebugCheck.o\
 		./ExonRegions.o\
+		./ReadIndex.o\
+		./SplitAlignment.o\
 		./SplitReadAligner.o\
 		./Parsers.o\
 		./PathFinder.o\
-		./SplitFusion.o\
 		./splitseq.o\
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
@@ -196,7 +168,7 @@ localalign : \
 		./DebugCheck.o\
 		./Common.o
 
-tools : clustermatepairs connectivity overlapclusters maximalvalidclusters setcover calccov estislands findcandidatereads dosplitalign evalsplitalign localalign
+tools : clustermatepairs setcover calccov estislands findcandidatereads dosplitalign evalsplitalign localalign splitseq
 	
 
 clean : 

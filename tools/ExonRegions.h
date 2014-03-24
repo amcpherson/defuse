@@ -35,7 +35,6 @@ public:
 	bool RemapTranscriptToGenome(const string& transcript, int strand, int position, string& remapChromosome, int& remapStrand, int& remapPosition) const;
 	bool RemapGenomeToTranscript(const string& transcript, int position, int& remapped) const;
 	bool RemapGenomeToTranscripts(const string& gene, int position, StringVec& transcripts, IntegerVec& remapped) const;
-	bool TrimTranscriptRegion(const string& transcript, Region& region) const;
 	bool RemapThroughTranscript(const string& transcript, int position, int strand, int extendMin, int extendMax, int& remapStrand, int& start, int& end) const;
 	
 private:

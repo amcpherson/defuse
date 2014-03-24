@@ -32,7 +32,6 @@ sub new
 	
 		my $gene_id;
 		my $transcript_id;
-		my $exon_number;
 		my $gene_name;
 		foreach my $feature (@features)
 		{
@@ -45,14 +44,12 @@ sub new
 	
 				$gene_id = $value if $key eq "gene_id";
 				$transcript_id = $value if $key eq "transcript_id";
-				$exon_number = $value if $key eq "exon_number";
 				$gene_name = $value if $key eq "gene_name";
 			}
 		}
 		
 		defined $gene_id or die "Error: gtf line $line_number has no gene_id\n";
 		defined $transcript_id or die "Error: gtf line $line_number has no transcript_id\n";
-		defined $exon_number or die "Error: gtf line $line_number has no exon_number\n";
 		defined $gene_name or die "Error: gtf line $line_number has no gene_name\n";
 		
 		$transcript_id = $gene_id."|".$transcript_id;		
@@ -60,6 +57,7 @@ sub new
 		$self->{transcripts}{$transcript_id}{gene} = $gene_id;
 		$self->{transcripts}{$transcript_id}{chromosome} = $chromosome;
 		$self->{transcripts}{$transcript_id}{strand} = $strand;
+		$self->{transcripts}{$transcript_id}{source} = $source;
 		push @{$self->{transcripts}{$transcript_id}{exons}}, [$start,$end] if $feature_type eq "exon";
 		push @{$self->{transcripts}{$transcript_id}{cds}}, [$start,$end] if $feature_type eq "CDS";
 		
@@ -627,7 +625,7 @@ sub create_nearest_binning
 	my $current_gene_end;
 	foreach my $bin (0..$max_bin)
 	{
-		if (defined $current_gene and not defined $bins_ref->{bins}{$bin})
+		if (defined $current_gene)
 		{
 			push @{$nearest{$bin}}, $current_gene;
 		}
@@ -636,8 +634,8 @@ sub create_nearest_binning
 		{
 			if (not defined $current_gene_end or $bins_ref->{genes}{$gene_id}{region}->[1] > $current_gene_end)
 			{
-				my $current_gene = $gene_id;
-				my $current_gene_end = $bins_ref->{genes}{$gene_id}{region}->[1];
+				$current_gene = $gene_id;
+				$current_gene_end = $bins_ref->{genes}{$gene_id}{region}->[1];
 			}
 		}
 	}
@@ -646,7 +644,7 @@ sub create_nearest_binning
 	my $current_gene_start;
 	foreach my $bin (reverse(0..$max_bin))
 	{
-		if (defined $current_gene and not defined $bins_ref->{bins}{$bin})
+		if (defined $current_gene)
 		{
 			push @{$nearest{$bin}}, $current_gene;
 		}
@@ -655,8 +653,8 @@ sub create_nearest_binning
 		{
 			if (not defined $current_gene_start or $bins_ref->{genes}{$gene_id}{region}->[0] < $current_gene_start)
 			{
-				my $current_gene = $gene_id;
-				my $current_gene_start = $bins_ref->{genes}{$gene_id}{region}->[0];
+				$current_gene = $gene_id;
+				$current_gene_start = $bins_ref->{genes}{$gene_id}{region}->[0];
 			}
 		}
 	}

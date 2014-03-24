@@ -13,7 +13,6 @@
 #include "SplitAlignment.h"
 #include "Parsers.h"
 #include "PathFinder.h"
-#include "ReadIndex.h"
 
 #include <fstream>
 #include <iostream>

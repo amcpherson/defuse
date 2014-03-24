@@ -16,8 +16,6 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
 #include <boost/unordered_set.hpp>
-#include "bam.h"
-#include "sam.h"
 
 using namespace boost;
 using namespace std;
@@ -153,85 +151,6 @@ void WriteClusters(const string& inClustersFilename, const string& outClustersFi
 	
 	outClustersFile.close();
 	inClustersFile.close();
-}
-
-void ReadOverlaps(const string& overlapsFilename, IntegerPairVec& overlaps)
-{
-	// Open overlaps file
-	ifstream overlapsFile(overlapsFilename.c_str());
-	if (!overlapsFile)
-	{
-		cerr << "Error: unable to read from overlaps file " << overlapsFilename << endl;		
-		exit(1);
-	}
-	
-	// Parse file contents
-	string line;
-	int lineNumber = 0;
-	while (getline(overlapsFile, line))
-	{
-		lineNumber++;
-		
-		if (line.length() == 0)
-		{
-			cerr << "Error: Empty overlaps line " << lineNumber << " of " << overlapsFilename << endl;
-			exit(1);
-		}
-		
-		vector<string> overlapsFields;
-		split(overlapsFields, line, is_any_of("\t"));
-		
-		if (overlapsFields.size() < 2)
-		{
-			cerr << "Error: Format error for overlaps line " << lineNumber << " of " << overlapsFilename << endl;
-			exit(1);
-		}
-		
-		int clusterID1 = lexical_cast<int>(overlapsFields[0]);
-		int clusterID2 = lexical_cast<int>(overlapsFields[1]);
-		
-		overlaps.push_back(IntegerPair(clusterID1, clusterID2));
-	}
-	
-	overlapsFile.close();
-}
-
-void ReadAlignments(const string& bamFilename, StringVec& referenceNames, CompAlignVec& alignments)
-{
-	cout << "Reading alignments and creating fragment name index" << endl;
-	
-	samfile_t* inBamFile = samopen(bamFilename.c_str(), "rb", 0);
-	
-	referenceNames.clear();
-	for (int targetIndex = 0; targetIndex < inBamFile->header->n_targets; targetIndex++)
-	{
-		referenceNames.push_back(string(inBamFile->header->target_name[targetIndex]));
-	}
-
-	bam1_t bamEntry;
-	memset(&bamEntry, 0, sizeof(bam1_t));
-	while (bam_read1(inBamFile->x.bam, &bamEntry))
-	{
-		// Split qname into id and end
-		// Fragment index encoded in fragment name
-		string qname = string((char*)bamEntry.data);
-		vector<string> qnameFields;
-		split(qnameFields, qname, is_any_of("/"));
-		
-		CompactAlignment compactAlignment;
-		compactAlignment.readID.fragmentIndex = lexical_cast<int>(qnameFields[0]);
-		compactAlignment.readID.readEnd = (qnameFields[1] == "1") ? 0 : 1;
-		compactAlignment.refStrand.referenceIndex = bamEntry.core.tid;
-		compactAlignment.refStrand.strand = (bamEntry.core.flag & 0x10) ? MinusStrand : PlusStrand;
-		compactAlignment.region.start = bamEntry.core.pos + 1;
-		compactAlignment.region.end = bamEntry.core.pos + bamEntry.core.l_qseq;
-		
-		alignments.push_back(compactAlignment);
-		
-		memset(&bamEntry, 0, sizeof(bam1_t));
-	}
-	
-	samclose(inBamFile);
 }
 
 void IntepretAlignString(const string& alignString, Location& alignRegion)

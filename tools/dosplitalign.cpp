@@ -79,7 +79,7 @@ int main(int argc, char* argv[])
 	for (SplitAlignment::SplitAlignmentMapIter splitAlignIter = splitAlignments.begin(); splitAlignIter != splitAlignments.end(); splitAlignIter++)
 	{
 		SplitAlignment& splitAlignment = splitAlignIter->second;		
-		splitAlignment.Align();
+		splitAlignment.Align(false);
 	}
 	
 	SplitAlignment::WriteAlignments(splitAlignmentsFile, splitAlignments);

@@ -11,14 +11,18 @@ my $fraglength_num = 0;
 my $readlength_min;
 my $readlength_max;
 
+my $line = 0;
 while (my $sam_line = <>)
 {
+	$line++;
+
 	next if $sam_line =~ /^\@/;
 
 	chomp $sam_line;
 	my @sam_info_1 = split /\t/, $sam_line;
 
 	$sam_line = <>;
+	$line++;
 	chomp $sam_line;
 	my @sam_info_2 = split /\t/, $sam_line;
 	
@@ -28,7 +32,7 @@ while (my $sam_line = <>)
 	$read_name_1 =~ s/\/[12]//;
 	$read_name_2 =~ s/\/[12]//;
 
-	$read_name_1 eq $read_name_2 or die "Error: Sam file error\n";
+	$read_name_1 eq $read_name_2 or die "Error: Sam file error at line $line\n";
 
 	my $flag_1 = $sam_info_1[1];
 	my $flag_2 = $sam_info_2[1];
@@ -42,18 +46,16 @@ while (my $sam_line = <>)
 	my $isize_1 = abs($sam_info_1[8]);
 	my $isize_2 = abs($sam_info_2[8]);
 
-	$isize_1 == $isize_2 or die "Error: Sam file isize error\n";
+	$isize_1 == $isize_2 or die "Error: Sam file isize error at line $line\n";
 
 	my $sequence_1 = $sam_info_1[9];
 	my $sequence_2 = $sam_info_2[9];
 
-	$reference_1 eq $reference_2 or warn "Warning: Sam file includes mismatched pair\n" and next;
+	$reference_1 eq $reference_2 or warn "Warning: Sam file includes mismatched pair at line $line\n" and next;
 
 	my $seq_length_1 = length($sequence_1);
 	my $seq_length_2 = length($sequence_2);
-
-	$seq_length_1 == $seq_length_2 or die "Error: Sequence lengths mismatch for pair\n";
-
+	
 	my $fraglength = $isize_1;
 
 	$fraglength_sum += $fraglength;

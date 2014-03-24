@@ -12,10 +12,10 @@
 
 void DebugCheckFailure(const char* expr, const char* file, int line);
 
-#ifdef DEBUG_CHECKS
-#define DebugCheck(expr) ((expr) ? (void)(0) : DebugCheckFailure(#expr, __FILE__, __LINE__))
-#else
+#ifdef NO_DEBUG_CHECKS
 #define DebugCheck(expr) (void)(0)
+#else
+#define DebugCheck(expr) ((expr) ? (void)(0) : DebugCheckFailure(#expr, __FILE__, __LINE__))
 #endif
 
 #endif

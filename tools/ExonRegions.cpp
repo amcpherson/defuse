@@ -492,19 +492,3 @@ bool ExonRegions::RemapGenomeToTranscripts(const string& gene, int position, Str
 	return true;
 }
 
-bool ExonRegions::TrimTranscriptRegion(const string& transcript, Region& region) const
-{
-	if (mLength.find(transcript) == mLength.end())
-	{
-		cerr << "Error: Data mismatch, unable to find transcript " << transcript << endl;
-		exit(1);
-	}
-	
-	int transcriptLength = mLength.find(transcript)->second;
-	
-	region.start = max(1,region.start);
-	region.end = min(transcriptLength,region.end);
-	
-	return true;
-}
-

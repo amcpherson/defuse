@@ -2,7 +2,6 @@
 
 use strict;
 use warnings FATAL => 'all';
-use FileCache;
 no strict 'refs';
 
 my $usage = "Usage: $0 split_catalog candidate_reads > candidate_catalog\n";
@@ -15,20 +14,22 @@ die $usage if not defined $candidate_reads_filename;
 # Read in split catalog
 my @split_catalog = read_split_catalog($split_catalog_filename);
 
+# Maximum cached entries
+my $max_cached = 10000;
+
 # Open files for writing
 # Create binning for fragment indices
 my $bin_size = 100000;
 my %split_bins;
 my @split_candidates_filenames;
+my %split_candidates;
 foreach my $split_info (@split_catalog)
 {
-        my $split_prefix = $split_info->[0];
-        my $start_fragment_index = $split_info->[1];
-        my $end_fragment_index = $split_info->[2];
+	my $split_prefix = $split_info->[0];
+	my $start_fragment_index = $split_info->[1];
+	my $end_fragment_index = $split_info->[2];
 
-        my $split_candidates_filename = $split_prefix.".candidate.reads";
-	
-	cacheout $split_candidates_filename;
+	my $split_candidates_filename = $split_prefix.".candidate.reads";
 	
 	my $start_bin = int($start_fragment_index / $bin_size);
 	my $end_bin = int($end_fragment_index / $bin_size);
@@ -38,7 +39,22 @@ foreach my $split_info (@split_catalog)
 		push @{$split_bins{$bin}}, [$start_fragment_index, $end_fragment_index, $split_candidates_filename];
 	}
 
-	push @split_candidates_filenames, $split_candidates_filename."\n";
+	push @split_candidates_filenames, $split_candidates_filename;
+
+	unlink $split_candidates_filename;
+}
+
+sub flush
+{
+	my $filename = shift;
+	my $cached_ref = shift;
+	
+	open OUT, ">>".$filename or die "Error: Unable to write to $filename\n $!\n";
+	foreach my $line (@{$cached_ref})
+	{
+		print OUT $line;
+	}
+	close OUT;
 }
 
 # Output each line to the appropriate file
@@ -58,14 +74,30 @@ while (<CAN>)
 		if ($fragment_index >= $split_info->[0] and $fragment_index <= $split_info->[1])
 		{
 			my $filename = $split_info->[2];
-			print $filename $line;
+			push @{$split_candidates{$filename}}, $line;
+			
+			if (scalar @{$split_candidates{$filename}} >= $max_cached)
+			{
+				flush($filename, \@{$split_candidates{$filename}});
+				@{$split_candidates{$filename}} = ();
+			}
+
+			last;
 		}
 	}
 }
 close CAN;
 
+foreach my $filename (@split_candidates_filenames)
+{
+	flush($filename, \@{$split_candidates{$filename}});
+}
+
 # Output the list of split canadidate filenames
-print @split_candidates_filenames;
+foreach my $filename (@split_candidates_filenames)
+{
+	print $filename."\n";
+}
 
 sub read_split_catalog
 {

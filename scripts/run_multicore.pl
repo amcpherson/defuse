@@ -44,39 +44,61 @@ close BAT;
 chomp(@jobs);
 @jobs = reverse(@jobs);
 
+$batch_filename = abs_path($batch_filename);
+my $batch_jobname_prefix = basename($batch_filename);
+
+# Run all jobs
 my $last_job_start_time;
 my $jobs_to_start = scalar @jobs;
-print "Starting $jobs_to_start jobs\n";
+print "[runmulticore] Starting $jobs_to_start jobs\n";
 my $jobs_running = 0;
+my $job_number = 0;
 my %pid_to_job;
-my @failed_jobs;
+my %pid_to_out;
+my %num_to_pid;
+my %pid_to_status;
 while ($jobs_to_start > 0)
 {
 	while ($jobs_running < $num_threads and $jobs_to_start > 0)
 	{
 		my $job = pop @jobs;
+		$job_number++;
 
+		my $job_name = $batch_jobname_prefix.".".$job_number;
+		my $job_script = $batch_filename.".".$job_number.".sh";
+		my $job_out = $batch_filename.".".$job_number.".log";
+
+		# Ensure a sufficient delay
 		if (defined $last_job_start_time)
 		{
 			my $sleep_time = $delay - (time - $last_job_start_time);
 			if ($sleep_time > 0)
 			{
-				print "Pausing for $sleep_time seconds\n";
+				print "[runmulticore] Pausing for $sleep_time seconds\n";
 				sleep $sleep_time;
 			}
 		}
-
 		$last_job_start_time = time;
 
+		# Fork a new process for the job
 		my $pid = fork();
-		
 		die "Unable to get a new process id\n" if not defined $pid;
 
+		# Check if process is child
 		if ($pid == 0)
 		{
-			my $return_value = system $job;
+			# Write script to execute job
+			open SCR, ">".$job_script or die "Error: Unable to open job script $job_script\n";
+			print SCR $job."\n";
+			print SCR "echo -e [runmulticore] Return codes: \${PIPESTATUS[*]}\n";
+			close SCR;
 
-			if ($return_value != 0)
+			# Do the command and write the stdout and stderr to the log file
+			my $sysretcode = system "bash $job_script &> $job_out";
+			print "bash $job_script 2>&1 > $job_out\n";
+
+			# Propogate failure return code
+			if ($sysretcode != 0)
 			{
 				exit(-1);
 			}
@@ -85,55 +107,88 @@ while ($jobs_to_start > 0)
 		}
 		else
 		{
-			print "Job $pid started\n";
+			# Update job numbers and store job info
+			print "[runmulticore] Job $pid started\n";
 			$jobs_running++;
 			$jobs_to_start--;
+			$num_to_pid{$job_number} = $pid;
 			$pid_to_job{$pid} = $job;
+			$pid_to_out{$pid} = $job_out;
 		}
 	}
 	
-	my $finished_pid = wait();
+	# Wait for next job	
+	my $pid = wait();
 
-	my $status = "success";
-	if ($? > 0)
-	{
-		$status = "failure";
-		push @failed_jobs, $pid_to_job{$finished_pid};
-	}
+	# Store status
+	$pid_to_status{$pid} = $?;
 	
 	$jobs_running--;
-	
-	print "Job $finished_pid finished with status $status\n";
 }
 
+# Wait for remaining jobs
 while ($jobs_running)
 {
-	my $finished_pid = wait();
+	# Wait for next job	
+	my $pid = wait();
 
-	my $status = "success";
-	if ($? > 0)
-	{
-		$status = "failure";
-		push @failed_jobs, $pid_to_job{$finished_pid};
-	}
+	# Store status
+	$pid_to_status{$pid} = $?;
 	
 	$jobs_running--;
-
-	print "Job $finished_pid finished with status $status\n";
 }
 
+# Determine which jobs failed
+my @failed_jobs;
+foreach my $num (sort {$a <=> $b} keys %num_to_pid)
+{
+	my $pid = $num_to_pid{$num};
+	my $job = $pid_to_job{$pid};
+	my $job_out = $pid_to_out{$pid};
+	my $status = $pid_to_status{$pid};
+
+	print "[runmulticore] $job\n";
+
+	my $failed = 0;
+	if (-e $job_out)
+	{
+		# Cat output file to standard out
+		my $cat_result = system "cat $job_out";
+
+		# Get the pipestatus result from the bottom of the log file
+		my $pipestatus = `tail -1 $job_out`;
+		chomp($pipestatus);
+
+		# Check for any failure in the pipestatus and system return code
+		$failed = 1 if not $pipestatus =~ /Return codes/;
+		$failed = 1 if $pipestatus =~ /[1-9]/;
+		$failed = 1 if $cat_result != 0;
+	}
+
+	# Failed if job status was failure
+	$failed = 1 if $status != 0;
+
+	if ($failed != 0)
+	{
+		push @failed_jobs, $job
+	}
+}
+
+# Output jobs that failed
 my $num_failed = scalar @failed_jobs;
 if ($num_failed > 0)
 {
-	print "The following $num_failed jobs failed:\n";
+	print "[runmulticore] The following $num_failed jobs failed:\n";
 	foreach my $failed_job (@failed_jobs)
 	{
-		print $failed_job."\n";
+		print "[runmulticore] $failed_job\n";
 	}
 	exit(1);
 }
 else
 {
-	print "Finished succesfully\n";
+	print "[runmulticore] Finished succesfully\n";
 	exit;
 }
+
+

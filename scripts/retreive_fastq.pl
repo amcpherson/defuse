@@ -7,6 +7,8 @@ use Getopt::Long;
 use File::Basename;
 use Cwd qw[abs_path];
 
+$| = 1;
+
 use lib dirname($0);
 use configdata;
 
@@ -229,6 +231,9 @@ foreach my $lane (keys %convert_filename)
 # Create a sorted list of filenames
 my @source_list = sort {$a cmp $b} keys %convert_filename;
 
+# Check that we have at least one source file
+die "Error: No source data files found\n" if scalar @source_list == 0;
+
 # Compare with existing source file list
 my $same_source_files = 1;
 if (scalar @source_list != scalar @previous_source_list)
@@ -250,7 +255,7 @@ else
 # Exit if these are the same source files and the fastq files exist
 if ($same_source_files and -e $reads_end_1_fastq and -e $reads_end_2_fastq)
 {
-	print "No new data files found\n";
+	print "No new source data files found\n";
 	exit;
 }
 
@@ -342,6 +347,10 @@ foreach my $lane (keys %convert_command)
 		die "Conversion Failed\n";
 	}
 }
+
+# Check if we found reads
+die "Error: No reads found\n" if $current_fragment_index == 0;
+print "Imported $current_fragment_index reads\n";
 
 # Finished writing fastq sequences
 close FQ1;

@@ -17,10 +17,8 @@ while (my $line = <>)
 	my @fields = split /\t/, $line;
 
 	my $reference = $fields[2];
-
-	next unless $reference =~ /(ENSG\d+)\|(ENST\d+)/;
+	$reference =~ /^([^|]*)/;
 	my $gene = $1;
-	my $transcript = $2;
 
 	$gene_counts{$gene} += 0.5;
 }

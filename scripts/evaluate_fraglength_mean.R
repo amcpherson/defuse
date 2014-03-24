@@ -14,14 +14,20 @@ sample_mean_variance <- fraglength_variance / spanning_data$count + (spanning_da
 fraglength_prob <- dnorm((spanning_data$mean - fraglength_mean)/sqrt(sample_mean_variance), log=T);
 fraglength_pval <- 2 * pnorm(-abs(spanning_data$mean - fraglength_mean)/sqrt(sample_mean_variance));
 
-fraglength_mean_adjusted <- fraglength_mean + fraglength_variance / (fraglength_mean - 2 * readlength_max);
-fraglength_variance_adjusted <- fraglength_variance - fraglength_variance^2 / (fraglength_mean - 2 * readlength_max)^2;
-sample_mean_variance_adjusted <- fraglength_variance_adjusted / spanning_data$count + (spanning_data$count - 1) * cov_stats$span_covariance / spanning_data$count;
-fraglength_prob_adjusted <- dnorm((spanning_data$mean - fraglength_mean_adjusted)/sqrt(sample_mean_variance_adjusted), log=T);
-fraglength_pval_adjusted <- 2 * pnorm(-abs(spanning_data$mean - fraglength_mean_adjusted)/sqrt(sample_mean_variance_adjusted));
+fraglength_test <- 1 - pnorm((fraglength_mean - 2 * readlength_max) / read_stats$fraglength_stddev)
 
-pvalue = fraglength_pval * (fraglength_prob > fraglength_prob_adjusted) + fraglength_pval_adjusted * (fraglength_prob <= fraglength_prob_adjusted);
-pvalue[spanning_data$mean >= fraglength_mean & spanning_data$mean <= fraglength_mean_adjusted] = 1;
+if (fraglength_test < 0.05) {
+	fraglength_mean_adjusted <- fraglength_mean + fraglength_variance / (fraglength_mean - 2 * readlength_max);
+	fraglength_variance_adjusted <- fraglength_variance - fraglength_variance^2 / (fraglength_mean - 2 * readlength_max)^2;
+	sample_mean_variance_adjusted <- fraglength_variance_adjusted / spanning_data$count + (spanning_data$count - 1) * cov_stats$span_covariance / spanning_data$count;
+	fraglength_prob_adjusted <- dnorm((spanning_data$mean - fraglength_mean_adjusted)/sqrt(sample_mean_variance_adjusted), log=T);
+	fraglength_pval_adjusted <- 2 * pnorm(-abs(spanning_data$mean - fraglength_mean_adjusted)/sqrt(sample_mean_variance_adjusted));
+
+	pvalue = fraglength_pval * (fraglength_prob > fraglength_prob_adjusted) + fraglength_pval_adjusted * (fraglength_prob <= fraglength_prob_adjusted);
+	pvalue[spanning_data$mean >= fraglength_mean & spanning_data$mean <= fraglength_mean_adjusted] = 1;
+} else {
+	pvalue = fraglength_pval
+}
 
 pvalue_data <- data.frame(id=spanning_data$id, pvalue=pvalue);
 

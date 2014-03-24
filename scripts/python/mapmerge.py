@@ -1,86 +1,83 @@
-
-class delegator(object):
-	def delegate(self, jobs):
-		for job in jobs:
-			job()
-
-
-class jobcontainer(object):
-	def __init__(self, callable, input):
-		self.callable = callable
-		self.input = input
-	def __call__(self):
-		self.output = self.callable(self.input)
-	
-def mapmerge(input, split, mapper, output, deleg):
-	splitjob = jobcontainer(input.split, split)
-	deleg.delegate([splitjob])
-	splitinputs = splitjob.output
-	mapjobs = []
-	for splitinput in splitinputs:
-		mapjobs.append(jobcontainer(mapper, splitinput))
-	if (len(mapjobs) == 0):
-		return
-	deleg.delegate(mapjobs)
-	splitoutputs = []
-	for mapjob in mapjobs:
-		splitoutputs.append(mapjob.output)
-	deleg.delegate([jobcontainer(output.merge, splitoutputs)])
-
-class testinput(object):
-	def __init__(self, data):
-		self.data = data
-	def split(self, split):
-		print split
-		splitdat = []
-		for dat in self.data:
-			splitdat.append(testinput([dat]))
-		return splitdat
-			
-class testmapper(object):
-	def __call__(self, input):
-		a = []
-		for inp in input.data:
-			a.append(inp * 2)
-			a.append(inp * 3)
-		return a
-
-class testoutput(object):
-	def merge(self, data):
-		self.merged = []
-		for dat in data:
-			self.merged.append(dat)
-
+import cmdrun
+import optparse
 import csv
+import os
+import sys
+import hashlib
 
-def splitfastq(self, fastqfilename, split):
-	splitprefix = fastqfilename + ".split.%.fastq"
-	splitlistfilename = fastq2filename + ".split.list"
-	runcmd("split_fastq.pl %s %d %s > %s" % fastqfilename, split["reads_per_file"], splitprefix, splitlistfilename)
-	splitlistfile = open(splitlistfilename, "rb")
-	return splitlistfile.readlines()
+usage = "usage: %prog [options] input output command"
+parser = optparse.OptionParser(usage)
+parser.add_option("-s", "--split_size", type="int", dest="split_size", help="Split size in lines", default="1000")
+parser.add_option("-w", "--working_dir", type="string", dest="working_dir", help="Working directory", default="./")
+parser.add_option("-t", "--submit_type", type="string", dest="submit_type", help="Type of job submission", default="direct")
+parser.add_option("-m", "--job_mem", type="string", dest="job_mem", help="Memory per job in Gigabytes", default="2")
 
-class fastqpair(object):
-	def __init__(self, fastq1filename, fastq2filename):
-		self.fastq1filename = fastq1filename
-		self.fastq2filename = fastq2filename
-	def split(self, split):
-		split1list = splitfastq(fastq1filename, split)
-		split2list = splitfastq(fastq2filename, split)
-		if (len(split1list) != len(split2list)):
-			raise
-		splitfastqpairs = []
-		for splitindex in range(len(split1list)):
-			splitfastqpairs.append(fastqpair(split1list[splitindex],split2list[splitindex))
-		return splitfastqpairs
+(options, args) = parser.parse_args()
 
-if __name__ == "__main__":
-	input = testinput(range(10))
-	mapper = testmapper()
-	output = testoutput()
-	deleg = delegator()
-	mapmerge(input, 1, mapper, output, deleg)
-	
-	for m in output.merged:
-		print m
-	
+if len(args) < 3:
+	parser.error("incorrect number of arguments")
+
+input = os.path.abspath(args[0])
+output = os.path.abspath(args[1])
+command = args[2]
+
+options.working_dir = os.path.abspath(options.working_dir)
+
+m = hashlib.md5()
+m.update(input.encode("utf-8"))
+m.update(output.encode("utf-8"))
+m.update(command.encode("utf-8"))
+job_name = "mapmerge." + m.hexdigest()
+
+print(job_name)
+
+log_filename = options.working_dir + "/" + job_name + ".log"
+
+cmdrun = cmdrun.cmdrun(job_name, options.working_dir, log_filename, job_type=options.submit_type, job_mem=options.job_mem)
+
+def remove_files(filenames):
+	for filename in filenames:
+		if os.path.exists(filename):
+			os.remove(filename)
+
+split_input_filenames = []
+split_input_file = 0
+split_input_index = 0
+split_input_lines = options.split_size
+
+input_file = open(input, 'r')
+for line in input_file:
+	if (split_input_lines == options.split_size):
+		if (split_input_file):
+			split_input_file.close()
+		split_input_filename = options.working_dir + "/" + job_name + ".%d" % split_input_index
+		split_input_filenames.append(split_input_filename)
+		split_input_file = open(split_input_filename, 'w')
+		split_input_index += 1
+		split_input_lines = 0
+	split_input_file.write(line)
+	split_input_lines += 1
+
+if (split_input_file):
+	split_input_file.close()
+
+split_output_filenames = []
+for split_input_filename in split_input_filenames:
+	split_output_filename = split_input_filename + ".out"
+	split_output_filenames.append(split_output_filename)
+	cmdrun.padd([command], {'input': split_input_filename}, {'output': split_output_filename});
+cmdrun.prun()
+
+merge_command = ["cat"]
+merge_inputs = {}
+for merge_index, split_output_filename in enumerate(split_output_filenames):
+	merge_input_id = "merge%d" % merge_index
+	merge_command.append("%(" + merge_input_id + ")s")
+	merge_inputs[merge_input_id] = split_output_filename
+merge_command.extend([">", "%(output)s"])
+cmdrun.run(merge_command, merge_inputs, {'output': output})
+
+remove_files(split_input_filenames)
+remove_files(split_output_filenames)
+os.remove(log_filename)
+

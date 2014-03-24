@@ -12,6 +12,7 @@
 #include "ExonRegions.h"
 #include "FastaIndex.h"
 #include "ReadStream.h"
+#include "ReadIndex.h"
 #include <boost/unordered_set.hpp>
 
 #include <vector>
@@ -37,8 +38,9 @@ public:
 	static void ReadCandidateRegions(istream& in, SplitAlignmentMap& splitAlignments);
 
 	static void ReadCandidateSequences(IReadStream* readStream, SplitAlignmentMap& splitAlignments);
+	static void ReadCandidateSequences(const ReadIndex& readIndex, SplitAlignmentMap& splitAlignments);
 
-	bool Align();
+	bool Align(bool generateAlignmentText);
 
 	static void WriteAlignments(ostream& out, SplitAlignmentMap& splitAlignments);
 	static void ReadAlignments(istream& in, SplitAlignmentMap& splitAlignments);
@@ -47,6 +49,7 @@ public:
 	
 	static void WriteSequences(ostream& out, SplitAlignmentMap& splitAlignments);
 	static void WriteBreaks(ostream& out, SplitAlignmentMap& splitAlignments);
+	static void WriteAlignText(ostream& out, SplitAlignmentMap& splitAlignments);
 	
 private:	
 	inline void AddAnchoredReads(const AlignmentIndex& discordant, const AlignmentIndex& anchored, const string& transcript, int strand, int revComp, int start, int end);
@@ -78,7 +81,9 @@ private:
 	IntegerPairVec mAlignmentSplit;
 	IntegerPairVec mAlignmentMatches;
 	IntegerVec mAlignmentScore;
+	StringVec mAlignmentText;
 	
+	IntegerPair mBestSplit;
 	IntegerVec mBreakPos;
 	string mSequence;
 	int mSplitReadCount;
@@ -87,3 +92,4 @@ private:
 };
 
 #endif
+

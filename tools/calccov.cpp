@@ -9,11 +9,8 @@
 #include "Common.h"
 #include "DebugCheck.h"
 #include "ExonRegions.h"
-#include "FastaIndex.h"
-#include "SplitFusion.h"
 #include "Parsers.h"
 #include "PathFinder.h"
-#include "ReadIndex.h"
 
 #include <fstream>
 #include <iostream>

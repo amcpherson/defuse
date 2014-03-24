@@ -70,6 +70,6 @@ while (<FA>)
 write_seq($current_seq_id, $current_seq);
 
 close FA;
-close $split_fasta_file;
+close $split_fasta_file if defined $split_fasta_file;
 
 	

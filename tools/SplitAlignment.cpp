@@ -30,8 +30,8 @@ const int minAnchor = 4;
 bool SplitAlignment::FindCandidates(const LocationVec& alignPair, const AlignmentIndex& discordant, const AlignmentIndex& anchored, const FastaIndex& reference, 
 							        const ExonRegions& exonRegions, double fragmentLengthMean, double fragmentLengthStdDev, int minReadLength, int maxReadLength)
 {
-	int minFragmentLength = fragmentLengthMean - 3 * fragmentLengthStdDev;
-	int maxFragmentLength = fragmentLengthMean + 3 * fragmentLengthStdDev;
+	int minFragmentLength = (int)(fragmentLengthMean - 3 * fragmentLengthStdDev);
+	int maxFragmentLength = (int)(fragmentLengthMean + 3 * fragmentLengthStdDev);
 
 	if (alignPair.size() != 2)
 	{
@@ -307,7 +307,31 @@ void SplitAlignment::ReadCandidateSequences(IReadStream* readStream, SplitAlignm
 	}
 }
 
-bool SplitAlignment::Align()
+void SplitAlignment::ReadCandidateSequences(const ReadIndex& readIndex, SplitAlignmentMap& splitAlignments)
+{
+	unordered_map<int,IntegerPairVec> candidateReadMap;
+	
+	for (SplitAlignmentMapIter splitAlignIter = splitAlignments.begin(); splitAlignIter != splitAlignments.end(); splitAlignIter++)
+	{
+		int id = splitAlignIter->first;
+		SplitAlignment& splitAlignment = splitAlignIter->second;
+		
+		splitAlignment.mCandidateSequence.resize(splitAlignment.mCandidateReadID.size());
+		
+		for (int candidateIndex = 0; candidateIndex < splitAlignment.mCandidateReadID.size(); candidateIndex++)
+		{
+			ReadID readID;
+			readID.id = splitAlignment.mCandidateReadID[candidateIndex];
+			
+			string readSeq;
+			readIndex.Find(readID.fragmentIndex, readID.readEnd, readSeq);
+			
+			splitAlignment.mCandidateSequence[candidateIndex] = readSeq;
+		}
+	}
+}
+
+bool SplitAlignment::Align(bool generateAlignmentText)
 {
 	if (mCandidateSequence.size() == 0)
 	{
@@ -318,7 +342,8 @@ bool SplitAlignment::Align()
 	
 	for (int candidateIndex = 0; candidateIndex < mCandidateReadID.size(); candidateIndex++)
 	{
-		int readID = mCandidateReadID[candidateIndex];
+		ReadID readID;
+		readID.id = mCandidateReadID[candidateIndex];
 		int revComp = mCandidateRevComp[candidateIndex];
 		string readSeq = mCandidateSequence[candidateIndex];
 		
@@ -345,10 +370,48 @@ bool SplitAlignment::Align()
 			
 			readSplits.insert(splitAlignment.split);
 			
-			mAlignmentReadID.push_back(readID);
+			mAlignmentReadID.push_back(readID.id);
 			mAlignmentSplit.push_back(splitAlignment.split);
 			mAlignmentMatches.push_back(IntegerPair(splitAlignment.matches1.size(),splitAlignment.matches2.size()));
 			mAlignmentScore.push_back(min(splitAlignment.score1,splitAlignment.score2));
+			
+			if (generateAlignmentText)
+			{
+				stringstream alignmentText;
+				
+				alignmentText << readID.fragmentIndex << ((readID.readEnd == 0) ? "/1" : "/2") << endl;
+				
+				int prevMatch = -1;
+				for (int matchIndex = 0; matchIndex < splitAlignment.matches1.size(); matchIndex++)
+				{
+					const IntegerPair& match = splitAlignment.matches1[matchIndex];
+					
+					int numRefGap = match.first - prevMatch - 1;
+					alignmentText << string(numRefGap,(prevMatch == -1) ? ' ' : '-');
+					alignmentText << readSeq[match.second];
+					
+					prevMatch = match.first;
+				}
+				
+				int numRemaining = mSplitAlignSeq[0].length() - prevMatch - 1 + 1;
+				alignmentText << string(numRemaining,'-');
+				
+				prevMatch = -1;
+				for (int matchIndex = 0; matchIndex < splitAlignment.matches2.size(); matchIndex++)
+				{
+					const IntegerPair& match = splitAlignment.matches2[matchIndex];
+					
+					int numRefGap = match.first - prevMatch - 1;
+					alignmentText << string(numRefGap,'-');
+					alignmentText << readSeq[match.second];
+					
+					prevMatch = match.first;
+				}
+				
+				alignmentText << endl;
+				
+				mAlignmentText.push_back(alignmentText.str());
+			}
 		}
 	}
 	
@@ -454,35 +517,35 @@ bool SplitAlignment::Evaluate()
 		return false;
 	}
 	
-	IntegerPair bestSplit = maxSplitScoreIter->first;
+	mBestSplit = maxSplitScoreIter->first;
 	
-	DebugCheck(bestSplit.first <= mSplitAlignSeq[0].length());
-	DebugCheck(bestSplit.second + 1 < mSplitAlignSeq[1].length());
+	DebugCheck(mBestSplit.first <= mSplitAlignSeq[0].length());
+	DebugCheck(mBestSplit.second + 1 < mSplitAlignSeq[1].length());
 	
-	string alignBreak1 = mSplitRemainderSeq[0] + mSplitAlignSeq[0].substr(0, bestSplit.first);
-	string alignBreak2 = mSplitAlignSeq[1].substr(bestSplit.second + 1) + mSplitRemainderSeq[1];
+	string alignBreak1 = mSplitRemainderSeq[0] + mSplitAlignSeq[0].substr(0, mBestSplit.first);
+	string alignBreak2 = mSplitAlignSeq[1].substr(mBestSplit.second + 1) + mSplitRemainderSeq[1];
 	
 	mSequence = alignBreak1 + "|" + alignBreak2;
 	
 	if (mSplitSeqStrand[0] == PlusStrand)
 	{
-		mBreakPos[0] = mSplitAlignSeqStart[0] + bestSplit.first - 1;
+		mBreakPos[0] = mSplitAlignSeqStart[0] + mBestSplit.first - 1;
 	}
 	else
 	{
-		mBreakPos[0] = mSplitAlignSeqStart[0] + mSplitAlignSeqLength[0] - bestSplit.first;				
+		mBreakPos[0] = mSplitAlignSeqStart[0] + mSplitAlignSeqLength[0] - mBestSplit.first;				
 	}
 	
 	if (mSplitSeqStrand[1] == PlusStrand)
 	{
-		mBreakPos[1] = mSplitAlignSeqStart[1] + bestSplit.second + 1;
+		mBreakPos[1] = mSplitAlignSeqStart[1] + mBestSplit.second + 1;
 	}
 	else
 	{
-		mBreakPos[1] = mSplitAlignSeqStart[1] + mSplitAlignSeqLength[1] - bestSplit.second - 2;
+		mBreakPos[1] = mSplitAlignSeqStart[1] + mSplitAlignSeqLength[1] - mBestSplit.second - 2;
 	}
 	
-	mSplitReadCount = splitCountMap[bestSplit];
+	mSplitReadCount = splitCountMap[mBestSplit];
 	
 	const IntegerVec& leftBaseCount = leftBaseCounts[maxSplitScoreIter->first];
 	const IntegerVec& rightBaseCount = rightBaseCounts[maxSplitScoreIter->first];
@@ -529,6 +592,29 @@ void SplitAlignment::WriteBreaks(ostream& out, SplitAlignmentMap& splitAlignment
 		for (int clusterEnd = 0; clusterEnd <= 1; clusterEnd++)
 		{
 			out << id << "\t" << clusterEnd << "\t" << splitAlignment.mAlignRefName[clusterEnd] << "\t" << (splitAlignment.mAlignStrand[clusterEnd] == PlusStrand ? "+" : "-") << "\t" << splitAlignment.mBreakPos[clusterEnd] << endl;
+		}
+	}
+}
+
+void SplitAlignment::WriteAlignText(ostream& out, SplitAlignmentMap& splitAlignments)
+{
+	for (SplitAlignmentMapConstIter splitAlignIter = splitAlignments.begin(); splitAlignIter != splitAlignments.end(); splitAlignIter++)
+	{
+		int id = splitAlignIter->first;
+		const SplitAlignment& splitAlignment = splitAlignIter->second;
+		
+		DebugCheck(!splitAlignment.mAlignmentText.empty());
+		
+		out << id << endl;
+		out << splitAlignment.mSplitAlignSeq[0] << "|" << splitAlignment.mSplitAlignSeq[1] << endl;
+		for (int alignmentIndex = 0; alignmentIndex < splitAlignment.mAlignmentReadID.size(); alignmentIndex++)
+		{
+			const IntegerPair& split = splitAlignment.mAlignmentSplit[alignmentIndex];
+			
+			if (split == splitAlignment.mBestSplit)
+			{
+				out << splitAlignment.mAlignmentText[alignmentIndex];
+			}
 		}
 	}
 }

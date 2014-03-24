@@ -191,6 +191,7 @@ verify_directory_exists($scripts_directory);
 my $retreive_fastq_script = "$scripts_directory/retreive_fastq.pl";
 my $remove_end_sed_command = "sed 's#/[12]\$##g'";
 my $alignjob_script = "$scripts_directory/alignjob.pl";
+my $samtools_merge_script = "$scripts_directory/samtools_merge.pl";
 my $filter_bowtie_script = "$scripts_directory/filter_bowtie.pl";
 my $filter_reference_script = "$scripts_directory/filter_bowtie_reference.pl";
 my $read_stats_script = "$scripts_directory/read_stats.pl";
@@ -201,7 +202,6 @@ my $split_candidate_reads_script = "$scripts_directory/split_candidate_reads.pl"
 my $get_align_regions_script = "$scripts_directory/get_align_regions.pl";
 my $merge_read_stats_script = "$scripts_directory/merge_read_stats.pl";
 my $merge_expression_script = "$scripts_directory/merge_expression.pl";
-my $split_align_merge_script = "$scripts_directory/splitalignmerge.pl";
 my $split_seq_merge_script = "$scripts_directory/splitseqmerge.pl";
 my $get_cluster_alignments_script = "$scripts_directory/get_cluster_alignments.pl";
 my $bowtie2sam_script = "$scripts_directory/bowtie2sam.pl";
@@ -623,21 +623,11 @@ sub splitalignmerge
 			# Merge expression statistics
 			$runner->padd("$merge_expression_script #<A > #>1", [@merge_jobs_expression], [$intermediate_expression]);
 			
-			# Merge bam files or copy if theres only one
-			if (scalar @merge_jobs_cdna_pair_bam == 1)
-			{
-				rename $merge_jobs_cdna_pair_bam[0], $intermediate_cdna_pair_bam;
-				rename $merge_jobs_spanning_bam[0], $intermediate_spanning_bam;
-				rename $merge_jobs_spanning_byread_bam[0], $intermediate_spanning_byread_bam;
-				rename $merge_jobs_anchored_bam[0], $intermediate_anchored_bam;
-			}
-			else
-			{
-				$runner->padd("$samtools_bin merge #>1 #<A", [@merge_jobs_cdna_pair_bam], [$intermediate_cdna_pair_bam]);
-				$runner->padd("$samtools_bin merge #>1 #<A", [@merge_jobs_spanning_bam], [$intermediate_spanning_bam]);
-				$runner->padd("$samtools_bin merge -n #>1 #<A", [@merge_jobs_spanning_byread_bam], [$intermediate_spanning_byread_bam]);
-				$runner->padd("$samtools_bin merge #>1 #<A", [@merge_jobs_anchored_bam], [$intermediate_anchored_bam]);
-			}
+			# Merge bam files
+			$runner->padd("$samtools_merge_script $samtools_bin #>1 #<A", [@merge_jobs_cdna_pair_bam], [$intermediate_cdna_pair_bam]);
+			$runner->padd("$samtools_merge_script $samtools_bin #>1 #<A", [@merge_jobs_spanning_bam], [$intermediate_spanning_bam]);
+			$runner->padd("$samtools_merge_script $samtools_bin -n #>1 #<A", [@merge_jobs_spanning_byread_bam], [$intermediate_spanning_byread_bam]);
+			$runner->padd("$samtools_merge_script $samtools_bin #>1 #<A", [@merge_jobs_anchored_bam], [$intermediate_anchored_bam]);
 			
 			push @all_intermediate_read_stats, $intermediate_read_stats;
 			push @all_intermediate_expression, $intermediate_expression;
@@ -662,21 +652,12 @@ sub splitalignmerge
 	# Merge intermediate expression statistics
 	$runner->run("$merge_expression_script #<A > #>1", [@all_intermediate_expression], [$expression]);
 	
-	# Merge bam files or copy if theres only one
-	if (scalar @all_intermediate_spanning_bam == 1)
-	{
-		rename $all_intermediate_cdna_pair_bam[0], $cdna_pair_bam;
-		rename $all_intermediate_spanning_bam[0], $spanning_bam;
-		rename $all_intermediate_spanning_byread_bam[0], $spanning_byread_bam;
-		rename $all_intermediate_anchored_bam[0], $anchored_bam;
-	}
-	else
-	{
-		$runner->run("$samtools_bin merge #>1 #<A", [@all_intermediate_cdna_pair_bam], [$cdna_pair_bam]);
-		$runner->run("$samtools_bin merge #>1 #<A", [@all_intermediate_spanning_bam], [$spanning_bam]);
-		$runner->run("$samtools_bin merge -n #>1 #<A", [@all_intermediate_spanning_byread_bam], [$spanning_byread_bam]);
-		$runner->run("$samtools_bin merge #>1 #<A", [@all_intermediate_anchored_bam], [$anchored_bam]);
-	}
+	# Merge bam files
+	$runner->padd("$samtools_merge_script $samtools_bin #>1 #<A", [@all_intermediate_cdna_pair_bam], [$cdna_pair_bam]);
+	$runner->padd("$samtools_merge_script $samtools_bin #>1 #<A", [@all_intermediate_spanning_bam], [$spanning_bam]);
+	$runner->padd("$samtools_merge_script $samtools_bin -n #>1 #<A", [@all_intermediate_spanning_byread_bam], [$spanning_byread_bam]);
+	$runner->padd("$samtools_merge_script $samtools_bin #>1 #<A", [@all_intermediate_anchored_bam], [$anchored_bam]);
+	$runner->prun();
 
 	if (lc($remove_job_files) eq "yes")	
 	{

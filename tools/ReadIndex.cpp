@@ -60,11 +60,11 @@ void ReadIndex::CheckFastqFail(int fragmentIndex, int readEnd) const
 
 void ReadIndex::Find(int fragmentIndex, string& readSeq1, string& readSeq2) const
 {
-	FindEnd(fragmentIndex, 0, readSeq1);
-	FindEnd(fragmentIndex, 1, readSeq2);
+	Find(fragmentIndex, 0, readSeq1);
+	Find(fragmentIndex, 1, readSeq2);
 }
 
-void ReadIndex::FindEnd(int fragmentIndex, int readEnd, string& readSeq) const
+void ReadIndex::Find(int fragmentIndex, int readEnd, string& readSeq) const
 {
 	long int fragmentFilePos = fragmentIndex * 2 * sizeof(long int) + readEnd * sizeof(long int);
 	mReadsIndexFile.seekg(fragmentFilePos);

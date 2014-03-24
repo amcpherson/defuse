@@ -85,9 +85,10 @@ class job(object):
 		if self.finished:
 			return
 		
-		# Submit the job using the submit function
+		# Submit the job using the submit function, taking at least 1 second
 		if not self.running:
 			self.submit()
+			time.sleep(1)
 			self.running = True
 
 		# Poll the job and update if status changed
@@ -158,6 +159,11 @@ class job(object):
 				else:
 					file.write("\t" + line)
 				line = next_line
+	
+	def cleanup(self):
+		os.remove(self.script)
+		os.remove(self.log)
+		
 
 class direct_job(job):
 	
@@ -261,20 +267,20 @@ def uptodate(inputs, outputs, remarks=[]):
 			remarks.append("%s missing" % output)
 		elif mod_time < max(in_times):
 			remarks.append("%s out of date" % output)
-	if max(in_times) < min(out_times) and min(out_times) != 0:
+	if max(in_times) <= min(out_times) and min(out_times) != 0:
 		return True
 	return False
 
 class cmdrun(object):
 
-	def __init__(self, name, workdir, job_type="direct"):
+	def __init__(self, name, workdir, log_filename, job_type="direct", job_mem = "2"):
 		self.name = name
 		self.workdir = workdir
 		self.prefix = workdir + "/" + name
-		self.log_filename = self.prefix + ".log"
+		self.log_filename = log_filename
 		self.max_parallel = 200
 		self.file_timeout = 100
-		self.jobmem = "2"
+		self.jobmem = job_mem
 		self.jobs = []
 		if not os.path.exists(self.workdir):
 			os.makedirs(self.workdir)
@@ -394,6 +400,10 @@ class cmdrun(object):
 					sys.stderr.write("\t" + job.full_command + "\n")
 					job.explain(sys.stderr)
 					job.writelog(sys.stderr)
+				
+				# Cleanup files if job succeeded
+				if job.succeeded:
+					job.cleanup()
 					
 			# End timer
 			time_taken = time.time() - start
