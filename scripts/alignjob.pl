@@ -21,16 +21,16 @@ push @usage, "  -c, --config    Configuration Filename\n";
 push @usage, "  -l, --local     Job Local Directory\n";
 push @usage, "  -o, --output    Output Directory\n";
 push @usage, "  -n, --name      Library Name\n";
-push @usage, "  -j, --job       Job Directory\n";
-push @usage, "  -p, --prefix    Prefix of Input/Output\n";
+push @usage, "  -j, --job       Job Name\n";
+push @usage, "  -p, --prefix    Prefix of Job Input/Output\n";
 
 my $help;
 my $config_filename;
 my $local_directory;
 my $output_directory;
 my $library_name;
-my $job_directory;
-my $prefix;
+my $job_name;
+my $job_prefix;
 
 GetOptions
 (
@@ -39,8 +39,8 @@ GetOptions
 	'local=s'     => \$local_directory,
 	'output=s'    => \$output_directory,
 	'name=s'      => \$library_name,
-	'job=s'       => \$job_directory,
-	'prefix=s'    => \$prefix,
+	'job=s'       => \$job_name,
+	'prefix=s'    => \$job_prefix,
 );
 
 not defined $help or die @usage;
@@ -49,25 +49,28 @@ defined $config_filename or die @usage;
 defined $local_directory or die @usage;
 defined $output_directory or die @usage;
 defined $library_name or die @usage;
-defined $job_directory or die @usage;
-defined $prefix or die @usage;
+defined $job_name or die @usage;
+defined $job_prefix or die @usage;
 
-print "Starting alignjob $prefix\n";
+print "Starting alignjob $job_name\n";
 
 my $config = configdata->new();
 $config->read($config_filename);
 
 # Config values
-my $cdna_gene_fasta      = $config->get_value("cdna_gene_fasta_cluster");
-my $cdna_fasta           = $config->get_value("cdna_fasta_cluster");
-my $rrna_fasta           = $config->get_value("rrna_fasta");
-my $ig_gene_list         = $config->get_value("ig_gene_list");
-my $max_insert_size      = $config->get_value("max_insert_size");
-my $scripts_directory    = $config->get_value("scripts_directory");
-my $bowtie_bin           = $config->get_value("bowtie_bin");
-my $samtools_bin         = $config->get_value("samtools_bin");
-my $bowtie_threads       = $config->get_value("bowtie_threads");
-my @prefilter_fastas     = $config->get_list("prefilter");
+my $cdna_gene_fasta          = $config->get_value("cdna_gene_fasta_cluster");
+my $cdna_fasta               = $config->get_value("cdna_fasta_cluster");
+my $rrna_fasta               = $config->get_value("rrna_fasta");
+my $ig_gene_list             = $config->get_value("ig_gene_list");
+my $max_insert_size          = $config->get_value("max_insert_size");
+my $discord_read_trim        = $config->get_value("discord_read_trim");
+my $scripts_directory        = $config->get_value("scripts_directory");
+my $bowtie_bin               = $config->get_value("bowtie_bin");
+my $samtools_bin             = $config->get_value("samtools_bin");
+my $bowtie_threads           = $config->get_value("bowtie_threads");
+my @prefilter_fastas         = $config->get_list("prefilter");
+my $remove_job_temp_files    = $config->get_value("remove_job_temp_files");
+my $bowtie_quals             = $config->get_value("bowtie_quals");
 
 sub verify_file_exists
 {
@@ -105,8 +108,8 @@ verify_directory_exists($scripts_directory);
 verify_directory_exists($local_directory);
 verify_directory_exists($output_directory);
 
-my $align_pair_bin = "$bowtie_bin --sam-nosq -S --mm -t -X $max_insert_size";
-my $align_single_bin = "$bowtie_bin --sam-nosq -S --mm -t -k 100 -m 100";
+my $align_pair_bin = "$bowtie_bin $bowtie_quals --sam-nosq -S --mm -t -X $max_insert_size";
+my $align_single_bin = "$bowtie_bin $bowtie_quals --sam-nosq -S --mm -t -k 100 -m 100";
 my $sort_cmd = "sort";
 
 my $filter_sam_readids_script = "$scripts_directory/filter_sam_readids.pl";
@@ -117,9 +120,9 @@ my $find_concordant_ensembl_script = "$scripts_directory/find_concordant_ensembl
 my $sam_readids_script = "$scripts_directory/sam_readids.pl";
 my $filter_sam_concordant_script = "$scripts_directory/filter_sam_concordant.pl";
 my $filter_sam_mapped_script = "$scripts_directory/filter_sam_mapped.pl";
+my $trim_fastq_script = "$scripts_directory/trim_fastq.pl";
 
-my $job_prefix = $job_directory."/".$prefix;
-my $local_prefix = abs_path($local_directory)."/".$library_name.".".$prefix;
+my $local_prefix = abs_path($local_directory)."/".$library_name.".".$job_name;
 
 # List of local files to remove on control-c
 my @local_filenames;
@@ -129,9 +132,9 @@ sub cleanup
 {
 	return if scalar @local_filenames == 0;
 	print "Cleaning Up\n";
-	foreach my $filename (@local_filenames)
+	if (lc($remove_job_temp_files) eq "yes")
 	{
-		unlink $filename if -e $filename;
+		unlink @local_filenames;
 	}
 }
 
@@ -165,12 +168,12 @@ sub get_local_filename
 }
 
 my $log_directory = $output_directory."/log";
-my $log_prefix = $log_directory."/".$prefix;
+my $log_prefix = $log_directory."/".$job_name;
 
 mkdir $log_directory if not -e $log_directory;
 
 my $runner = cmdrunner->new();
-$runner->name("alignjob.$prefix");
+$runner->name("alignjob.$job_name");
 $runner->prefix($log_prefix);
 $runner->submitter("direct");
 
@@ -199,11 +202,17 @@ $runner->run("$expression_script < #<1 > #>1", [$cdna_pair_sam], [$expression]);
 
 if (not $runner->uptodate([$reads_end_1_fastq, $reads_end_2_fastq], [$discordant_aligned_bam, $discordant_unaligned_bam]))
 {
+	print "Trimming reads\n";
+	my $trim_reads_end_1_fastq = get_local_filename("trim.1.fastq");
+	my $trim_reads_end_2_fastq = get_local_filename("trim.2.fastq");
+	$runner->run("$trim_fastq_script $discord_read_trim < #<1 > #>1", [$reads_end_1_fastq], [$trim_reads_end_1_fastq]);
+	$runner->run("$trim_fastq_script $discord_read_trim < #<1 > #>1", [$reads_end_2_fastq], [$trim_reads_end_2_fastq]);
+	
 	print "Finding alignable reads\n";
 	my $cdna_end_1_sam = get_local_filename("cdna.end.1.sam");
 	my $cdna_end_2_sam = get_local_filename("cdna.end.2.sam");
-	$runner->run("$align_single_bin $cdna_gene_fasta #<1 #>1", [$reads_end_1_fastq], [$cdna_end_1_sam]);
-	$runner->run("$align_single_bin $cdna_gene_fasta #<1 #>1", [$reads_end_2_fastq], [$cdna_end_2_sam]);
+	$runner->run("$align_single_bin $cdna_gene_fasta #<1 #>1", [$trim_reads_end_1_fastq], [$cdna_end_1_sam]);
+	$runner->run("$align_single_bin $cdna_gene_fasta #<1 #>1", [$trim_reads_end_2_fastq], [$cdna_end_2_sam]);
 	
 	my $concordant_readids = get_local_filename("concordant.readids");
 
@@ -240,8 +249,12 @@ if (not $runner->uptodate([$reads_end_1_fastq, $reads_end_2_fastq], [$discordant
 			$runner->run("$filter_sam_concordant_script < #<1 | $sam_readids_script | $sort_cmd -u > #>1", [$prefilter_pair_sam], [$prefilter_pair_readids]);
 			
 			push @all_prefilter_pair_readids, $prefilter_pair_readids;
-			unlink $prefilter_pair_sam;
 			$prefilter_out_num++;
+			
+			if (lc($remove_job_temp_files) eq "yes")
+			{
+				unlink $prefilter_pair_sam;
+			}
 		}
 
 		print "Excluding IG rearrangements\n";
@@ -255,11 +268,14 @@ if (not $runner->uptodate([$reads_end_1_fastq, $reads_end_2_fastq], [$discordant
 		print "Coallating concordant read ids\n";
 		$runner->run("$sort_cmd -u -m #<A > #>1", [$cdna_concordant_readids, $rrna_end_1_readids, $rrna_end_2_readids, $cdna_pair_readids, $ig_readids, @all_prefilter_pair_readids], [$concordant_readids]);
 		
-		unlink $cdna_pair_readids;
-		unlink @all_prefilter_pair_readids;
-		unlink $cdna_end_1_ig_readids;
-		unlink $cdna_end_2_ig_readids;
-		unlink $ig_readids;
+		if (lc($remove_job_temp_files) eq "yes")
+		{
+			unlink $cdna_pair_readids;
+			unlink @all_prefilter_pair_readids;
+			unlink $cdna_end_1_ig_readids;
+			unlink $cdna_end_2_ig_readids;
+			unlink $ig_readids;
+		}
 	}
 	
 	print "Extracting aligned read ids\n";
@@ -291,17 +307,6 @@ if (not $runner->uptodate([$reads_end_1_fastq, $reads_end_2_fastq], [$discordant
 	$runner->run("$samtools_bin view -bt $cdna_fasta_index #<1 | $samtools_bin sort -o - $cdna_pair_bam_prefix > #>1", [$cdna_pair_sam], [$cdna_pair_bam]);
 	$runner->run("$samtools_bin view -bt $cdna_gene_fasta_index #<1 | $samtools_bin sort -o - $discordant_aligned_bam_prefix > #>1", [$discordant_aligned_sam], [$discordant_aligned_bam]);
 	$runner->run("$samtools_bin view -bt $cdna_gene_fasta_index #<1 | $samtools_bin sort -o - $discordant_unaligned_bam_prefix > #>1", [$discordant_unaligned_sam], [$discordant_unaligned_bam]);
-
-	unlink $cdna_end_1_sam;
-	unlink $cdna_end_2_sam;
-	unlink $cdna_end_1_readids;
-	unlink $cdna_end_2_readids;
-	unlink $cdna_all_readids;
-	unlink $cdna_aligned_readids;
-	unlink $cdna_unaligned_readids;
-	unlink $discordant_aligned_readids;
-	unlink $discordant_unaligned_readids;
-	unlink $concordant_readids;
 }
 
 print "Finished Alignments\n";

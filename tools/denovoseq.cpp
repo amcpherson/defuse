@@ -133,10 +133,10 @@ int main(int argc, char* argv[])
 	CheckFile(breakFile, breakFilename);
 	CheckFile(logFile, logFilename);
 
-	DeNovoFusion deNovoFusion(discordant, anchored, reads, reference, exonRegions, fragmentLengthMean, fragmentLengthStdDev, minReadLength, maxReadLength, logFile);
-
 	for (LocationVecMapConstIter pairIter = alignRegionPairs.begin(); pairIter != alignRegionPairs.end(); pairIter++)
 	{
+		DeNovoFusion deNovoFusion(discordant, anchored, reads, reference, exonRegions, fragmentLengthMean, fragmentLengthStdDev, minReadLength, maxReadLength, logFile);
+
 		const string& pairID = pairIter->first;
 		const LocationVec& alignRegionPair = pairIter->second;
 

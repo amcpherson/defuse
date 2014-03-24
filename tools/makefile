@@ -89,6 +89,48 @@ setcover: \
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
 
+findcandidatereads: \
+		./AlignmentIndex.o\
+		./FastaIndex.o\
+		./Common.o\
+		./DebugCheck.o\
+		./ExonRegions.o\
+		./SplitAlignment.o\
+		./SplitReadAligner.o\
+		./Parsers.o\
+		./findcandidatereads.o\
+		$(BAMDIR)/$(BAMLIB)\
+		$(ZDIR)/$(ZLIB)
+
+dosplitalign: \
+		./AlignmentIndex.o\
+		./ReadIndex.o\
+		./FastaIndex.o\
+		./Common.o\
+		./DebugCheck.o\
+		./ExonRegions.o\
+		./SplitAlignment.o\
+		./SplitReadAligner.o\
+		./Parsers.o\
+		./ReadStream.o\
+		./dosplitalign.o\
+		$(BAMDIR)/$(BAMLIB)\
+		$(ZDIR)/$(ZLIB)
+
+evalsplitalign: \
+		./AlignmentIndex.o\
+		./ReadIndex.o\
+		./FastaIndex.o\
+		./Common.o\
+		./DebugCheck.o\
+		./ExonRegions.o\
+		./SplitAlignment.o\
+		./SplitReadAligner.o\
+		./ReadStream.o\
+		./evalsplitalign.o\
+		$(BAMDIR)/$(BAMLIB)\
+		$(ZDIR)/$(ZLIB)
+
 splitseq: \
 		./AlignmentIndex.o\
 		./ReadIndex.o\
@@ -134,7 +176,7 @@ estislands : \
 		$(BAMDIR)/$(BAMLIB)\
 		$(ZDIR)/$(ZLIB)
 
-tools : connectivity remapsplices overlapclusters maximalvalidclusters setcover splitseq denovoseq calccov estislands
+tools : connectivity remapsplices overlapclusters maximalvalidclusters setcover splitseq denovoseq calccov estislands findcandidatereads dosplitalign evalsplitalign
 	
 
 clean : 
