@@ -5,7 +5,6 @@
  *
  */
 
-#include "AlignmentIndex.h"
 #include "Common.h"
 #include "DebugCheck.h"
 #include "ExonRegions.h"

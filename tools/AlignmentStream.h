@@ -7,8 +7,6 @@
 #define ALIGNMENTSTREAM_H_
 
 #include "Common.h"
-#include "bam.h"
-#include "sam.h"
 
 #include <iostream>
 #include <fstream>
@@ -49,20 +47,6 @@ public:
 protected:
 	istream* mStream;
 	int mLineNumber;
-};
-
-
-class BamAlignmentStream : public AlignmentStream
-{
-public:
-	BamAlignmentStream(const string& bamFilename);
-	~BamAlignmentStream();
-	
-	bool GetNextAlignment(RawAlignment& alignment);
-	
-private:
-	samfile_t* mBamFile;
-	bam1_t mCurrentEntry;
 };
 
 

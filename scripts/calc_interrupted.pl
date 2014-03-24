@@ -160,8 +160,12 @@ foreach my $transcript_id (keys %transcript_fusion_position)
 		my $pos = $sam_fields[3];
 		my $seq = $sam_fields[9];
 			
-		$transcript_id eq $rname or die "Error: samtools retrieived alignments to $rname when alignments to $transcript_id were requested\n";
-			
+		if ($transcript_id ne $rname)
+		{
+			warn "Error: samtools retrieived alignments to $rname when alignments to $transcript_id were requested\n";
+			next;
+		}
+		
 		my $start = $pos;
 		my $end = $pos + length($seq) - 1;
 
@@ -188,6 +192,7 @@ foreach my $transcript_id (keys %transcript_fusion_position)
 		}
 	}
 	close TA;
+	($? >> 8) == 0 or die "Error: Unable to run samtools on $cdna_bam_filename\n";
 }
 
 foreach my $cluster_id (keys %breaks)

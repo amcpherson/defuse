@@ -155,11 +155,16 @@ sub calculate_break_concordant
 					my $read_align_start = int($pos);
 					my $read_align_end = int($pos + length($seq) - 1);
 					
-					$transcript_id eq $rname or die "Error: samtools retrieived alignments to $rname when alignments to $transcript_id were requested\n";
+					if ($transcript_id ne $rname)
+					{
+						warn "Error: samtools retrieived alignments to $rname when alignments to $transcript_id were requested\n";
+						next;
+					}
 
 					$qname_alignment{$qname}{$read_align_strand} = [$read_align_start,$read_align_end];
 				}
 				close TA;
+				($? >> 8) == 0 or die "Error: Unable to run samtools on $cdna_bam_filename\n";
 				
 				# Count the number of concordant reads spanning the breakpoint
 				foreach my $qname (keys %qname_alignment)

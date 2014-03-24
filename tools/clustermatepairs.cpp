@@ -8,7 +8,6 @@
 #include "AlignmentStream.h"
 #include "DebugCheck.h"
 #include "ExonRegions.h"
-#include "FragmentAlignmentsIterator.h"
 #include "IMatePairClusterer.h"
 #include "Indexer.h"
 #include "MatePairEM.h"
@@ -21,8 +20,6 @@
 #include <tclap/CmdLine.h>
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
-#include "bam.h"
-#include "sam.h"
 
 using namespace boost;
 using namespace std;

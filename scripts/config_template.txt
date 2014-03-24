@@ -4,6 +4,10 @@
 # At a minimum, change all values enclused by []
 #
 
+ensembl_version                             = 69
+ensembl_genome_version                      = GRCh37
+ucsc_genome_version                         = hg19
+
 # Directory where the defuse code was unpacked
 source_directory                            = [Where you unpacked the defuse code]
 
@@ -25,12 +29,18 @@ est_alignments                              = [spliced EST alignments downloaded
 unigene_fasta                               = [Unigene fasta downloaded from ncbi]
 
 # Paths to external tools
+samtools_bin                                = [path to your samtools binary
 bowtie_bin                                  = [path of your bowtie binary version 0.12.5 or greater recommended]
 bowtie_build_bin                            = [path of your bowtie-build binary version 0.12.5 or greater recommended]
 blat_bin                                    = [path of your blat binary]
 fatotwobit_bin                              = [path of your faToTwoBit binary from the blat suite]
 r_bin                                       = [path of your R binary]
 rscript_bin                                 = [path of your Rscript binary]
+gmap_bin                                    = [path of your gmap binary]
+gmap_setup_bin                              = [path of your gmap_setup binary]
+
+# Directory where you want your dataset
+gmap_index_directory                        = $(dataset_directory)/gmap
 
 # Dataset files
 dataset_prefix                              = $(dataset_directory)/defuse
@@ -61,9 +71,6 @@ scripts_directory                           = $(source_directory)/scripts
 tools_directory                             = $(source_directory)/tools
 data_directory                              = $(source_directory)/data
 
-# Path to samtools, 0.1.8 is compiled for you, use other versions at your own risk
-samtools_bin                                = $(source_directory)/external/samtools-0.1.8/samtools
-
 # Bowtie parameters
 bowtie_threads                              = 1
 bowtie_quals                                = --phred33-quals
@@ -85,17 +92,15 @@ dna_concordant_length                       = 2000
 # Trim length for discordant reads (split reads are not trimmed)
 discord_read_trim                           = 50
 
+# Calculate extra annotations, fusion splice index and interrupted index
+calculate_extra_annotations                 = no
+
 # Filtering parameters
 clustering_precision                        = 0.95
 span_count_threshold                        = 5
-split_count_threshold                       = 3
 percent_identity_threshold                  = 0.90
-max_dist_pos                                = 600
-num_dist_genes                              = 500
 split_min_anchor                            = 4
-max_concordant_ratio                        = 0.1
 splice_bias                                 = 10
-denovo_assembly                             = no
 positive_controls                           = $(data_directory)/controls.txt
 probability_threshold                       = 0.50
 
@@ -105,45 +110,10 @@ covariance_sampling_density                 = 0.01
 # Number of reads for each job in split
 reads_per_job                               = 1000000
 
-# Number of regions for each breakpoint sequence job in split
-regions_per_job                             = 20
-
 # If you have command line 'mail' and wish to be notified
 mailto                                      = andrew.mcpherson@gmail.com
 
 # Remove temp files
 remove_job_files                            = yes
 remove_job_temp_files                       = yes
-
-# Converting to fastq
-# Fastq converter config format 1 for reads stored in separate files for each end
-#  data_lane_rexex_N is a perl regex which stores the lane id in $1
-#  data_end_regex_N is a perl regex which stores the end, 1 or 2, in $1
-#  data_compress_regex_N is a perl regex which stores the compression extension in $1
-#  data_convert_N is the associated conversion utility that takes data at stdin and outputs fastq at stdout
-# Fastq converter config format 2 for reads stored in separate files for each end
-#  data_lane_regex_N is a perl regex which stores the lane id in $1
-#  data_compress_regex_N is a perl regex which stores the compression extension in $1
-#  data_end1_converter_N is the associated conversion utility that takes data at stdin and outputs fastq for end 1 at stdout
-#  data_end2_converter_N is the associated conversion utility that takes data at stdin and outputs fastq for end 2 at stdout
-
-data_lane_regex_1                           = ^(.+)_[12]_export\.txt.*$
-data_end_regex_1                            = ^.+_([12])_export\.txt.*$
-data_compress_regex_1                       = ^.+_[12]_export\.txt(.*)$
-data_converter_1                            = $(scripts_directory)/fq_all2std.pl export2std
-
-data_lane_regex_2                           = ^(.+)_[12]_concat_qseq\.txt.*$
-data_end_regex_2                            = ^.+_([12])_concat_qseq\.txt.*$
-data_compress_regex_2                       = ^.+_[12]_concat_qseq\.txt(.*)$
-data_converter_2                            = $(scripts_directory)/qseq2fastq.pl
-
-data_lane_regex_3                           = ^(.+)\.bam.*$
-data_compress_regex_3                       = ^.+\.bam(.*)$
-data_end1_converter_3                       = samtools view - | filter_sam_mate.pl 1 | sam_to_fastq.pl
-data_end2_converter_3                       = samtools view - | filter_sam_mate.pl 2 | sam_to_fastq.pl
-
-data_lane_regex_4                           = ^(.+).[12].fastq.*$
-data_end_regex_4                            = ^.+.([12]).fastq.*$
-data_compress_regex_4                       = ^.+.[12].fastq(.*)$
-data_converter_4                            = cat
 

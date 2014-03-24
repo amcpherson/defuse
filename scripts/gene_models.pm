@@ -64,6 +64,7 @@ sub new
 		$self->{genes}{$gene_id}{name} = $gene_name;
 		$self->{genes}{$gene_id}{chromosome} = $chromosome;
 		$self->{genes}{$gene_id}{strand} = $strand;
+		$self->{genes}{$gene_id}{source} = $source;
 		$self->{genes}{$gene_id}{transcripts}{$transcript_id} = 1;
 		
 		$self->{chromosomes}{$chromosome}{genes}{$gene_id} = 1;
@@ -73,6 +74,19 @@ sub new
 		$line_number++;
 	}
 	close GFF;
+	
+	# Create null gene entry
+	$self->{transcripts}{""}{gene} = "";
+	$self->{transcripts}{""}{chromosome} = "";
+	$self->{transcripts}{""}{strand} = "";
+	$self->{transcripts}{""}{source} = "";
+	push @{$self->{transcripts}{""}{exons}}, [0,0];
+	push @{$self->{transcripts}{""}{cds}}, [0,0];
+	$self->{genes}{""}{name} = "";
+	$self->{genes}{""}{chromosome} = "";
+	$self->{genes}{""}{strand} = "";
+	$self->{genes}{""}{source} = "";
+	$self->{genes}{""}{transcripts}{""} = 1;
 	
 	# Sort the exons and cds for each transcript
 	foreach my $transcript_id (keys %{$self->{transcripts}})
@@ -169,7 +183,10 @@ sub calc_nearest_gene
 	my $chromosome = shift;
 	my $break_pos = shift;
 	
-	die "Error: Unable to find gene models for chromosome $chromosome\n" if not defined $self->{chromosomes}{$chromosome};
+	if (not defined $self->{chromosomes}{$chromosome})
+	{
+		return "";
+	}
 	
 	my @gene_ids = retrieve_nearest($self->{chromosomes}{$chromosome}{nearest_gene}, [$break_pos,$break_pos]);
 	
@@ -205,9 +222,11 @@ sub calc_gene
 	my $ref_name = shift;
 	my $break_pos = shift;
 	
-	die "Error: Unable to find reference $ref_name\n" if not defined $self->{chromosomes}{$ref_name} and not defined $self->{transcripts}{$ref_name};
-	
-	if (defined $self->{transcripts}{$ref_name})
+	if (not defined $self->{chromosomes}{$ref_name} and not defined $self->{transcripts}{$ref_name})
+	{
+		return "";
+	}
+	elsif (defined $self->{transcripts}{$ref_name})
 	{
 		return $self->{transcripts}{$ref_name}{gene};
 	}
@@ -222,6 +241,11 @@ sub calc_overlapping_genes
 	my $self = shift;
 	my $ref_name = shift;
 	my $region = shift;
+	
+	if (not defined $self->{chromosomes}{$ref_name} and not defined $self->{transcripts}{$ref_name})
+	{
+		return ();
+	}
 	
 	my $chromosome = $self->calc_genomic_chromosome($ref_name);
 	my @genomic_regions = $self->calc_genomic_regions($ref_name, $region);
@@ -247,6 +271,11 @@ sub calc_gene_location
 	my $self = shift;
 	my $gene_id = shift;
 	my $break_pos = shift;
+	
+	if ($gene_id eq "")
+	{
+		return "";
+	}
 	
 	my $gene_region = $self->{genes}{$gene_id}{region};
 	my $strand = $self->{genes}{$gene_id}{strand};
@@ -395,6 +424,16 @@ sub calc_genomic_regions
 	if ($strand eq "-")
 	{
 		$region = [$transcript_length - $region->[1] + 1, $transcript_length - $region->[0] + 1];
+	}
+	
+	if ($region->[0] < 1)
+	{
+		$region = [1, $region->[1]];
+	}
+
+	if ($region->[1] > $transcript_length)
+	{
+		$region = [$region->[0], $transcript_length];
 	}
 	
 	my @genomic;

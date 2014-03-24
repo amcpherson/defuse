@@ -130,53 +130,6 @@ bool SamAlignmentStream::GetNextAlignment(RawAlignment& alignment)
 }
 
 
-BamAlignmentStream::BamAlignmentStream(const string& bamFilename) : mBamFile(0)
-{
-	mCurrentEntry.data = 0;
-	
-	mBamFile = samopen(bamFilename.c_str(), "rb", 0);
-	
-	if (mBamFile == 0)
-	{
-		cerr << "Error: Unable to open bam file " << bamFilename << endl;
-		exit(1);
-	}
-	
-	memset(&mCurrentEntry, 0, sizeof(bam1_t));
-}
-
-BamAlignmentStream::~BamAlignmentStream()
-{
-	samclose(mBamFile);
-	mBamFile = 0;
-	free(mCurrentEntry.data);
-}
-
-bool BamAlignmentStream::GetNextAlignment(RawAlignment& alignment)
-{
-	if (bam_read1(mBamFile->x.bam, &mCurrentEntry) <= 0)
-	{
-		return false;
-	}
-	
-	// Split qname into id and end
-	// Fragment index encoded in fragment name
-	string qname = string((char*)mCurrentEntry.data);
-	vector<string> qnameFields;
-	split(qnameFields, qname, is_any_of("/"));
-	
-	alignment.fragment = qnameFields[0];
-	alignment.readEnd = (qnameFields[1] == "1") ? 0 : 1;
-	alignment.reference = mBamFile->header->target_name[mCurrentEntry.core.tid];
-	alignment.strand = (mCurrentEntry.core.flag & 0x10) ? MinusStrand : PlusStrand;
-	alignment.region.start = mCurrentEntry.core.pos + 1;
-	alignment.region.end = mCurrentEntry.core.pos + mCurrentEntry.core.l_qseq;
-	
-	return true;
-}
-
-
-
 CompactAlignmentStream::CompactAlignmentStream(const string& alignFilename) : mStream(NULL), mLineNumber(0)
 {
 	if (alignFilename == "-")

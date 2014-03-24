@@ -108,8 +108,8 @@ verify_directory_exists($scripts_directory);
 verify_directory_exists($local_directory);
 verify_directory_exists($output_directory);
 
-my $align_pair_bin = "$bowtie_bin $bowtie_quals --sam-nosq -S -t -X $max_insert_size";
-my $align_single_bin = "$bowtie_bin $bowtie_quals --sam-nosq -S -t -k 100 -m 100";
+my $align_pair_bin = "$bowtie_bin $bowtie_quals --sam-nohead -S -t -X $max_insert_size";
+my $align_single_bin = "$bowtie_bin $bowtie_quals --sam-nohead -S -t -k 100 -m 100";
 my $sort_cmd = "sort";
 
 my $filter_fastq_script = "$scripts_directory/filter_fastq.pl";

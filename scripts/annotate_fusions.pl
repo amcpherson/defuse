@@ -59,11 +59,11 @@ my $est_fasta				= $config->get_value("est_fasta");
 my $est_alignments			= $config->get_value("est_alignments");
 my $repeats_regions			= $config->get_value("repeats_regions");
 my $splice_bias             = $config->get_value("splice_bias");
-my $denovo_assembly			= $config->get_value("denovo_assembly");
 my $tools_directory			= $config->get_value("tools_directory");
 my $scripts_directory		= $config->get_value("scripts_directory");
 my $samtools_bin			= $config->get_value("samtools_bin");
 my $percident_threshold		= $config->get_value("percent_identity_threshold");
+my $calc_extra_anno         = $config->get_value("calculate_extra_annotations");
 
 my $genome_max_ins = 2000;
 my $est_max_ins = 10000;
@@ -361,8 +361,11 @@ my $cdna_pair_sam = $output_directory."/cdna.pair.sam";
 my $cdna_pair_bam = $output_directory."/cdna.pair.bam";
 my $cdna_pair_bam_bai = $cdna_pair_bam.".bai";
 my $cdna_pair_bam_prefix = $cdna_pair_bam.".sort";
-$runner->run("$samtools_bin view -bt $cdna_fasta_index #<1 | $samtools_bin sort -o - $cdna_pair_bam_prefix > #>1", [$cdna_pair_sam], [$cdna_pair_bam]);
-$runner->padd("$samtools_bin index #<1 #>1", [$cdna_pair_bam], [$cdna_pair_bam_bai]);
+if ($calc_extra_anno eq "yes")
+{
+	$runner->run("$samtools_bin view -bt $cdna_fasta_index #<1 | $samtools_bin sort -o - $cdna_pair_bam_prefix > #>1", [$cdna_pair_sam], [$cdna_pair_bam]);
+	$runner->run("$samtools_bin index #<1", [$cdna_pair_bam], [$cdna_pair_bam_bai]);
+}
 
 # Calculate mapping statistics
 my %mapping_stats;
@@ -370,11 +373,17 @@ calculate_mapping_stats(\%mapping_stats);
 
 # Calculate break concordant counts
 my %break_concordant;
-calculate_break_concordant($break_filename, \%break_concordant);
+if ($calc_extra_anno eq "yes")
+{
+	calculate_break_concordant($break_filename, \%break_concordant);
+}
 
 # Calculate interrupted
 my %interruption_info;
-calculate_interrupted($break_filename, \%interruption_info);
+if ($calc_extra_anno eq "yes")
+{
+	calculate_interrupted($break_filename, \%interruption_info);
+}
 
 sub calculate_splicing_index
 {
@@ -399,7 +408,7 @@ foreach my $cluster_id (keys %cluster_ids)
 sub calculate_interrupted_index
 {
 	my $interrupted_ref = shift;
-
+	
 	return "-" if not defined $interrupted_ref->{count_before};
 	
 	my $expression_before = $interrupted_ref->{count_before} / ($interrupted_ref->{size_before} + 1) + 1;

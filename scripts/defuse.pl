@@ -19,7 +19,8 @@ push @usage, "Run the defuse pipeline for fusion discovery.\n";
 push @usage, "  -h, --help      Displays this information\n";
 push @usage, "  -c, --config    Configuration Filename\n";
 push @usage, "  -o, --output    Output Directory\n";
-push @usage, "  -d, --data      Source Data Directory (default: Skip data retrieval)\n";
+push @usage, "  -1, --1fastq    Fastq filename 1\n";
+push @usage, "  -2, --2fastq    Fastq filename 2\n";
 push @usage, "  -n, --name      Library Name (default: Output Directory Suffix)\n";
 push @usage, "  -l, --local     Job Local Directory (default: Output Directory)\n";
 push @usage, "  -s, --submit    Submitter Type (default: direct)\n";
@@ -27,7 +28,8 @@ push @usage, "  -p, --parallel  Maximum Number of Parallel Jobs (default: 1)\n";
 
 my $help;
 my $config_filename;
-my $source_directory;
+my $fastq1_filename;
+my $fastq2_filename;
 my $output_directory;
 my $library_name;
 my $joblocal_directory;
@@ -38,7 +40,8 @@ GetOptions
 (
 	'help'        => \$help,
 	'config=s'    => \$config_filename,
-	'data=s'      => \$source_directory,
+	'1fastq=s'    => \$fastq1_filename,
+	'2fastq=s'    => \$fastq2_filename,
 	'output=s'    => \$output_directory,
 	'name=s'      => \$library_name,
 	'local=s'     => \$joblocal_directory,
@@ -117,12 +120,10 @@ my $clustering_precision  = $config->get_value("clustering_precision");
 my $scripts_directory     = $config->get_value("scripts_directory");
 my $tools_directory       = $config->get_value("tools_directory");
 my $reads_per_job         = $config->get_value("reads_per_job");
-my $regions_per_job       = $config->get_value("regions_per_job");
 my $samtools_bin          = $config->get_value("samtools_bin");
 my $rscript_bin           = $config->get_value("rscript_bin");
 my $split_min_anchor      = $config->get_value("split_min_anchor");
 my $cov_samp_density      = $config->get_value("covariance_sampling_density");
-my $denovo_assembly       = $config->get_value("denovo_assembly");
 my $remove_job_files      = $config->get_value("remove_job_files");
 my $positive_controls     = $config->get_value("positive_controls");
 my $discord_read_trim     = $config->get_value("discord_read_trim");
@@ -130,7 +131,6 @@ my %chromosomes           = $config->get_hash("chromosomes");
 my $mt_chromosome         = $config->get_value("mt_chromosome");
 my $num_blat_sequences    = $config->get_value("num_blat_sequences");
 my $blat_bin              = $config->get_value("blat_bin");
-my $percident_threshold   = $config->get_value("percent_identity_threshold");
 my $dna_concordant_len    = $config->get_value("dna_concordant_length");
 my $gmap_bin              = $config->get_value("gmap_bin");
 my $gmap_index_directory  = $config->get_value("gmap_index_directory");
@@ -190,7 +190,7 @@ sub verify_directory_exists
 verify_directory_exists($scripts_directory);
 
 # Script and binary paths
-my $retreive_fastq_script = "$scripts_directory/retreive_fastq.pl";
+my $index_paired_fastq_script = "$scripts_directory/index_paired_fastq.pl";
 my $alignjob_script = "$scripts_directory/alignjob.pl";
 my $read_stats_script = "$scripts_directory/read_stats.pl";
 my $expression_script = "$scripts_directory/calculate_expression_simple.pl";
@@ -247,12 +247,14 @@ my $reads_names_filename = $reads_prefix.".names";
 my $reads_sources_filename = $reads_prefix.".sources";
 
 # Optionally retrieve fastq files
-if (defined $source_directory)
+if (defined $fastq1_filename and defined $fastq2_filename)
 {
-	print "Retreiving fastq files\n";
-	-d $source_directory or die "Error: Unable to find source directory $source_directory\n";
-	$source_directory = abs_path($source_directory);
-	$runner->run("$retreive_fastq_script -c $config_filename -d $source_directory -1 $reads_end_1_fastq -2 $reads_end_2_fastq -i $reads_index_filename -n $reads_names_filename -s $reads_sources_filename", [], []);
+	print "Importing fastq files\n";
+	-e $fastq1_filename or die "Error: Unable to find fastq $fastq1_filename\n";
+	-e $fastq2_filename or die "Error: Unable to find fastq $fastq2_filename\n";
+	$fastq1_filename = abs_path($fastq1_filename);
+	$fastq2_filename = abs_path($fastq2_filename);
+	$runner->run("$index_paired_fastq_script #<1 #<2 #>1 #>2 #>3 #>4", [$fastq1_filename,$fastq2_filename], [$reads_end_1_fastq,$reads_end_2_fastq,$reads_index_filename,$reads_names_filename]);
 }
 
 print "Splitting fastq files\n";
@@ -282,6 +284,7 @@ my @job_spanlength_samples;
 my @job_splitpos_samples;
 my @job_splitmin_samples;
 my @job_expression;
+my @job_cdna_pair_sam;
 foreach my $job_info (@job_infos)
 {
 	# Names of job products
@@ -319,6 +322,7 @@ foreach my $job_info (@job_infos)
 	push @job_splitpos_samples, $job_info->{splitpos_samples};
 	push @job_splitmin_samples, $job_info->{splitmin_samples};
 	push @job_expression, $job_info->{expression};
+	push @job_cdna_pair_sam, $job_info->{cdna_pair_sam};
 }
 $runner->prun();
 
@@ -328,11 +332,14 @@ my $spanlength_cov = $output_directory."/spanlength.cov";
 my $splitpos_cov = $output_directory."/splitpos.cov";
 my $splitmin_cov = $output_directory."/splitmin.cov";
 my $expression = $output_directory."/expression.txt";
-$runner->run("$merge_read_stats_script #<A > #>1", [@job_read_stats], [$read_stats]);
-$runner->run("$merge_cov_samples_script #<A > #>1", [@job_spanlength_samples], [$spanlength_cov]);
-$runner->run("$merge_cov_samples_script #<A > #>1", [@job_splitpos_samples], [$splitpos_cov]);
-$runner->run("$merge_cov_samples_script #<A > #>1", [@job_splitmin_samples], [$splitmin_cov]);
-$runner->run("$merge_expression_script #<A > #>1", [@job_expression], [$expression]);
+my $cdna_pair_sam = $output_directory."/cdna.pair.sam";
+$runner->padd("$merge_read_stats_script #<A > #>1", [@job_read_stats], [$read_stats]);
+$runner->padd("$merge_cov_samples_script #<A > #>1", [@job_spanlength_samples], [$spanlength_cov]);
+$runner->padd("$merge_cov_samples_script #<A > #>1", [@job_splitpos_samples], [$splitpos_cov]);
+$runner->padd("$merge_cov_samples_script #<A > #>1", [@job_splitmin_samples], [$splitmin_cov]);
+$runner->padd("$merge_expression_script #<A > #>1", [@job_expression], [$expression]);
+$runner->padd("cat #<A > #>1", [@job_cdna_pair_sam], [$cdna_pair_sam]);
+$runner->prun();
 
 # Read in the read stats
 my %read_stat_values;

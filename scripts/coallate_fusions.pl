@@ -40,7 +40,6 @@ my $config = configdata->new();
 $config->read($config_filename);
 
 my $scripts_directory		= $config->get_value("scripts_directory");
-my $denovo_assembly			= $config->get_value("denovo_assembly");
 
 my %span_count_failed;
 my %span_align_failed;
@@ -124,13 +123,6 @@ print "splitr_count\t";
 print "splitr_span_pvalue\t";
 print "splitr_pos_pvalue\t";
 print "splitr_min_pvalue\t";
-
-if (lc($denovo_assembly) eq "yes")
-{
-	print "denovo_sequence\t";
-	print "denovo_min_count\t";
-	print "denovo_span_pvalue\t";
-}
 
 foreach my $anno_type (@anno_types)
 {
