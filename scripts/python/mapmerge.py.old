@@ -1,0 +1,31 @@
+
+
+class mapjob(object):
+	def __init__(self, inputs, constants, mapper):
+		self.inputs = inputs
+		self.constants = constants
+		self.mapper = mapper
+	def __call__(self):
+		self.outputs = self.mapper(**self.inputs, **self.constants)
+	
+def mapmerge(inputs, constants, splitter, mapper, mergers, delegator):
+	split_inputs = splitter(inputs)
+	mapjobs = []
+	for split_input in split_inputs:
+		mapjobs.append(mapjob(split_input, constants, mapper))
+	if (len(mapjobs) == 0):
+		return
+	delegator.delegate(mapjobs)
+	split_outputs = []
+	num_outputs = len(mapjobs[0].outputs)
+	for output_index in range(num_outputs):
+		o
+		for job in mapjobs:
+			try: 
+			
+		for output in 
+		
+		for output in job.outputs:
+			split_outputs.append(job.outputs)
+	
+	
