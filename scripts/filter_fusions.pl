@@ -49,6 +49,10 @@ my $span_length_pvalue_threshold      = $config->get_value("span_length_pvalue_t
 my $split_pos_pvalue_threshold        = $config->get_value("split_pos_pvalue_threshold");
 my $split_min_pvalue_threshold        = $config->get_value("split_min_pvalue_threshold");
 my $percent_identity_threshold        = $config->get_value("percent_identity_threshold");
+my $genome_breakseq_threshold         = $config->get_value("genome_breakseq_threshold");
+my $cdna_breakseq_threshold           = $config->get_value("cdna_breakseq_threshold");
+my $est_breakseq_threshold            = $config->get_value("est_breakseq_threshold");
+my $estislands_breakseq_threshold     = $config->get_value("estislands_breakseq_threshold");
 my $scripts_directory                 = $config->get_value("scripts_directory");
 
 my %span_coverage_failed;
@@ -132,11 +136,10 @@ foreach my $cluster_id (keys %annotations)
 
 	print LOG "$cluster_id failed concordant alignment filter\n" and $false_pos{$cluster_id} = 1 and $span_align_failed{$cluster_id} = 1 if $annotations{$cluster_id}{concordant_ratio} > $max_concordant_ratio;
 
-	print LOG "$cluster_id failed genome alignment\n" and $false_pos{$cluster_id} = 1 and $alignment_failed{$cluster_id} = 1 if $annotations{$cluster_id}{genome_breakseqs_percident} > $percent_identity_threshold;
-	print LOG "$cluster_id failed cdna alignment\n" and $false_pos{$cluster_id} = 1 and $alignment_failed{$cluster_id} = 1 if $annotations{$cluster_id}{cdna_breakseqs_percident} > $percent_identity_threshold;
-	print LOG "$cluster_id failed est alignment\n" and $false_pos{$cluster_id} = 1 and $alignment_failed{$cluster_id} = 1 if $annotations{$cluster_id}{est_breakseqs_percident} > $percent_identity_threshold;
-
-	print LOG "$cluster_id failed estislands\n" and $false_pos{$cluster_id} = 1 and $estislands_failed{$cluster_id} = 1 if $annotations{$cluster_id}{breakseqs_estislands_percident} > $percent_identity_threshold;
+	print LOG "$cluster_id failed genome alignment\n" and $false_pos{$cluster_id} = 1 and $alignment_failed{$cluster_id} = 1 if $annotations{$cluster_id}{genome_breakseqs_percident} > $genome_breakseq_threshold;
+	print LOG "$cluster_id failed cdna alignment\n" and $false_pos{$cluster_id} = 1 and $alignment_failed{$cluster_id} = 1 if $annotations{$cluster_id}{cdna_breakseqs_percident} > $cdna_breakseq_threshold;
+	print LOG "$cluster_id failed est alignment\n" and $false_pos{$cluster_id} = 1 and $alignment_failed{$cluster_id} = 1 if $annotations{$cluster_id}{est_breakseqs_percident} > $est_breakseq_threshold;
+	print LOG "$cluster_id failed estislands\n" and $false_pos{$cluster_id} = 1 and $estislands_failed{$cluster_id} = 1 if $annotations{$cluster_id}{breakseqs_estislands_percident} > $estislands_breakseq_threshold;
 }
 
 foreach my $cluster_id (keys %annotations)

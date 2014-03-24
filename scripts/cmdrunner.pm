@@ -176,7 +176,7 @@ sub submitter_sge_cluster
 	my $qsub_commands = "-l mem_free=$job_mem";
 	
 	# Do the command with qsub and write the stdout and stderr to the log file
-	my $sysretcode = system "qsub -sync y -notify -b y -j y -o $job_out -N $job_name $qsub_commands 'bash $job_script' > /dev/null 2>&1";
+	my $sysretcode = system "qsub -sync y -notify -b y -j y -o $job_out -N $job_name $qsub_commands -S /bin/bash 'bash $job_script' > /dev/null 2>&1";
 
 	return $sysretcode;
 }

@@ -61,6 +61,7 @@ my $upstream_fasta			= $config->get_value("upstream_fasta");
 my $downstream_fasta		= $config->get_value("downstream_fasta");
 my $gene_info_list			= $config->get_value("gene_info_list");
 my $gene_adj_list			= $config->get_value("gene_adj_list");
+my $cdna_gene_fasta			= $config->get_value("cdna_gene_fasta");
 my $cdna_gene_regions		= $config->get_value("cdna_gene_regions");
 my $cdna_regions			= $config->get_value("cdna_regions");
 my $gene_tran_list			= $config->get_value("gene_tran_list");
@@ -74,6 +75,8 @@ my $samtools_bin			= $config->get_value("samtools_bin");
 my $genome_max_ins = 2000;
 my $est_max_ins = 10000;
 my $cdna_max_ins = 10000000;
+
+my $entropy_breakpoint_adjacent_size = 40;
 
 my $estislandsbin = $tools_directory."/estislands";
 my $break_concordant_script = $scripts_directory."/calc_break_concordant.pl";
@@ -148,6 +151,35 @@ my %fusion_strand2;
 my %genomic_breakpos1;
 my %genomic_breakpos2;
 my %fusion_break_predict;
+my %break_adj_entropy1;
+my %break_adj_entropy2;
+my %fusion_seq_length;
+my %fusion_seq1_length;
+my %fusion_seq2_length;
+
+sub calcentropy
+{
+	my $seq = shift;
+	
+	my $entropy = 0;
+	foreach my $n1 ("A","C","T","G")
+	{
+		foreach my $n2 ("A","C","T","G")
+		{
+			my $npair = $n1.$n2;
+			my $count = 0; $count++ while $seq =~ /$npair/g;
+			
+			next if $count == 0;
+			
+			my $p = $count / (length($seq) - 1);
+			my $logp = log($p)/log(2);
+			
+			$entropy -= $p * $logp;
+		}
+	}
+	
+	return $entropy;
+}
 
 my $breakpoint_sequences_temp_filename = $output_directory."/breakpoint.sequences.fa.tmp";
 my $breakpoint_sequences_filename = $output_directory."/breakpoint.sequences.fa";
@@ -186,6 +218,15 @@ foreach my $cluster_id (keys %cluster_ids)
 	
 	# Skip if no breakpoint sequence was predicted
 	delete $cluster_ids{$cluster_id} and next if $break_sequence eq "";
+
+	# Find position of breakpoint in break sequence	
+	my $break_in_seq = index $break_sequence, "|";
+
+	# Skip if we dont find the break marker
+	next if $break_in_seq < 0;
+	
+	# Remove breakpoint marker
+	$break_sequence =~ s/\|//g;
 	
 	die "Error: Unable to find break infor for $cluster_id\n" if scalar @{$splitr_break{$cluster_id}{breakpos}} != 2;
 	
@@ -204,6 +245,16 @@ foreach my $cluster_id (keys %cluster_ids)
 	$fusion_strand2{$cluster_id} = $strand2;
 	
 	$fusion_break_predict{$cluster_id} = $break_predict;
+
+	my $break_adj_seq1 = substr $break_sequence, max(0, $break_in_seq - $entropy_breakpoint_adjacent_size), min($break_in_seq, $entropy_breakpoint_adjacent_size);
+	my $break_adj_seq2 = substr $break_sequence, $break_in_seq, min(length($break_sequence) - $break_in_seq, $entropy_breakpoint_adjacent_size);
+	
+	$break_adj_entropy1{$cluster_id} = calcentropy($break_adj_seq1);
+	$break_adj_entropy2{$cluster_id} = calcentropy($break_adj_seq2);
+	
+	$fusion_seq_length{$cluster_id} = length($break_sequence);
+	$fusion_seq1_length{$cluster_id} = $break_in_seq;
+	$fusion_seq2_length{$cluster_id} = length($break_sequence) - $break_in_seq;
 }
 close SEQ;
 
@@ -278,6 +329,8 @@ foreach my $cluster_id (keys %cluster_ids)
 sub calculate_interrupted_index
 {
 	my $interrupted_ref = shift;
+
+	return "-" if not defined $interrupted_ref->{count_before};
 	
 	my $expression_before = $interrupted_ref->{count_before} / ($interrupted_ref->{size_before} + 1) + 1;
 	my $expression_after = $interrupted_ref->{count_after} / ($interrupted_ref->{size_after} + 1) + 1;
@@ -511,36 +564,25 @@ find_overlap($upstream_fasta, $upstream_overlap_output, \%upstream_overlap);
 find_overlap($downstream_fasta, $downstream_overlap_output, \%downstream_overlap);
 
 my %concordant_reads;
-my %multimapped_reads;
-
 find_concordant_reads($genome_fasta, $read_sequences_filename, \%concordant_reads, $genome_max_ins);
 find_concordant_reads($cdna_fasta, $read_sequences_filename, \%concordant_reads, $cdna_max_ins);
 find_anchored_concordant_reads($rrna_fasta, $read_sequences_filename, \%concordant_reads);
-find_multimapped_reads($genome_fasta, $read_sequences_filename, \%multimapped_reads);
 
 my %concordant_ratio;
-my %average_mappings;
 foreach my $cluster_id (keys %fusion_span_count)
 {
 	my $span_count = $fusion_span_count{$cluster_id};
 	
 	my $concordant_fragments = 0;
-	my $total_mappings;
 	foreach my $fragment_id (keys %{$fusion_fragments{$cluster_id}})
 	{
 		$concordant_fragments++ if $concordant_reads{$fragment_id};
-	
-		$multimapped_reads{$fragment_id}{'1'} = 1 if not defined $multimapped_reads{$fragment_id}{'1'};
-		$multimapped_reads{$fragment_id}{'2'} = 1 if not defined $multimapped_reads{$fragment_id}{'2'};
-
-		$total_mappings += $multimapped_reads{$fragment_id}{'1'} * $multimapped_reads{$fragment_id}{'2'};
 	}
 
 	$concordant_ratio{$cluster_id} = $concordant_fragments / $span_count;
-	$average_mappings{$cluster_id} = $total_mappings / $span_count;
 }
 
-my $expected_coverage = $read_stat_values{"fraglength_mean"} - $read_stat_values{"readlength_min"};
+my $minimum_coverage = $read_stat_values{"fraglength_mean"} - $read_stat_values{"readlength_min"};
 
 my %span_coverage;
 foreach my $cluster_id (keys %clusters)
@@ -557,7 +599,7 @@ foreach my $cluster_id (keys %clusters)
 		}
 		
 		my $num_covered = scalar keys %covered;
-		my $normalized_coverage = $num_covered / $expected_coverage;
+		my $normalized_coverage = $num_covered / $minimum_coverage;
 		
 		$span_coverage{$cluster_id}{$ref_name} = $normalized_coverage;
 	}
@@ -567,9 +609,35 @@ my %breakseqs_percident;
 find_breakseqs_percident($genome_fasta, $breakpoint_sequences_filename, \%{$breakseqs_percident{genome}}, $genome_max_ins);
 find_breakseqs_percident($cdna_fasta, $breakpoint_sequences_filename, \%{$breakseqs_percident{cdna}}, $cdna_max_ins);
 find_breakseqs_percident($est_fasta, $breakpoint_sequences_filename, \%{$breakseqs_percident{est}}, $est_max_ins);
+find_breakseqs_estislands_percident($genome_fasta, $breakpoint_sequences_filename, \%{$breakseqs_percident{estisland}});
 
-my %breakseqs_estislands_percident;
-find_breakseqs_estislands_percident($genome_fasta, $breakpoint_sequences_filename, \%breakseqs_estislands_percident);
+my %breakpoint_matches;
+find_breakseqs_matches($cdna_gene_fasta, $breakpoint_sequences_filename, \%breakpoint_matches);
+
+# Scale all the percent identities
+# Calculate breakpoint homologies
+my %breakpoint_homology;
+foreach my $cluster_id (keys %cluster_ids)
+{
+	foreach my $ref_type ("genome", "cdna", "est", "estisland")
+	{
+		next if not defined $breakseqs_percident{$ref_type}{$cluster_id};
+		
+		my $mismatches = (1 - $breakseqs_percident{$ref_type}{$cluster_id}) * $fusion_seq_length{$cluster_id};
+		my $adjusted_percident = 1 - ($mismatches / min($fusion_seq1_length{$cluster_id}, $fusion_seq2_length{$cluster_id}));
+		$adjusted_percident = max(0,$adjusted_percident);
+	
+		$breakseqs_percident{$ref_type}{$cluster_id} = $adjusted_percident;
+	}
+	
+	$breakpoint_matches{$cluster_id}{$fusion_gene1{$cluster_id}} = $fusion_seq1_length{$cluster_id} if not defined $breakpoint_matches{$cluster_id}{$fusion_gene1{$cluster_id}};
+	$breakpoint_matches{$cluster_id}{$fusion_gene2{$cluster_id}} = $fusion_seq2_length{$cluster_id} if not defined $breakpoint_matches{$cluster_id}{$fusion_gene2{$cluster_id}};
+
+	my $matches1 = $breakpoint_matches{$cluster_id}{$fusion_gene1{$cluster_id}} - $fusion_seq1_length{$cluster_id};
+	my $matches2 = $breakpoint_matches{$cluster_id}{$fusion_gene2{$cluster_id}} - $fusion_seq2_length{$cluster_id};
+	
+	$breakpoint_homology{$cluster_id} = $matches1 + $matches2;
+}
 
 foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 {
@@ -792,7 +860,7 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	$breakseqs_percident{genome}{$cluster_id} = 0 if not defined $breakseqs_percident{genome}{$cluster_id};
 	$breakseqs_percident{cdna}{$cluster_id} = 0 if not defined $breakseqs_percident{cdna}{$cluster_id};
 	$breakseqs_percident{est}{$cluster_id} = 0 if not defined $breakseqs_percident{est}{$cluster_id};
-	$breakseqs_estislands_percident{$cluster_id} = 0 if not defined $breakseqs_estislands_percident{$cluster_id};
+	$breakseqs_percident{estisland}{$cluster_id} = 0 if not defined $breakseqs_percident{estisland}{$cluster_id};
 
 	print $cluster_id."\tlibrary_name\t".$library_name."\n";
 
@@ -854,12 +922,19 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	
 	print $cluster_id."\tspan_count\t".$fusion_span_count{$cluster_id}."\n";
 	print $cluster_id."\tconcordant_ratio\t".$concordant_ratio{$cluster_id}."\n";
-	print $cluster_id."\taverage_mappings\t".$average_mappings{$cluster_id}."\n";
 	print $cluster_id."\tgenome_breakseqs_percident\t".$breakseqs_percident{genome}{$cluster_id}."\n";
 	print $cluster_id."\tcdna_breakseqs_percident\t".$breakseqs_percident{cdna}{$cluster_id}."\n";
 	print $cluster_id."\test_breakseqs_percident\t".$breakseqs_percident{est}{$cluster_id}."\n";
-	print $cluster_id."\tbreakseqs_estislands_percident\t".$breakseqs_estislands_percident{$cluster_id}."\n";
+	print $cluster_id."\tbreakseqs_estislands_percident\t".$breakseqs_percident{estisland}{$cluster_id}."\n";
 	print $cluster_id."\tbreak_predict\t".$fusion_break_predict{$cluster_id}."\n";
+
+	print $cluster_id."\tbreak_adj_entropy1\t".$break_adj_entropy1{$cluster_id}."\n";
+	print $cluster_id."\tbreak_adj_entropy2\t".$break_adj_entropy2{$cluster_id}."\n";
+	print $cluster_id."\tbreakpoint_homology\t".$breakpoint_homology{$cluster_id}."\n";
+	
+	print $cluster_id."\tbreak_adj_entropy_min\t".min($break_adj_entropy1{$cluster_id},$break_adj_entropy2{$cluster_id})."\n";
+	print $cluster_id."\tspan_coverage_min\t".min($span_coverage{$cluster_id}{$ref_name1},$span_coverage{$cluster_id}{$ref_name2})."\n";
+	print $cluster_id."\tspan_coverage_max\t".max($span_coverage{$cluster_id}{$ref_name1},$span_coverage{$cluster_id}{$ref_name2})."\n";
 }
 
 sub read_splitr_seq
@@ -1011,7 +1086,9 @@ sub find_concordant_reads
 		chomp;
 		my @psl_fields = split /\t/;
 		
+		my $matches = $psl_fields[0];
 		my $read_id = $psl_fields[9];
+		my $qsize = $psl_fields[10];
 		my $align_chr = $psl_fields[13];
 		my $align_start = $psl_fields[15];
 		my $align_end = $psl_fields[16];
@@ -1020,6 +1097,9 @@ sub find_concordant_reads
 		$read_id =~ /(.*)\/([12])/;
 		my $fragment_id = $1;
 		my $read_end = $2;
+
+		my $percent_identity = $matches / $qsize;
+		next if $percent_identity < 0.90;
 
 		$align_chr =~ s/ENST\d+//g;
 
@@ -1071,7 +1151,6 @@ sub find_multimapped_reads
 		my @psl_fields = split /\t/;
 		
 		my $matches = $psl_fields[0];
-		my $mismatches = $psl_fields[1];
 		my $read_id = $psl_fields[9];
 		my $qsize = $psl_fields[10];
 		my $align_chr = $psl_fields[13];
@@ -1083,7 +1162,7 @@ sub find_multimapped_reads
 		my $fragment_id = $1;
 		my $read_end = $2;
 
-		my $percent_identity = ($matches - $mismatches) / $qsize;
+		my $percent_identity = $matches / $qsize;
 		next if $percent_identity < 0.90;
 
 		push @{$read_align{$fragment_id}{$read_end}}, [$align_chr,$align_strand,$align_start,$align_end];
@@ -1134,12 +1213,10 @@ sub find_anchored_concordant_reads
 		my @psl_fields = split /\t/;
 
 		my $matches = $psl_fields[0];
-		my $mismatches = $psl_fields[1];
 		my $qsize = $psl_fields[10];
 		my $read_id = $psl_fields[9];
 
-		my $percent_identity = ($matches - $mismatches) / $qsize;	
-
+		my $percent_identity = $matches / $qsize;	
 		next if $percent_identity < 0.9;
 
 		$read_id =~ /(.*)\/([12])/;
@@ -1179,6 +1256,39 @@ sub find_breakseqs_percident
 		
 		$max_percident_ref->{$cluster_id} = 0 if not defined $max_percident_ref->{$cluster_id};
 		$max_percident_ref->{$cluster_id} = max($max_percident_ref->{$cluster_id}, $percent_identity);
+	}
+	close PSL;
+}
+
+sub find_breakseqs_matches
+{
+	my $reference_fasta = shift;
+	my $breakpoints_fasta = shift;
+	my $max_matches_ref = shift;
+
+	my $breakpoints_psl = $breakpoints_fasta.".".basename($reference_fasta).".psl";
+	
+	$runner->run("$blat_bin -noHead $reference_fasta #<1 #>1", [$breakpoints_fasta], [$breakpoints_psl]);
+
+	open PSL, $breakpoints_psl or die "Error: Unable to open $breakpoints_psl\n";
+	while (<PSL>)
+	{
+		chomp;
+		my @psl_fields = split /\t/;
+	
+		my $num_matches = $psl_fields[0];
+		my $num_target_bases_inserted = $psl_fields[7];
+		my $cluster_id = $psl_fields[9];
+		my $breakpoint_seq_length = $psl_fields[10];
+		my $target_seq_name = $psl_fields[13];
+
+		$target_seq_name =~ /(ENSG\d+)/;
+		my $gene = $1;
+
+		next unless $fusion_gene_lookup{$cluster_id}{$gene};
+
+		$max_matches_ref->{$cluster_id}{$gene} = 0 if not defined $max_matches_ref->{$cluster_id}{$gene};
+		$max_matches_ref->{$cluster_id}{$gene} = max($max_matches_ref->{$cluster_id}{$gene}, $num_matches);
 	}
 	close PSL;
 }

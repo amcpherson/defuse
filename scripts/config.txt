@@ -1,10 +1,16 @@
+#
+# Configuration file for deFuse
+#
+# At a minimum, change all values enclused by []
+#
+
 # Directory where you have decompressed your dataset
-dataset_dir                                 = /share/data4/amcpherson/fusions/release/dataset
-dataset_prefix                              = $(dataset_dir)/Homo_sapiens.NCBI36.54
+dataset_dir                                 = [Where you unpacked or intend to store the dataset]
+dataset_prefix                              = $(dataset_dir)/Homo_sapiens.GRCh37.59
 
 # Local directory acessible by individual cluster jobs
 cluster_dir                                 = $(dataset_dir)
-cluster_prefix                              = $(cluster_dir)/Homo_sapiens.NCBI36.54
+cluster_prefix                              = $(cluster_dir)/Homo_sapiens.GRCh37.59
 
 # Dataset files
 gene_models                                 = $(dataset_prefix).gtf
@@ -33,8 +39,8 @@ ig_gene_list                                = $(dataset_prefix).ig.gene.list
 gene_info_list                              = $(dataset_prefix).gene.info.list
 gene_adj_list                               = $(dataset_prefix).gene.adj.list
 gene_tran_list                              = $(dataset_prefix).genetran.list
-est_fasta                                   = $(dataset_dir)/Homo_sapiens.NCBI.est.fa
-est_alignments                              = $(dataset_dir)/Homo_sapiens.NCBI36.est.alignments.psl
+est_fasta                                   = $(dataset_dir)/est.fa
+est_alignments                              = $(dataset_dir)/intronEst.txt
 
 # Fasta files with bowtie indices, accessible by individual alignment jobs, possibly locally stored on cluster nodes
 #  If you wish to have files local to a cluster's execution nodes, these can be different than the 
@@ -45,27 +51,28 @@ cdna_gene_fasta_cluster                     = $(cluster_prefix).cdna.gene.fa
 # Fasta files with bowtie indices for prefiltering reads for concordantly mapping pairs
 #  Accessed only by individual jobs, thus these files could be put in the local directory 
 #  of each cluster node if a cluster is being used. 
-prefilter1                                  = $(cluster_dir)/Homo_sapiens.NCBI36.54.dna.fa
+prefilter1                                  = $(cluster_dir)/Homo_sapiens.GRCh37.59.dna.fa
 prefilter2                                  = $(cluster_dir)/Hs.seq.uniq
 
 # Path where you unpacked the source
-source_directory                            = /share/data4/amcpherson/svn/code/dev/defuse/
+source_directory                            = [where you unpacked the source code]
 
 # deFuse scripts and tools
 scripts_directory                           = $(source_directory)/scripts
 tools_directory                             = $(source_directory)/tools
+data_directory                              = $(source_directory)/data
 
 # Path to samtools, 0.1.8 is compiled for you, use other versions at your own risk
 samtools_bin                                = $(source_directory)/external/samtools-0.1.8/samtools
 
 # Paths to executables and scripts
-bowtie_bin                                  = /home/amcpherson/install/bin/bowtie
-bowtie_build_bin                            = /home/amcpherson/install/bin/bowtie-build
+bowtie_bin                                  = [path to your bowtie binary version 0.12.5 or greater recommended]
+bowtie_build_bin                            = [path to your bowtie-build binary version 0.12.5 or greater recommended]
 bowtie_threads                              = 1
 bowtie_quals                                = --phred33-quals
-blat_bin                                    = /home/amcpherson/install/bin/blat
-r_bin                                       = /home/amcpherson/install/bin/R
-rscript_bin                                 = /home/amcpherson/install/bin/Rscript
+blat_bin                                    = [path to your blat binary, 64-bit recommended]
+r_bin                                       = [path to R binary]
+rscript_bin                                 = [path to Rscript binary]
 
 # Parameters for building the dataset
 gene_sources                                = IG_C_gene,IG_D_gene,IG_J_gene,IG_V_gene,processed_transcript,protein_coding
@@ -77,7 +84,7 @@ cdna_utr_extend                             = 500
 rrna_extend                                 = 100
 
 # Max insert size considered by bowtie
-max_insert_size                             = 500
+max_insert_size                             = 400
 
 # Trim length for discordant reads (split reads are not trimmed)
 discord_read_trim                           = 50
@@ -97,6 +104,11 @@ split_min_anchor                            = 4
 max_concordant_ratio                        = 0.1
 splice_bias                                 = 10
 denovo_assembly                             = no
+genome_breakseq_threshold                   = 0.1
+cdna_breakseq_threshold                     = 0.1
+est_breakseq_threshold                      = 0.2
+estislands_breakseq_threshold               = 0.2
+positive_controls                           = $(data_directory)/controls.txt
 
 # Position density when calculating covariance
 covariance_sampling_density                 = 0.01

@@ -1,1010 +1,408 @@
-
-	# Assign interrupt handler to ensure correct shutdown on interrupt
-	$SIG{INT} = \&job_int_handler;
-	
-	bless($self);
-
 import os
 import time
+import re
+import threading
+import socket
+import subprocess
+import sys
 
-class cmdrun:
-	def __init__(self):
-		self.name = "anonymous";
-		self.workdir = ".";
-		self.submitter = submitter_direct;
-		self.maxparallel = 200;
-		self.filetimeout = 100;
-		self.jobmem = "2G";
-		self.tempfiles = [];
-	def logfilename(self):
-		return self.workdir + "/" + self.name + ".log";
-	def writelog(self, *messages, prepend=""):
-		logfilename = self.logfilename()
-		logfile = open(logfilename, 'w')
-		for message in messages:
-			logfile.write(prepend)
-			logfile.write(message + "\n")
-		logfile.close()
-	def catjoblog(self, filename):
-		if not os.path.exists(filename):
-			return
-		retcode = subprocess.call("head --lines=-1 %s | perl -pe 's/^/\\t/' >> %s" % filename, self.logfilename())
-		if retcode != 0:
-			raise Exception("Error: Unable to cat to log %s" % self.logfilename())
-	def waitfiles(self, filenames, missing=[]):
-		start = time.time()
-		while time.time() - start < self.filetimeout:
-			del missing[:]
-			for filename in filenames:
-				if os.path.exists(filename):
-					missing.append(filename)
-			if len(missing) == 0:
-				return True
-			else:
-				time.sleep(1)
-		return False
-	def uptodate(self, inargs, outargs, remarks=[]):
-		intimes = []
-		for arg in inargs:
-			if not os.path.exists(arg):
-				raise Exception("Error: Input %s not found" % arg)
-			intimes.append(os.path.getmtime(arg))
-		outtimes = []
-		for arg in outargs:
-			modtime = 0
-			if os.path.exists(arg):
-				modtime = os.path.getmtime(arg)
-			outtimes.append(modtime)
-			if modtime == 0:
-				remarks.append("%s missing" % arg)
-			elif modtime < max(intimes):
-				remarks.append("%s out of date" % arg)
-		if max(intimes) < min(outtimes) and min(outtimes) != 0:
-			return True
-		return False
-	def runrequired(self, inargs, outargs, remarks=[]):
-		if len(inargs) == 0:
+
+class job(object):
+
+	def __init__(self, command, inputs, outputs, name, script, log, mem, timeout):
+
+		self.command = command
+		self.inputs = inputs
+		self.outputs = outputs
+		
+		self.name = name
+		self.script = script
+		self.log = log
+		self.mem = mem
+		self.timeout = timeout
+
+		self.running = False
+		self.submitted = False
+		self.finished = False
+		self.succeeded = False
+		
+		self.messages = []
+		self.submit_messages = []
+
+		# Rename all output files
+		self.tmp_to_output = {}
+		self.tmp_outputs = {}
+		for id, output in self.outputs.items():
+			tmp = "%s.tmp" % output
+			self.tmp_to_output[tmp] = output
+			self.tmp_outputs[id] = tmp
+		
+		# Interpolate command
+		arguments = dict(self.inputs)
+		arguments.update(self.tmp_outputs)
+		self.full_command = " ".join(self.command) % arguments
+		
+	def __del__(self):
+		self.kill()
+		for filename in self.tmp_outputs.values():
+			if os.path.exists(filename):
+				os.remove(filename)
+
+	def runrequired(self, remarks=[]):
+		if len(self.inputs.values()) == 0:
 			remarks.append("No input file specified")
-		if len(outargs) == 0:
+		if len(self.outputs.values()) == 0:
 			remarks.append("No output file specified")
-		if len(inargs) == 0 or len(outargs) == 0:
+		if len(self.inputs.values()) == 0 or len(self.outputs.values()) == 0:
 			return True
-		if not self.uptodate(inargs, outargs, remarks):
+		if not uptodate(self.inputs.values(), self.outputs.values(), remarks):
 			return True
 		return False
-	def run(self, cmd, inargs, outargs):
-		self.padd(cmd, inargs, outargs);
-		self.prun()
-	def padd(self, cmd, inargs, outargs):
-		self.joblist.append(cmd, inargs, outargs)
+					
+	def init(self):
+		# Remove previously generated log
+		if os.path.exists(self.log):
+			os.remove(self.log)
+		
+		# Write script to execute job
+		script_file = open(self.script, 'w')
+		script_file.write("echo -e Running on $HOSTNAME\n");
+		script_file.write(self.full_command + "\n");
+		script_file.write("echo -e \"Finished\\nReturn codes: ${PIPESTATUS[*]}\"\n");
+		script_file.close()
 
+	def submit(self, name, script, out, mem):
+		raise Exception("Error: job subclass must implement submit function")
+		
+	def finished(self):
+		raise Exception("Error: job subclass must implement finished function")
 
-	def prun(self):
-
-		if len(self.joblist) == 0:
+	def kill(self):
+		raise Exception("Error: job subclass must implement kill function")
+		
+	def run(self):
+		# Return if finished
+		if self.finished:
 			return
-		numjobs = len(self.joblist)
+		
+		# Submit the job using the submit function
+		if not self.running:
+			self.submit()
+			self.running = True
 
-		maxparallel = self.maxparallel
-		if maxparallel == 0:
-			maxparallel = numjobs
+		# Poll the job and update if status changed
+		self.poll()
+		
+		# Check if the job finished
+		if not self.finished:
+			return
+		
+		# Take at least 1 second
+		time.sleep(1)
 
-		self.writelog("Starting %d %s command(s) on %s" % numjobs, self.name, socket.gethostname())
+		# Check if the job failed to submit
+		if not self.submitted:
+			self.messages.append("Command was not properly submitted/executed")
+			self.messages.extend(self.submit_messages)
+			return
+			
+		# Wait for job output to appear
+		if not waitfiles([self.log],self.timeout):
+			self.messages.append("Timed out waiting for %s to appear" % self.log)
+			return
+		
+		# Get the pipestatus result from the bottom of the log file
+		pipestatus = str(subprocess.Popen(["tail", "-1", self.log], stdout=subprocess.PIPE).communicate()[0])
 
-		start = time.time()
+		# Check for any failure in the pipestatus and system return code
+		if pipestatus.find("Return codes") < 0 or re.search('[1-9]', pipestatus):
+			self.messages.append("Job command with nonzero return code")
+			return
 
-		running = []
-		jobs_running = 0
-		job_number = 0
-%		pid_to_cmd = {}
-%		pid_to_out = {}
-%		pid_to_retcode = {}
-%		pid_to_pipe = {}
-		running_something = False
+		# Wait at least filetimout seconds for outputs to appear
+		missing = []
+		if not waitfiles(self.tmp_outputs.values(), self.timeout, missing):
+			self.messages.append("Timed out waiting for output files:")
+			self.messages.extend(missing)
+			return
 
-		while len(self.joblist) > 0:
+		# Check outputs are up to date
+		remarks = []
+		if len(self.inputs.values()) > 0 and len(self.tmp_outputs.values()) > 0 and not uptodate(self.inputs.values(), self.tmp_outputs.values(), remarks):
+			self.messages.append("Job did not update output files:")
+			self.messages.extend(remarks)
+			return
+			
+		# Move the results to the correct filenames
+		for tmp, output in self.tmp_to_output.items():
+			os.rename(tmp, output)
+			
+		# Job succeeded if it got here
+		self.tmp_outputs = {}
+		self.succeeded = True
+	
+	def explain(self, file):
+		file.write("Reason:\n")
+		for message in self.messages:
+			file.write("\t" + message + "\n")
 
-			while jobs_running < maxparallel and len(self.joblist) > 0:
+	def writelog(self, file):
+		if os.path.exists(self.log):
+			file.write("Job Output:\n")
+			job_log_file = open(self.log, 'r')
+			line = job_log_file.readline()
+			while line != "":
+				next_line = job_log_file.readline()
+				if next_line == "" and self.submitted:
+					file.write(line)
+				else:
+					file.write("\t" + line)
+				line = next_line
 
-				jobinfo = self.joblist.pop()
-				job_number++
+class direct_job(job):
+	
+	def submit(self):
+		try:
+			self.log_file = open(self.log, 'w')
+			self.process = subprocess.Popen("bash " + self.script, shell=True, stdout=self.log_file , stderr=subprocess.STDOUT)
+			self.submitted = True
+		except OSError as e:
+			self.submit_messages.append("Execution failed: " + e)
+			self.submitted = False
 
-				job_cmd = jobinfo[0]
-				in_args = jobinfo[1]
-				out_args = jobinfo[2]
+	def poll(self):
+		if self.process.poll() != None:
+			self.finished = True
+			self.log_file.close()
+			if self.process.returncode < 0:
+				self.submit_messages.append("Child was terminated by signal %d" % -self.process.returncode)
+				self.submitted = False
+			elif self.process.returncode > 0:
+				self.submit_messages.append("Child returned %d" % self.process.returncode)
+				self.submitted = False
 
-				job_name = "%s.%s" % self.name, job_number
-				job_script = "%s.%s.sh" % self.prefix, job_number
-				job_out = "%s.%s.log" % self.prefix, job_number
+	def kill(self):
+		try:
+			if self.process.poll() == None:
+				self.process.kill()
+		except AttributeError:
+			pass
 
-				# Remove previously generated log
-				os.remove(job_out)
+class sge_job(job):
+	
+	def submit(self):
+		# Check qsub exists on this machine
+		qsub_exists = subprocess.call(["which", "qsub"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+		if qsub_exists != 0:
+			self.submit_messages.append("Error: no qsub on this machine")
 
+		# Do the command with qsub and write the stdout and stderr to the log file
+		try:
+			qsub_args = "qsub -sync y -notify -b y -j y -S /bin/bash -q fusions.q"
+			qsub_args += " -o " + self.log
+			qsub_args += " -N " + self.name
+			qsub_args += " -l mem_free=" + self.mem + "G";
+			qsub_args += " 'bash " + self.script + "'"
+			
+			self.process = subprocess.Popen(qsub_args, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+			self.submitted = True
+				
+		except OSError as e:
+			self.submit_messages.append("qsub execution failed: " + e)
+			self.submitted = False
+	
+	def poll(self):
+		if self.process.poll() != None:
+			qsub_output = str(self.process.stdout.read(),encoding='utf8').rstrip("\n")
+			qsub_messages = qsub_output.split("\n")
+			self.finished = True
+			if self.process.returncode < 0:
+				self.submit_messages.append("qsub was terminated by signal %d" % -self.process.returncode)
+				self.submit_messages.extend(qsub_messages)
+				self.submitted = False
+			elif self.process.returncode > 0:
+				self.submit_messages.append("qsub returned %d" % self.process.returncode)
+				self.submit_messages.extend(qsub_messages)
+				self.submitted = False
+
+	def kill(self):
+		try:
+			if self.process.poll() == None:
+				self.process.kill()
+		except AttributeError:
+			pass
+
+def waitfiles(filenames, filetimeout, missing=[]):
+	start = time.time()
+	while time.time() - start < filetimeout:
+		del missing[:]
+		for filename in filenames:
+			if not os.path.exists(filename):
+				missing.append(filename)
+		if len(missing) == 0:
+			return True
+		else:
+			time.sleep(1)
+	return False
+
+def uptodate(inputs, outputs, remarks=[]):
+	in_times = []
+	for input in inputs:
+		if not os.path.exists(input):
+			raise Exception("Error: Input %s not found" % input)
+		in_times.append(os.path.getmtime(input))
+	out_times = []
+	for output in outputs:
+		mod_time = 0
+		if os.path.exists(output):
+			mod_time = os.path.getmtime(output)
+		out_times.append(mod_time)
+		if mod_time == 0:
+			remarks.append("%s missing" % output)
+		elif mod_time < max(in_times):
+			remarks.append("%s out of date" % output)
+	if max(in_times) < min(out_times) and min(out_times) != 0:
+		return True
+	return False
+
+class cmdrun(object):
+
+	def __init__(self, name, workdir, job_type="direct"):
+		self.name = name
+		self.workdir = workdir
+		self.prefix = workdir + "/" + name
+		self.log_filename = self.prefix + ".log"
+		self.max_parallel = 200
+		self.file_timeout = 100
+		self.jobmem = "2"
+		self.jobs = []
+		if not os.path.exists(self.workdir):
+			os.makedirs(self.workdir)
+		if job_type == "direct":
+			self.job_type = direct_job
+		elif job_type == "sge":
+			self.job_type = sge_job
+		else:
+			sys.stderr.write("Error: Invalid job type\n")
+			sys.exit(1)
+			
+	def run(self, command, inputs, outputs):
+		self.padd(command, inputs, outputs);
+		self.prun()
+
+	def padd(self, command, inputs, outputs):
+
+		# Create job name, and script and log filenames
+		job_number = len(self.jobs)
+		name = "%s.%s" % (self.name, job_number)
+		script = "%s.%s.sh" % (self.prefix, job_number)
+		log = "%s.%s.log" % (self.prefix, job_number)
+
+		job = self.job_type(command, inputs, outputs, name, script, log, self.jobmem, self.file_timeout)
+		
+		self.jobs.append(job)
+		
+	def prun(self):
+		
+		# Ensure the log file is closed on exit
+		with open(self.log_filename, 'a') as log_file:
+			
+			# Do nothing if there were no jobs
+			if len(self.jobs) == 0:
+				return
+	
+			# If maximum parallel jobs is 0, run all concurrently
+			max_parallel = self.max_parallel
+			if max_parallel == 0:
+				max_parallel = len(self.joblist)
+	
+			# Starting message
+			log_file.write("Starting %d %s command(s) on %s" % (len(self.jobs), self.name, socket.gethostname()))
+	
+			# Start a timer
+			start = time.time()
+	
+			# Start all jobs
+			jobs = []
+			for job_number, job in enumerate(self.jobs):
+
+				# Initialize the job
+				job.init()
+				
 				# Check if running the job is required
 				runrequired_remarks = []
-				if self.runrequired(in_args, out_args, runrequired_remarks):
-					self.writelog("Starting $name command:")
-					self.writelog(job_cmd, prefix="\t")
-					self.writelog("Reasons:")
-					self.writelog(runrequired_remarks, prefix="\t")
+				if job.runrequired(runrequired_remarks):
+					log_file.write("Starting " + self.name + " command:\n")
+					log_file.write("\t" + job.full_command + "\n")
+					log_file.write("Reasons:\n")
+					for runrequired_remark in runrequired_remarks:
+						log_file.write("\t" + runrequired_remark + "\n")
 				else:
-					self.writelog("Skipping $name command with up to date outputs:")
-					self.writelog(job_cmd, prefix="\t")
+					log_file.write("Skipping " + self.name + " command with up to date outputs:\n")
+					log_file.write("\t" + job.full_command + "\n")
 					continue
 
-				# At least one thing is running
-				running_something = True
-
-				# Create a mapping between temp and output files
-				argtotmp = {}
-				tmptoarg = {}
-				for arg in out_args:
-					tmparg = "%s.tmp" % arg
-					argtotmp[arg] = tmparg
-					tmptoarg[tmparg] = arg
-
-				# Add inputs to command
-				inargnum = 1;
-				for arg in in_args:
-					placeholder = "#<%d" % inargnum
-					job_cmd.replace(placeholder, arg)
-					inargnum++
-
-				# Add array inputs to command
-				allin = " ".join(in_args);
-				job_cmd.replace("#<A", allin)
-		
-				# Add outputs to command
-				# Keep track of which outputs are on the command line
-				# Add temporary files to static list
-				# Add non command line files to a static list
-				outgenerated = []
-				cmdlineoutarg = {}
-				outargnum = 1
-				for arg in out_args
-					tmpoutarg = argtotmp[arg]
-					placeholder = "#>".outargnum
-					if job_cmd.replace(placeholder, tmpoutarg):
-						cmdlineoutarg[tmpoutarg] = 1
-						outgenerated.append(tmpoutarg)
-					else:
-						outgenerated.append(arg)
-					outargnum++
-
-				# Check command
-				if re.search("#>[0-9]", job_cmd) or re.search("#<[0-9]", job_cmd):
-					raise Exception("Error: cmdrunner syntax\n%s\n" % job_cmd)
-
-			# Fork a new process using open
-			my $job_pipe;
-			my $job_pid = open $job_pipe, "-|";
-			die "Error: Unable to get a new process id\n" if not defined $job_pid;
+				# Add to list of jobs to run
+				jobs.append(job)
 			
-			# Check if process is child
-			if ($job_pid == 0)
-			{
-				# Add output files to the list of temp files generated by this job
-				push @{$self->{tempfiles}}, @outgenerated;				
-
-				# Write script to execute job
-				open SCR, ">".$job_script or die "Error: Unable to open job script $job_script\n";
-				print SCR "source ~/.bashrc\n";
-				print SCR "echo -e Running on \$HOSTNAME\n";
-				print SCR $job_cmd."\n";
-				print SCR "echo -e Return codes: \${PIPESTATUS[*]}\n";
-				close SCR;
-
-				# Do the command using the run subroutine provided
-				my $sysretcode = &{$submitter}($job_name,$job_script,$job_out,$self);
-
-				# Take at least 1 second
-				sleep 1;
-
-				# Return nonzero if the job failed
-				if ($sysretcode != 0)
-				{
-					print "Command was not properly submitted/executed\n";
-					exit(1);
-				}
-
-				# Wait for job output to appear
-				if (not waitfiles($filetimeout,[$job_out]))
-				{
-					print "Timed out waiting for $job_out to appear\n";
-					exit(1);
-				}
-
-				# Get the pipestatus result from the bottom of the log file
-				my $pipestatus = `tail -1 $job_out`;
-				chomp($pipestatus);
-
-				# Check for any failure in the pipestatus and system return code
-				if (not $pipestatus =~ /Return codes/ or $pipestatus =~ /[1-9]/)
-				{
-					print "Job command with nonzero return code\n";
-					exit(1);
-				}
-
-				# Wait at least filetimout seconds for outputs to appear
-				my @outmissing;
-				if (not waitfiles($filetimeout,\@outgenerated,\@outmissing))
-				{
-					print join "\n", ("Timed out waiting for output files:", @outmissing, "");
-					exit(1);
-				}
-
-				# Check outputs are up to date
-				my @remarks = ();
-				if (scalar @{$in_args} > 0 and scalar @outgenerated > 0 and not $self->uptodate($in_args,\@outgenerated,\@remarks))
-				{
-					print join "\n", ("Job did not update output files:", @remarks, "");
-					exit(1);
-				}
-
-				# Move the results to the correct filenames
-				foreach my $tmparg (keys %tmptoarg)
-				{
-					next if not defined $cmdlineoutarg{$tmparg};
-					die "Error: $tmparg was not found\n" if not -e $tmparg;
-					rename $tmparg, $tmptoarg{$tmparg};
-				}
-	
-				# Clear temp file list, they have all been renamed to their correct filenames
-				@{$self->{tempfiles}} = ();
+			# Reset the job list
+			self.jobs = []
+			
+			# Check if anything was started
+			if len(jobs) == 0:
+				return
+			
+			# Catch interrupt
+			try:
+				# Run all jobs
+				running = [] 
+				queued = list(jobs)
+				while len(queued) > 0 or len(running) > 0:
+					while len(queued) > 0 and len(running) < max_parallel:
+						running.append(queued.pop())
+					new_running = []
+					for job in running:
+						job.run()
+						if not job.finished:
+							new_running.append(job)
+					running = new_running
+					time.sleep(1)
+			except KeyboardInterrupt:
+				sys.stderr.write("User interrupted jobs\n")
+				sys.exit(1)
+			
+			# Check all jobs that were running
+			num_failed = 0
+			for job in jobs:
+				# Track number of failed jobs
+				if not job.succeeded:
+					num_failed += 1
+					log_file.write("Failure for " + self.name + " command:\n")
+					log_file.write("\t" + job.full_command + "\n")
+					job.explain(log_file)
+				else:
+					log_file.write("Success for " + self.name + " command:\n")
+					log_file.write("\t" + job.full_command + "\n")
 				
-				exit;
-			}
-			else
-			{
-				# Update job numbers and store job info
-				$jobs_running++;
-				$pid_to_cmd{$job_pid} = $job_cmd;
-				$pid_to_out{$job_pid} = $job_out;
-				$pid_to_pipe{$job_pid} = $job_pipe;
-			}
-		}
-
-		# Dont wait for nothing
-		next if $jobs_running == 0;
-
-		# Wait for next job	
-		while ($jobs_running >= $maxparallel)
-		{
-			# Wait for next job	
-			my $pid = wait();
-		
-			# Store status
-			$pid_to_retcode{$pid} = $?;
-			
-			# One less job running
-			$jobs_running--;
-		}
-	}
-
-	# Wait for remaining jobs
-	while ($jobs_running > 0)
-	{
-		# Wait for next job	
-		my $pid = wait();
-	
-		# Store status
-		$pid_to_retcode{$pid} = $?;
-		
-		# One less job running
-		$jobs_running--;
-	}
-	
-	# Return if everything was up to date
-	return if not $running_something;
-	
-	# Iterate through jobs that were running to check results
-	my $num_failed = 0;
-	foreach my $pid (keys %pid_to_cmd)
-	{
-		my $job_cmd = $pid_to_cmd{$pid};
-		my $job_out = $pid_to_out{$pid};
-		my $job_retcode = $pid_to_retcode{$pid};
-		my $job_pipe = $pid_to_pipe{$pid};
-		my $job_failed = $job_retcode;
-		my $job_status = $job_retcode >> 8;
-		
-		# Retrieve job message
-		my @job_message = <$job_pipe>;
-		chomp(@job_message);
-	
-		# Keep track of the number failing
-		$num_failed++ if $job_failed;
-
-		# Append job output to log file
-		if ($job_failed)
-		{
-			$self->writelog("", "Failure for $name command:");
-			$self->writelog("\t", $job_cmd);
-			$self->writelog("", "Reason:");
-			$self->writelog("\t", @job_message);
-		}
-		else
-		{
-			$self->writelog("", "Success for $name command:");
-			$self->writelog("\t", $job_cmd);
-		}
-		
-		# Write info to log
-		if (-e $job_out)
-		{
-			my $pipestatus = `tail -1 $job_out`;
-			chomp($pipestatus);
-			$self->writelog("", $pipestatus);
-
-			$self->writelog("", "Job output:");
-			$self->catjoblog($job_out);
-		}
-
-		# Write to stderr if job failed
-		if ($job_failed)
-		{
-			print STDERR "Failure for $name command:\n";
-			print STDERR "\t$job_cmd\n";
-
-			print STDERR "Reason:\n";
-
-			foreach my $job_message_line (@job_message)
-			{
-				print STDERR "\t$job_message_line\n";
-			}
-
-			if (-e $job_out)
-			{
-				if ($job_status == 2)
-				{
-					print STDERR "Job output:\n";
-					system "cat $job_out | perl -pe 's/^/\\t/' 1>&2";
-				}
-				else
-				{
-					print STDERR "Job output:\n";
-					system "head --lines=-1 $job_out | perl -pe 's/^/\\t/' 1>&2";
-					system "tail -1 $job_out 1>&2";
-				}
-			}
-		}
-	}
-
-	# End timer
-	my $end = time();
-	my $timetaken = $end - $start;
-
-	# Check for success
-	if ($num_failed != 0)
-	{
-		$self->writelog("", "$num_failed commands failed after $timetaken seconds");
-
-		if ($num_failed > 1)
-		{
-			die "$num_failed commands failed after $timetaken seconds\n";
-		}
-		else
-		{
-			die "Commands failed after $timetaken seconds\n";
-		}
-	}
-	
-	# Report time to log
-	$self->writelog("", "Completed in $timetaken seconds");
-}
-
-
-
-
-
-sub DESTROY
-{
-	my $self = shift;
-	if (scalar @{$self->{tempfiles}} > 0)
-	{
-		$self->writelog("", "Job interrupted");
-		unlink @{$self->{tempfiles}};
-	}
-}
-
-sub job_int_handler
-{
-	print "Job interrupted by user\n";
-	exit(1);
-}
-
-sub submitter_direct
-{
-	my $job_name = shift;
-	my $job_script = shift;
-	my $job_out = shift;
-	my $cmdrunner = shift;
-
-	# Do the command and write the stdout and stderr to the log file
-	my $sysretcode = system "bash $job_script > $job_out 2>&1";
-
-	return $sysretcode;
-}
-
-sub submitter_sge_cluster
-{
-	my $job_name = shift;
-	my $job_script = shift;
-	my $job_out = shift;
-	my $cmdrunner = shift;
-
-	my $job_mem = $cmdrunner->{jobmem};
-	my $qsub_commands = "-q fusions.q -l mem_free=$job_mem";
-	
-	# Check qsub exists on this machine
-	my $qsub_exists = system "which qsub > /dev/null 2>&1";
-	print STDERR "Error: no qsub on this machine\n" and return 1 if $qsub_exists != 0;
-	
-	# Do the command with qsub and write the stdout and stderr to the log file
-	my $sysretcode = system "qsub -sync y -notify -b y -j y -o $job_out -N $job_name $qsub_commands 'bash $job_script' > /dev/null 2>&1";
-
-	return $sysretcode;
-}
-
-sub writelog
-{
-	my $self = shift;
-	my $prepend = shift;
-	my @messages = @_;
-	
-	my $logfilename = $self->{logfilename};
-
-	open LOG, ">>".$logfilename or die "Error: Unable to write to log file $logfilename: $!\n";
-	foreach my $message (@messages)
-	{
-		print LOG "$prepend";
-		print LOG $message."\n";
-	}
-	close LOG;
-}
-
-sub catjoblog
-{
-	my $self = shift;
-	my $filename = shift;
-	my $logfilename = $self->{logfilename};
-
-	return if not -e $filename;
-
-	my $cat_result = system "head --lines=-1 $filename | perl -pe 's/^/\\t/' >> $logfilename";
-
-	$cat_result == 0 or die "Error: Unable to append to log\n";
-}
-
-sub waitfiles
-{
-	my $filetimeout = shift;
-	my $filenames = shift;
-	my $missing = shift;
-
-	# Optional out argment
-	$missing = [] if not defined $missing;
-	
-	# Reset missing list
-	@{$missing} = ();
-
-	# Start timer
-	my $start = time();
-
-	# Wait at least $filetimout seconds for outputs to appear
-	while (time() - $start < $filetimeout)
-	{
-		# Reset missing list
-		@{$missing} = ();
-
-		foreach my $filename (@{$filenames})
-		{
-			if (not -e $filename)
-			{
-				push @{$missing}, $filename;
-			}
-		}
-
-		if (scalar @{$missing} == 0)
-		{
-			return 1;
-		}
-		else
-		{
-			sleep 1;
-		}
-	}
-
-	return 0;
-}
-
-sub uptodate
-{
-	my $self = shift;
-	my $inargs = shift;
-	my $outargs = shift;
-	my $remarks = shift;
-
-	# Optional argument
-	$remarks = [] if not defined $remarks;
-
-	# Reset remarks list
-	@{$remarks} = ();
-
-	# Check the arguments
-	die "Error: Non-empty array ref expected for inargs argument to uptodate\n" if ref($inargs) ne 'ARRAY' or scalar @{$inargs} == 0;
-	die "Error: Non-empty array ref expected for outargs argument to uptodate\n" if ref($outargs) ne 'ARRAY' or scalar @{$outargs} == 0;
-
-	# Find modification times of inputs
-	# Check all inputs exist
-	my @intimes;
-	foreach my $arg (@{$inargs})
-	{
-		die "Error: Input $arg not found\n" if not -e $arg;
-
-		my $modtime = 0;
-		$modtime = stat($arg)->mtime;
-		push @intimes, $modtime;
-	}
-	
-	# Find modification times of outputs
-	my @outtimes;
-	foreach my $arg (@{$outargs})
-	{
-		my $modtime = 0;
-		$modtime = stat($arg)->mtime if -e $arg;
-		push @outtimes, $modtime;
-
-		if ($modtime == 0)
-		{
-			push @{$remarks}, $arg." missing";
-		}
-		elsif (scalar @intimes > 0 and $modtime < max(@intimes))
-		{
-			push @{$remarks}, $arg." out of date";
-		}
-	}
-
-	# Return 1 if up to date
-	return 1 if max(@intimes) < min(@outtimes) and min(@outtimes) != 0;
-	
-	# Return 0 if not up to date or missing
-	return 0;
-}
-
-sub runrequired
-{
-	my $self = shift;
-	my $inargs = shift;
-	my $outargs = shift;
-	my $remarks = shift;
-		
-	# Check the arguments
-	die "Error: Array ref expected for inargs argument to uptodate\n" if ref($inargs) ne 'ARRAY';
-	die "Error: Array ref expected for outargs argument to uptodate\n" if ref($outargs) ne 'ARRAY';
-
-	# Add remark for no inputs
-	if (scalar @{$inargs} == 0)
-	{
-		push @{$remarks}, "No input file specified";
-	}
-	
-	# Add remark for no outputs
-	if (scalar @{$outargs} == 0)
-	{
-		push @{$remarks}, "No output file specified";
-	}
-
-	# Always run commands if no inputs or outputs were specified
-	return 1 if scalar @{$inargs} == 0 or scalar @{$outargs} == 0;
-
-	# Otherwise, run commands if something is not up to date
-	return 1 if not $self->uptodate($inargs,$outargs,$remarks);
-
-	return 0;
-}
-
-sub run
-{
-	my $self = shift;
-	my $cmd = shift;
-	my $inargs = shift;
-	my $outargs = shift;
-
-	$self->padd($cmd,$inargs,$outargs);
-	$self->prun();
-}
-
-sub padd
-{
-	my $self = shift;
-	my $cmd = shift;
-	my $inargs = shift;
-	my $outargs = shift;
-	
-	push @{$self->{joblist}}, [$cmd,$inargs,$outargs];
-}
-
-sub prun
-{
-	my $self = shift;
-	
-	# Name of these jobs
-	my $name = $self->{name};
-
-	# Overridable subroutine for running scripts
-	my $submitter = $self->{submitter};
-
-	# Retreive list of jobs and clear
-	my @joblist = @{$self->{joblist}};
-	@{$self->{joblist}} = ();
-	my $num_jobs = scalar @joblist;
-	
-	# Dont bother doing anything for zero jobs
-	return if $num_jobs == 0;
-	
-	# Prefix for script filenames
-	my $prefix = $self->{prefix};
-
-	# Log filename
-	my $logfilename = $self->{logfilename};
-	
-	# Timout for waiting for files
-	my $filetimeout = $self->{filetimeout};
-
-	# Maximum number of parallel commands, 0 for unlimited
-	my $maxparallel = $self->{maxparallel};
-	$maxparallel = scalar @joblist if $maxparallel == 0;
-
-	# Write parallel starting to the log
-	my $host = hostname;
-	$self->writelog("", "Starting $num_jobs $name command(s) on $host");
-	
-	# Start timer
-	my $start = time();
-		
-	# Keep track of running commands
-	my @running;
-	
-	# Iterate through the list of commands
-	my $jobs_running = 0;
-	my $job_number = 0;
-	my %pid_to_cmd;
-	my %pid_to_out;
-	my %pid_to_retcode;
-	my %pid_to_pipe;
-	my $running_something = 0;
-	while (scalar @joblist > 0)
-	{
-		while ($jobs_running < $maxparallel and scalar @joblist > 0)
-		{
-			my $jobinfo = pop @joblist;
-			$job_number++;
-
-			my $job_cmd = $jobinfo->[0];
-			my $in_args = $jobinfo->[1];
-			my $out_args = $jobinfo->[2];
-
-			my $job_name = $name.".".$job_number;
-			my $job_script = $prefix.".".$job_number.".sh";
-			my $job_out = $prefix.".".$job_number.".log";
-
-			# Remove previously generated log
-			unlink $job_out;
-
-			# Check the arguments
-			die "Error: Array ref expected as inargs for command\n$job_cmd\n" if ref($in_args) ne 'ARRAY';
-			die "Error: Array ref expected as outargs for command\n$job_cmd\n" if ref($out_args) ne 'ARRAY';
-		
-			# Check if running the job is required
-			my @runrequired_remarks;
-			if ($self->runrequired($in_args,$out_args,\@runrequired_remarks))
-			{
-				$self->writelog("", "Starting $name command:");
-				$self->writelog("\t", $job_cmd);
-				$self->writelog("", "Reasons:");
-				$self->writelog("\t", @runrequired_remarks);
-			}
-			else
-			{
-				$self->writelog("", "Skipping $name command with up to date outputs:");
-				$self->writelog("\t", $job_cmd);
-				next;			
-			}
-
-			# At least one thing is running
-			$running_something = 1;
-	
-			# Create a mapping between temp and output files
-			my %argtotmp;
-			my %tmptoarg;
-			foreach my $arg (@{$out_args})
-			{
-				my $tmparg = $arg.".tmp";
-				$argtotmp{$arg} = $tmparg;
-				$tmptoarg{$tmparg} = $arg;
-			}
-	
-			# Add inputs to command
-			my $inargnum = 1;
-			foreach my $arg (@{$in_args})
-			{
-				my $placeholder = "#<".$inargnum;
-				$job_cmd =~ s/$placeholder/$arg/g;
-				$inargnum++;
-			}
-
-			# Add array inputs to command
-			my $allin = join(" ", @{$in_args});
-			$job_cmd =~ s/#<A/$allin/g;
-		
-			# Add outputs to command
-			# Keep track of which outputs are on the command line
-			# Add temporary files to static list
-			# Add non command line files to a static list
-			my @outgenerated;
-			my %cmdlineoutarg;
-			my $outargnum = 1;
-			foreach my $arg (@{$out_args})
-			{
-				my $tmpoutarg = $argtotmp{$arg};
-				my $placeholder = "#>".$outargnum;
-				if ($job_cmd =~ s/$placeholder/$tmpoutarg/g)
-				{
-					$cmdlineoutarg{$tmpoutarg} = 1;
-					push @outgenerated, $tmpoutarg;
-				}
-				else
-				{
-					push @outgenerated, $arg;
-				}
-	
-				$outargnum++;
-			}
-
-			# Check command
-			die "Error: cmdrunner syntax\n$job_cmd\n" if $job_cmd =~ /#>[0-9]/ or $job_cmd =~ /#<[0-9]/;
-
-			# Fork a new process using open
-			my $job_pipe;
-			my $job_pid = open $job_pipe, "-|";
-			die "Error: Unable to get a new process id\n" if not defined $job_pid;
-			
-			# Check if process is child
-			if ($job_pid == 0)
-			{
-				# Add output files to the list of temp files generated by this job
-				push @{$self->{tempfiles}}, @outgenerated;				
-
-				# Write script to execute job
-				open SCR, ">".$job_script or die "Error: Unable to open job script $job_script\n";
-				print SCR "source ~/.bashrc\n";
-				print SCR "echo -e Running on \$HOSTNAME\n";
-				print SCR $job_cmd."\n";
-				print SCR "echo -e Return codes: \${PIPESTATUS[*]}\n";
-				close SCR;
-
-				# Do the command using the run subroutine provided
-				my $sysretcode = &{$submitter}($job_name,$job_script,$job_out,$self);
-
-				# Take at least 1 second
-				sleep 1;
-
-				# Return nonzero if the job failed
-				if ($sysretcode != 0)
-				{
-					print "Command was not properly submitted/executed\n";
-					exit(1);
-				}
-
-				# Wait for job output to appear
-				if (not waitfiles($filetimeout,[$job_out]))
-				{
-					print "Timed out waiting for $job_out to appear\n";
-					exit(1);
-				}
-
-				# Get the pipestatus result from the bottom of the log file
-				my $pipestatus = `tail -1 $job_out`;
-				chomp($pipestatus);
-
-				# Check for any failure in the pipestatus and system return code
-				if (not $pipestatus =~ /Return codes/ or $pipestatus =~ /[1-9]/)
-				{
-					print "Job command with nonzero return code\n";
-					exit(1);
-				}
-
-				# Wait at least filetimout seconds for outputs to appear
-				my @outmissing;
-				if (not waitfiles($filetimeout,\@outgenerated,\@outmissing))
-				{
-					print join "\n", ("Timed out waiting for output files:", @outmissing, "");
-					exit(1);
-				}
-
-				# Check outputs are up to date
-				my @remarks = ();
-				if (scalar @{$in_args} > 0 and scalar @outgenerated > 0 and not $self->uptodate($in_args,\@outgenerated,\@remarks))
-				{
-					print join "\n", ("Job did not update output files:", @remarks, "");
-					exit(1);
-				}
-
-				# Move the results to the correct filenames
-				foreach my $tmparg (keys %tmptoarg)
-				{
-					next if not defined $cmdlineoutarg{$tmparg};
-					die "Error: $tmparg was not found\n" if not -e $tmparg;
-					rename $tmparg, $tmptoarg{$tmparg};
-				}
-	
-				# Clear temp file list, they have all been renamed to their correct filenames
-				@{$self->{tempfiles}} = ();
+				# Write info to log
+				if os.path.exists(job.log):
+					job.writelog(log_file)
 				
-				exit;
-			}
-			else
-			{
-				# Update job numbers and store job info
-				$jobs_running++;
-				$pid_to_cmd{$job_pid} = $job_cmd;
-				$pid_to_out{$job_pid} = $job_out;
-				$pid_to_pipe{$job_pid} = $job_pipe;
-			}
-		}
-
-		# Dont wait for nothing
-		next if $jobs_running == 0;
-
-		# Wait for next job	
-		while ($jobs_running >= $maxparallel)
-		{
-			# Wait for next job	
-			my $pid = wait();
+				# Write to stderr if job failed
+				if not job.succeeded:
+					sys.stderr.write("Failure for " + self.name + " command:\n")
+					sys.stderr.write("\t" + job.full_command + "\n")
+					job.explain(sys.stderr)
+					job.writelog(sys.stderr)
+					
+			# End timer
+			time_taken = time.time() - start
 		
-			# Store status
-			$pid_to_retcode{$pid} = $?;
-			
-			# One less job running
-			$jobs_running--;
-		}
-	}
-
-	# Wait for remaining jobs
-	while ($jobs_running > 0)
-	{
-		# Wait for next job	
-		my $pid = wait();
+			# Check for success
+			if num_failed != 0:
+				log_file.write("%d commands failed after %d seconds\n" % (num_failed, time_taken));
+				sys.stderr.write("%d commands failed after %d seconds\n" % (num_failed, time_taken));
+				sys.exit(1)
+			else:
+				log_file.write("%d commands succeeded after %d seconds\n" % (num_failed, time_taken));
 	
-		# Store status
-		$pid_to_retcode{$pid} = $?;
-		
-		# One less job running
-		$jobs_running--;
-	}
-	
-	# Return if everything was up to date
-	return if not $running_something;
-	
-	# Iterate through jobs that were running to check results
-	my $num_failed = 0;
-	foreach my $pid (keys %pid_to_cmd)
-	{
-		my $job_cmd = $pid_to_cmd{$pid};
-		my $job_out = $pid_to_out{$pid};
-		my $job_retcode = $pid_to_retcode{$pid};
-		my $job_pipe = $pid_to_pipe{$pid};
-		my $job_failed = $job_retcode;
-		my $job_status = $job_retcode >> 8;
-		
-		# Retrieve job message
-		my @job_message = <$job_pipe>;
-		chomp(@job_message);
-	
-		# Keep track of the number failing
-		$num_failed++ if $job_failed;
-
-		# Append job output to log file
-		if ($job_failed)
-		{
-			$self->writelog("", "Failure for $name command:");
-			$self->writelog("\t", $job_cmd);
-			$self->writelog("", "Reason:");
-			$self->writelog("\t", @job_message);
-		}
-		else
-		{
-			$self->writelog("", "Success for $name command:");
-			$self->writelog("\t", $job_cmd);
-		}
-		
-		# Write info to log
-		if (-e $job_out)
-		{
-			my $pipestatus = `tail -1 $job_out`;
-			chomp($pipestatus);
-			$self->writelog("", $pipestatus);
-
-			$self->writelog("", "Job output:");
-			$self->catjoblog($job_out);
-		}
-
-		# Write to stderr if job failed
-		if ($job_failed)
-		{
-			print STDERR "Failure for $name command:\n";
-			print STDERR "\t$job_cmd\n";
-
-			print STDERR "Reason:\n";
-
-			foreach my $job_message_line (@job_message)
-			{
-				print STDERR "\t$job_message_line\n";
-			}
-
-			if (-e $job_out)
-			{
-				if ($job_status == 2)
-				{
-					print STDERR "Job output:\n";
-					system "cat $job_out | perl -pe 's/^/\\t/' 1>&2";
-				}
-				else
-				{
-					print STDERR "Job output:\n";
-					system "head --lines=-1 $job_out | perl -pe 's/^/\\t/' 1>&2";
-					system "tail -1 $job_out 1>&2";
-				}
-			}
-		}
-	}
-
-	# End timer
-	my $end = time();
-	my $timetaken = $end - $start;
-
-	# Check for success
-	if ($num_failed != 0)
-	{
-		$self->writelog("", "$num_failed commands failed after $timetaken seconds");
-
-		if ($num_failed > 1)
-		{
-			die "$num_failed commands failed after $timetaken seconds\n";
-		}
-		else
-		{
-			die "Commands failed after $timetaken seconds\n";
-		}
-	}
-	
-	# Report time to log
-	$self->writelog("", "Completed in $timetaken seconds");
-}
-
-sub replaceifdifferent
-{
-	my $self = shift;
-	my $new_filename = shift;
-	my $prev_filename = shift;
-	
-	die "Error: File $new_filename does not exist\n" if not defined $new_filename;
-
-	if (not -e $prev_filename)
-	{
-		rename $new_filename, $prev_filename;
-	}
-	else
-	{
-		my $diff_result = `diff -q $new_filename $prev_filename`;
-		
-		if ($diff_result =~ /differ/)
-		{
-			rename $new_filename, $prev_filename;
-		}
-	}
-}
-
-1;
-

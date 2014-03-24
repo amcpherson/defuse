@@ -54,6 +54,7 @@ my $config = configdata->new();
 $config->read($config_filename);
 
 my $rscript_bin = $config->get_value("rscript_bin");
+my $discord_read_trim = $config->get_value("discord_read_trim");
 
 my $evaluate_fraglength_rscript = "$rscript_bin ".dirname($0)."/evaluate_fraglength_mean.R";
 
@@ -156,7 +157,7 @@ foreach my $cluster_id (keys %cluster_strand)
 
 	my $spanning_fragment_mean = $spanning_fragment_sum / $spanning_fragment_count;
 
-	my $pval_result_span_length = `$evaluate_fraglength_rscript $rstat_filename $vstat_filename $spanning_fragment_mean $spanning_fragment_count`;
+	my $pval_result_span_length = `$evaluate_fraglength_rscript $rstat_filename $vstat_filename $discord_read_trim $spanning_fragment_mean $spanning_fragment_count`;
 	$pval_result_span_length =~ /\[1\]\s+(.+)/ or die "Error: Unable to interpret pvalue from R\n";
 	my $length_average_pvalue = $1;
 

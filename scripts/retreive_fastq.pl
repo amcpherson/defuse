@@ -93,14 +93,21 @@ while (1)
 		push @data_lane_regexs, $config->get_value("$data_lane_regex");
 		push @data_end_regexs, $config->get_value("$data_end_regex");
 		push @data_compress_regexs, $config->get_value("$data_compress_regex");
-		push @data_end1_converters, $config->get_value("$data_converter");
-		push @data_end2_converters, $config->get_value("$data_converter");
 	}
 	else
 	{
 		push @data_lane_regexs, $config->get_value("$data_lane_regex");
 		push @data_end_regexs, "";
 		push @data_compress_regexs, $config->get_value("$data_compress_regex");
+	}
+
+	if ($config->has_value("$data_converter"))
+	{
+		push @data_end1_converters, $config->get_value("$data_converter");
+		push @data_end2_converters, $config->get_value("$data_converter");
+	}
+	else
+	{
 		push @data_end1_converters, $config->get_value("$data_end1_converter");
 		push @data_end2_converters, $config->get_value("$data_end2_converter");
 	}

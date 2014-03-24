@@ -114,10 +114,12 @@ my $reads_per_job         = $config->get_value("reads_per_job");
 my $regions_per_job       = $config->get_value("regions_per_job");
 my $gene_info_list        = $config->get_value("gene_info_list");
 my $samtools_bin          = $config->get_value("samtools_bin");
+my $rscript_bin           = $config->get_value("rscript_bin");
 my $split_min_anchor      = $config->get_value("split_min_anchor");
 my $cov_samp_density      = $config->get_value("covariance_sampling_density");
 my $denovo_assembly       = $config->get_value("denovo_assembly");
 my $remove_job_files      = $config->get_value("remove_job_files");
+my $positive_controls     = $config->get_value("positive_controls");
 
 my $cdna_fasta_fai        = $cdna_fasta.".fai";
 
@@ -210,8 +212,10 @@ my $evalsplitalign_bin = "$tools_directory/evalsplitalign";
 my $calc_span_pvalues_script = "$scripts_directory/calc_span_pvalues.pl";
 my $calc_split_pvalues_script = "$scripts_directory/calc_split_pvalues.pl";
 my $annotate_fusions_script = "$scripts_directory/annotate_fusions.pl";
+my $calc_map_stats_script = "$scripts_directory/calculate_mapping_stats.pl";
 my $filter_fusions_script = "$scripts_directory/filter_fusions.pl";
 my $coallate_fusions_script = "$scripts_directory/coallate_fusions.pl";
+my $evaluate_fraglength_rscript = "$rscript_bin ".$scripts_directory."/run_adaboost.R";
 
 mkdir $output_directory if not -e $output_directory;
 
@@ -289,6 +293,9 @@ print "Read Stats\n";
 print "\tFragment mean $fragment_mean stddev $fragment_stddev\n";
 print "\tRead length min $read_length_min max $read_length_max\n";
 
+# Run remaining commands on high memory cluster nodes
+$runner->jobmem(10000000000);
+
 print "Finding paired end alignment covariance\n";
 my $cov_stats = $output_directory."/covariance.stats";
 $runner->run("$calccov_bin -m $fragment_max -a $split_min_anchor -d $cov_samp_density -g $gene_tran_list -c #<1 -v #>1", [$cdna_pair_bam], [$cov_stats]);
@@ -355,7 +362,9 @@ $runner->run("$calc_split_pvalues_script -c $config_filename -s #<1 -v #<2 > #>1
 
 print "Annotating fusions\n";
 my $annotations_filename = $output_directory."/annotations.txt";
+my $mapping_stats_filename = $output_directory."/mapping.stats";
 $runner->run("$annotate_fusions_script -c $config_filename -o $output_directory -n $library_name > #>1", [$splitr_span_pval,$denovo_span_pval,$splitr_split_pval], [$annotations_filename]);
+$runner->run("$calc_map_stats_script -c $config_filename -o $output_directory > #>1", [$clusters_sc_sam], [$mapping_stats_filename]);
 
 print "Filtering fusions\n";
 my $filtered_filename = $output_directory."/filtered.txt";
@@ -367,12 +376,15 @@ my $filtered_results_filename = $output_directory."/results.filtered.txt";
 $runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$annotations_filename], [$results_filename]);
 $runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$filtered_filename], [$filtered_results_filename]);
 
+print "Running adaboost classifier\n";
+my $results_classify = $output_directory."/results.classify.txt";
+$runner->run("$evaluate_fraglength_rscript $positive_controls #<1 #>1", [$results_filename], [$results_classify]);
+
 print "Success\n";
 
 # Remove job files
 if (lc($remove_job_files) eq "yes")
 {
-	unlink $reads_split_catalog;
 	foreach my $split_fastq_prefix (@split_fastq_prefixes)
 	{
 		unlink $split_fastq_prefix.".1.fastq";
@@ -506,9 +518,9 @@ sub splitalignmerge
 			}
 			else
 			{
-				$runner->padd("samtools merge #>1 #<A", [@merge_jobs_cdna_pair_bam], [$intermediate_cdna_pair_bam]);
-				$runner->padd("samtools merge #>1 #<A", [@merge_jobs_discordant_aligned_bam], [$intermediate_discordant_aligned_bam]);
-				$runner->padd("samtools merge #>1 #<A", [@merge_jobs_discordant_unaligned_bam], [$intermediate_discordant_unaligned_bam]);
+				$runner->padd("$samtools_bin merge #>1 #<A", [@merge_jobs_cdna_pair_bam], [$intermediate_cdna_pair_bam]);
+				$runner->padd("$samtools_bin merge #>1 #<A", [@merge_jobs_discordant_aligned_bam], [$intermediate_discordant_aligned_bam]);
+				$runner->padd("$samtools_bin merge #>1 #<A", [@merge_jobs_discordant_unaligned_bam], [$intermediate_discordant_unaligned_bam]);
 			}
 			
 			push @all_intermediate_read_stats, $intermediate_read_stats;
@@ -541,9 +553,9 @@ sub splitalignmerge
 	}
 	else
 	{
-		$runner->run("samtools merge #>1 #<A", [@all_intermediate_cdna_pair_bam], [$cdna_pair_bam]);
-		$runner->run("samtools merge #>1 #<A", [@all_intermediate_discordant_aligned_bam], [$discordant_aligned_bam]);
-		$runner->run("samtools merge #>1 #<A", [@all_intermediate_discordant_unaligned_bam], [$discordant_unaligned_bam]);
+		$runner->run("$samtools_bin merge #>1 #<A", [@all_intermediate_cdna_pair_bam], [$cdna_pair_bam]);
+		$runner->run("$samtools_bin merge #>1 #<A", [@all_intermediate_discordant_aligned_bam], [$discordant_aligned_bam]);
+		$runner->run("$samtools_bin merge #>1 #<A", [@all_intermediate_discordant_unaligned_bam], [$discordant_unaligned_bam]);
 	}
 
 	if (lc($remove_job_files) eq "yes")	
@@ -595,7 +607,14 @@ sub dosplitalignments
 	$runner->prun();
 
 	# Merge the alignments
-	$runner->run("cat #<A > #>1", [@all_job_candidate_alignments], [$candidate_alignments]);
+	if (scalar @all_job_candidate_alignments > 0)
+	{
+		$runner->run("cat #<A > #>1", [@all_job_candidate_alignments], [$candidate_alignments]);
+	}
+	else
+	{
+		$runner->run("touch #>1", [], [$candidate_alignments]);
+	}
 }
 
 

@@ -2,12 +2,13 @@ args <- commandArgs(TRUE)
 
 read_stats <- read.table(args[1], header=T);
 cov_stats <- read.table(args[2], header=T);
-sample_mean <- as.numeric(args[3]);
-numfrags <- as.numeric(args[4]);
+readlength_trim <- as.numeric(args[3]);
+sample_mean <- as.numeric(args[4]);
+numfrags <- as.numeric(args[5]);
 
 fraglength_mean <- read_stats$fraglength_mean;
 fraglength_stddev <- read_stats$fraglength_stddev;
-readlength_max <- read_stats$readlength_max;
+readlength_max <- min(read_stats$readlength_max,readlength_trim);
 
 fraglength_variance <- read_stats$fraglength_stddev^2;
 

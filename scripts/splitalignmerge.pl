@@ -243,9 +243,9 @@ foreach my $job_index (0..$#all_jobs_read_stats)
 		}
 		else
 		{
-			$runner->padd("samtools merge #>1 #<A", [@merge_jobs_cdna_pair_bam], [$intermediate_cdna_pair_bam]);
-			$runner->padd("samtools merge #>1 #<A", [@merge_jobs_discordant_aligned_bam], [$intermediate_discordant_aligned_bam]);
-			$runner->padd("samtools merge #>1 #<A", [@merge_jobs_discordant_unaligned_bam], [$intermediate_discordant_unaligned_bam]);
+			$runner->padd("$samtools_bin merge #>1 #<A", [@merge_jobs_cdna_pair_bam], [$intermediate_cdna_pair_bam]);
+			$runner->padd("$samtools_bin merge #>1 #<A", [@merge_jobs_discordant_aligned_bam], [$intermediate_discordant_aligned_bam]);
+			$runner->padd("$samtools_bin merge #>1 #<A", [@merge_jobs_discordant_unaligned_bam], [$intermediate_discordant_unaligned_bam]);
 		}
 		
 		push @all_intermediate_read_stats, $intermediate_read_stats;
@@ -278,9 +278,9 @@ if (scalar @all_intermediate_discordant_aligned_bam == 1)
 }
 else
 {
-	$runner->run("samtools merge #>1 #<A", [@all_intermediate_cdna_pair_bam], [$cdna_pair_bam]);
-	$runner->run("samtools merge #>1 #<A", [@all_intermediate_discordant_aligned_bam], [$discordant_aligned_bam]);
-	$runner->run("samtools merge #>1 #<A", [@all_intermediate_discordant_unaligned_bam], [$discordant_unaligned_bam]);
+	$runner->run("$samtools_bin merge #>1 #<A", [@all_intermediate_cdna_pair_bam], [$cdna_pair_bam]);
+	$runner->run("$samtools_bin merge #>1 #<A", [@all_intermediate_discordant_aligned_bam], [$discordant_aligned_bam]);
+	$runner->run("$samtools_bin merge #>1 #<A", [@all_intermediate_discordant_unaligned_bam], [$discordant_unaligned_bam]);
 }
 
 unlink @all_jobs_read_stats;

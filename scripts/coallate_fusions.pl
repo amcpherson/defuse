@@ -86,7 +86,9 @@ foreach my $cluster_id (keys %clusters)
 # Read in annotations file
 my %annotations;
 my $annotations_filename = $output_directory."/annotations.txt";
+my $mapping_stats_filename = $output_directory."/mapping.stats";
 read_annotations($annotations_filename, \%annotations);
+read_annotations($mapping_stats_filename, \%annotations);
 
 # Read in split read and denovo break predictions
 my %splitr_break;

@@ -49,7 +49,7 @@ while (1)
 	chomp($comment1);
 	chomp($quality1);
 	
-	$readid1 =~ /^\@(.*)\/([12])$/ or die "Fastq error\n";
+	$readid1 =~ /^\@(.*)\/([12])$/ or die "Fastq error, unable to interpret readid $readid1\n";
 	my $fragment1 = $1;
 	my $end1 = $2;
 
@@ -65,11 +65,11 @@ while (1)
 	chomp($comment2);
 	chomp($quality2);
 
-	$readid2 =~ /^\@(.*)\/([12])$/ or die "Fastq error\n";
+	$readid2 =~ /^\@(.*)\/([12])$/ or die "Fastq error, unable to interpret readid $readid2\n";
 	my $fragment2 = $1;
 	my $end2 = $2;
 	
-	die "Fastq error\n" if $fragment1 ne $fragment2 or $end1 ne '1' or $end2 ne '2';
+	die "Fastq error: read id mismatch for $readid1 and $readid2\n" if $fragment1 ne $fragment2 or $end1 ne '1' or $end2 ne '2';
 
 	print FQI $filepos1;
 	print FQI $filepos2;
