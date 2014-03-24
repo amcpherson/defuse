@@ -277,11 +277,8 @@ my $clusters_sc = $output_directory."/clusters.sc.txt";
 $runner->run("$setcover_bin -m $span_count_threshold -c #<1 -o #>1", [$clusters], [$clusters_sc]);
 
 print "Generating sam format clusters\n";
-my $clusters_sam = $output_directory."/clusters.sam";
 my $clusters_sc_sam = $output_directory."/clusters.sc.sam";
-$runner->padd("$samtools_bin view #<1 | $get_cluster_alignments_script #<2 > #>1", [$discordant_aligned_bam,$clusters], [$clusters_sam]);
-$runner->padd("$samtools_bin view #<1 | $get_cluster_alignments_script #<2 > #>1", [$discordant_aligned_bam,$clusters_sc], [$clusters_sc_sam]);
-$runner->prun();
+$runner->run("$samtools_bin view #<1 | $get_cluster_alignments_script #<2 > #>1", [$discordant_aligned_bam,$clusters_sc], [$clusters_sc_sam]);
 
 print "Generating spanning alignment regions file\n";
 my $clusters_sc_regions = $output_directory."/clusters.sc.regions";
