@@ -1,7 +1,7 @@
 #
 # Configuration file for defuse
 #
-# At a minimum, change all values enclosed by []
+# At a minimum, change all values enclused by []
 #
 
 # Directory where the defuse code was unpacked
@@ -29,8 +29,8 @@ bowtie_bin                                  = [path of your bowtie binary versio
 bowtie_build_bin                            = [path of your bowtie-build binary version 0.12.5 or greater recommended]
 blat_bin                                    = [path of your blat binary]
 fatotwobit_bin                              = [path of your faToTwoBit binary from the blat suite]
-r_bin                                       = R
-rscript_bin                                 = Rscript
+r_bin                                       = [path of your R binary]
+rscript_bin                                 = [path of your Rscript binary]
 
 # Dataset files
 dataset_prefix                              = $(dataset_directory)/defuse

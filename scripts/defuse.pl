@@ -319,16 +319,17 @@ print "Read Stats\n";
 print "\tFragment mean $fragment_mean stddev $fragment_stddev\n";
 print "\tRead length min $read_length_min max $read_length_max\n";
 
-# Run remaining commands on high memory cluster nodes
-$runner->jobmem(10000000000);
-
 print "Finding paired end alignment covariance\n";
 my $cov_stats = $output_directory."/covariance.stats";
+$runner->jobmem(10000000000);
 $runner->run("$calccov_bin -m $fragment_max -a $split_min_anchor -d $cov_samp_density -g $cdna_regions -c #<1 -v #>1", [$cdna_pair_bam], [$cov_stats]);
+$runner->jobmem(3000000000);
 
 print "Generating maximal valid clusters\n";
 my $clusters_all = $output_directory."/clusters.all";
+$runner->jobmem(10000000000);
 $runner->run("$clustermatepairs_bin -m $span_count_threshold -p $clustering_precision -u $fragment_mean -s $fragment_stddev -r #<1 -c #>1", [$spanning_byread_bam], [$clusters_all]);
+$runner->jobmem(3000000000);
 
 print "Remove mitochondrial-genomic clusters\n";
 my $clusters = $output_directory."/clusters";
@@ -336,7 +337,9 @@ $runner->run("$segregate_mitochondrial_script $gene_models $mt_chromosome < #<1 
 
 print "Generating maximum parsimony solution\n";
 my $clusters_sc_all = $output_directory."/clusters.sc.all";
+$runner->jobmem(10000000000);
 $runner->run("$setcover_bin -m $span_count_threshold -c #<1 -o #>1", [$clusters], [$clusters_sc_all]);
+$runner->jobmem(3000000000);
 
 print "Selecting fusion clusters\n";
 my $clusters_sc_unfilt = $output_directory."/clusters.sc.unfilt";
@@ -361,7 +364,9 @@ $runner->run("$get_align_regions_script < #<1 > #>1", [$clusters_sc], [$clusters
 print "Finding candidate split reads\n";
 my $candidate_sequences = $output_directory."/candidate.seqs";
 my $candidate_reads = $output_directory."/candidate.reads";
+$runner->jobmem(10000000000);
 $runner->run("$findcandidatereads_bin -i #<1 -c #>1 -r #>2 -m $read_length_min -x $read_length_max -u $fragment_mean -s $fragment_stddev -e $cdna_regions -f $reference_fasta -d $spanning_bam -a $anchored_bam", [$clusters_sc_regions], [$candidate_sequences,$candidate_reads]);
+$runner->jobmem(3000000000);
 
 print "Calculating split reads\n";
 my $candidate_alignments = $output_directory."/candidate.alignments";

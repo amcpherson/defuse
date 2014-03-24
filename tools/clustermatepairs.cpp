@@ -21,13 +21,11 @@
 #include <tclap/CmdLine.h>
 #include <boost/lexical_cast.hpp>
 #include <boost/algorithm/string.hpp>
-#include <google/sparse_hash_map>
 #include "bam.h"
 #include "sam.h"
 
 using namespace boost;
 using namespace std;
-using google::sparse_hash_map;
 
 
 struct RefBinPacked
@@ -35,16 +33,18 @@ struct RefBinPacked
 	RefBinPacked() {}
 	RefBinPacked(const RefStrand& refStrand, int bin) : referenceIndex(refStrand.referenceIndex), strand(refStrand.strand), bin(bin)
 	{
-		if (refStrand.referenceIndex >= (1<<16))
+		if (refStrand.referenceIndex >= (1<<18))
 		{
+			cout << refStrand.referenceIndex << endl;
+			cout << (1<<18) << endl;
 			cerr << "Packing failed, too many reference sequences" << endl;
 			exit(1);
 		}
 
-		if (bin >= (1<<15))
+		if (bin >= (1<<13))
 		{
 			cout << bin << endl;
-			cout << (1<<15) << endl;
+			cout << (1<<13) << endl;
 			cerr << "Packing failed, chromosome too large" << endl;
 			exit(1);
 		}
@@ -54,9 +54,9 @@ struct RefBinPacked
 	{
 		struct
 		{
-			unsigned int referenceIndex : 16;
+			unsigned int referenceIndex : 18;
 			unsigned int strand : 1;
-			unsigned int bin : 15;
+			unsigned int bin : 13;
 		};
 		
 		unsigned int id;
@@ -165,12 +165,12 @@ public:
 	
 	int CalcBinRelativePos(int bin, int pos) const
 	{
-		return pos - bin * mBinLength + mBinLength;
+		return pos - bin * mBinLength + mBinLength / 2;
 	}
 
 	int CalcAbsolutePos(int bin, int pos) const
 	{
-		return pos + bin * mBinLength - mBinLength;
+		return pos + bin * mBinLength - mBinLength / 2;
 	}
 	
 private:
@@ -187,7 +187,7 @@ void PackAlignment(const Binning& binning, int bin, const CompactAlignment& alig
 	DebugCheck(relativeEnd >= 0);
 	DebugCheck(relativeStart < (1<<16));
 	DebugCheck(relativeEnd < (1 << 16));
-	
+
 	packed.readID = alignment.readID;
 	packed.relativeStart = relativeStart;
 	packed.relativeEnd = relativeEnd;
@@ -288,11 +288,6 @@ void AddBinPairs(const CompAlignVec& alignments, Binning& binning, RefBinPairMap
 				binPairs[refBinPair].first.insert(binPairs[refBinPair].first.end(), refBin2Iter->second.begin(), refBin2Iter->second.end());
 				binPairs[refBinPair].second.insert(binPairs[refBinPair].second.end(), refBin1Iter->second.begin(), refBin1Iter->second.end());
 			}
-			
-	//		RefBinPair refBinPair(refBin1,refBin2);
-			
-	//		binPairs[refBinPair].insert(binPairs[refBinPair].end(), refBin1Iter->second.begin(), refBin1Iter->second.end());
-	//		binPairs[refBinPair].insert(binPairs[refBinPair].end(), refBin2Iter->second.begin(), refBin2Iter->second.end());
 		}
 	}	
 }
@@ -428,7 +423,7 @@ int main(int argc, char* argv[])
 	}
 	
 	const int minFusionRange = (int)(fragmentLengthMean + 10 * fragmentLengthStdDev);
-	const int binLength = 10000;
+	const int binLength = 1<<15;
 		
 	cout << "Finding pairs of reference sequences connected by pairs of alignments" << endl;
 		

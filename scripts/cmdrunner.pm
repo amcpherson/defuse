@@ -315,7 +315,7 @@ sub append_joblog_filename
 	
 	open OUT, ">>".$filename or die "Error: Unable to append job log to $filename\n";
 	$self->append_joblog_file($joblog, \*OUT, $skiplast);
-	close LOG;
+	close OUT;
 }
 
 sub append_joblog_file

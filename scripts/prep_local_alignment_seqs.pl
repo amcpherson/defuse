@@ -111,6 +111,9 @@ sub output
 	}
 	
 	my $sequence = $reference_db->seq($ref_name, $start, $end);
+	
+	return if not defined $sequence;
+	
 	$sequence = revcomp($sequence) if $strand eq $other_strand;
 				
 	print $cluster_id."\t".$sequence."\t".$other_seq."\n";
