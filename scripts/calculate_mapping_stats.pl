@@ -277,14 +277,7 @@ sub get_bins
 	my $start_bin = int($start / $bin_spacing);
 	my $end_bin = int($end / $bin_spacing);
 	
-	if ($start_bin == $end_bin)
-	{
-		return ($start_bin, $start_bin + 1);
-	}
-	else
-	{
-		return ($start_bin + 1);
-	}	
+	return ($start_bin .. $end_bin);
 }
 
 # Check for overlap between regions

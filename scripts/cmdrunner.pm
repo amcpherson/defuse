@@ -147,14 +147,15 @@ sub submitter_direct
 	# Do the command and write the stdout and stderr to the log file
 	my $sysretcode = system "bash $job_script > $job_out 2>&1";
 
-	return $sysretcode;
+	return ($sysretcode,"");
 }
 
 sub check_qsub
 {
 	# Check qsub exists on this machine
 	my $qsub_exists = system "which qsub > /dev/null 2>&1";
-	print STDERR "Error: no qsub on this machine\n" and return 0 if $qsub_exists != 0;
+
+	return 0 if $qsub_exists != 0;
 	
 	return 1;
 }
@@ -167,7 +168,7 @@ sub submitter_sge_cluster
 	my $job_out = shift;
 	my $cmdrunner = shift;
 	
-	return 1 if not check_qsub();
+	return (1,"No qsub on this machine") if not check_qsub();
 
 	create_job_bash_script($job_cmd, $job_script);
 
@@ -176,9 +177,10 @@ sub submitter_sge_cluster
 	my $qsub_commands = "-l mem_free=$job_mem";
 	
 	# Do the command with qsub and write the stdout and stderr to the log file
-	my $sysretcode = system "qsub -sync y -notify -b y -j y -o $job_out -N $job_name $qsub_commands -S /bin/bash 'bash $job_script' > /dev/null 2>&1";
-
-	return $sysretcode;
+	my $qsub_output = `qsub -sync y -notify -b y -j y -o $job_out -N $job_name $qsub_commands -S /bin/bash 'bash $job_script' 2>&1`;
+	my $sysretcode = $? >> 8;
+	
+	return ($sysretcode,$qsub_output);
 }
 
 sub get_pbs_jobstate
@@ -200,7 +202,7 @@ sub submitter_pbs_cluster
 	my $job_out = shift;
 	my $cmdrunner = shift;
 
-	return 1 if not check_qsub();
+	return (1,"No qsub on this machine") if not check_qsub();
 
 	create_job_bash_script($job_cmd, $job_script);
 
@@ -218,7 +220,7 @@ sub submitter_pbs_cluster
 		sleep 10;
 	}
 
-	return 0;
+	return (0,"");
 }
 
 sub writelog
@@ -558,7 +560,7 @@ sub prun
 				$self->{jobtempfiles} = [@outgenerated];
 
 				# Do the command using the run subroutine provided
-				my $sysretcode = &{$submitter}($job_cmd,$job_name,$job_script,$job_out,$self);
+				my ($sysretcode,$message) = &{$submitter}($job_cmd,$job_name,$job_script,$job_out,$self);
 
 				# Take at least 1 second
 				sleep 1;
@@ -566,7 +568,7 @@ sub prun
 				# Return nonzero if the job failed
 				if ($sysretcode != 0)
 				{
-					print "Command was not properly submitted/executed\n";
+					print "Command was not properly submitted/executed\n".$message;
 					exit(1);
 				}
 

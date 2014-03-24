@@ -215,7 +215,7 @@ my $annotate_fusions_script = "$scripts_directory/annotate_fusions.pl";
 my $calc_map_stats_script = "$scripts_directory/calculate_mapping_stats.pl";
 my $filter_fusions_script = "$scripts_directory/filter_fusions.pl";
 my $coallate_fusions_script = "$scripts_directory/coallate_fusions.pl";
-my $evaluate_fraglength_rscript = "$rscript_bin ".$scripts_directory."/run_adaboost.R";
+my $adaboost_rscript = "$rscript_bin ".$scripts_directory."/run_adaboost.R";
 
 mkdir $output_directory if not -e $output_directory;
 
@@ -230,24 +230,25 @@ my $runner = cmdrunner->new();
 $runner->name("defuse");
 $runner->prefix($log_prefix);
 $runner->maxparallel($max_parallel);
+$runner->submitter($submitter_type);
+$runner->jobmem(3000000000);
 
 # Fastq files and prefix for index and name map
 my $reads_prefix = $output_directory."/reads";
 my $reads_end_1_fastq = $reads_prefix.".1.fastq";
 my $reads_end_2_fastq = $reads_prefix.".2.fastq";
+my $reads_index_filename = $reads_prefix.".fqi";
+my $reads_names_filename = $reads_prefix.".names";
+my $reads_sources_filename = $reads_prefix.".sources";
 
-# Retrieve Fastq Files
+# Optionally retrieve fastq files
 if (defined $source_directory)
 {
 	print "Retreiving fastq files\n";
 	-d $source_directory or die "Error: Unable to find source directory $source_directory\n";
 	$source_directory = abs_path($source_directory);
-	$runner->run("$retreive_fastq_script -c $config_filename -d $source_directory -o $output_directory -s $submitter_type", [], [$reads_end_1_fastq,$reads_end_2_fastq]);
+	$runner->run("$retreive_fastq_script -c $config_filename -d $source_directory -1 $reads_end_1_fastq -2 $reads_end_2_fastq -i $reads_index_filename -n $reads_names_filename -s $reads_sources_filename -f", [], []);
 }
-
-# Run remaining commands on cluster nodes
-$runner->submitter($submitter_type);
-$runner->jobmem(3000000000);
 
 print "Splitting fastq files\n";
 my $reads_split_prefix = $job_directory."/reads";
@@ -378,7 +379,7 @@ $runner->run("$coallate_fusions_script -c $config_filename -o $output_directory 
 
 print "Running adaboost classifier\n";
 my $results_classify = $output_directory."/results.classify.txt";
-$runner->run("$evaluate_fraglength_rscript $positive_controls #<1 #>1", [$results_filename], [$results_classify]);
+$runner->run("$adaboost_rscript $positive_controls #<1 #>1", [$results_filename], [$results_classify]);
 
 print "Success\n";
 

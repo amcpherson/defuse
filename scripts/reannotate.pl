@@ -101,10 +101,12 @@ my $reads_per_job         = $config->get_value("reads_per_job");
 my $regions_per_job       = $config->get_value("regions_per_job");
 my $gene_info_list        = $config->get_value("gene_info_list");
 my $samtools_bin          = $config->get_value("samtools_bin");
+my $rscript_bin           = $config->get_value("rscript_bin");
 my $split_min_anchor      = $config->get_value("split_min_anchor");
 my $cov_samp_density      = $config->get_value("covariance_sampling_density");
 my $denovo_assembly       = $config->get_value("denovo_assembly");
 my $remove_job_files      = $config->get_value("remove_job_files");
+my $positive_controls     = $config->get_value("positive_controls");
 
 my $cdna_fasta_fai        = $cdna_fasta.".fai";
 
@@ -200,6 +202,7 @@ my $calc_map_stats_script = "$scripts_directory/calculate_mapping_stats.pl";
 my $annotate_fusions_script = "$scripts_directory/annotate_fusions.pl";
 my $filter_fusions_script = "$scripts_directory/filter_fusions.pl";
 my $coallate_fusions_script = "$scripts_directory/coallate_fusions.pl";
+my $adaboost_rscript = "$rscript_bin ".$scripts_directory."/run_adaboost.R";
 
 mkdir $output_directory if not -e $output_directory;
 
@@ -232,8 +235,12 @@ $runner->run("$filter_fusions_script -c $config_filename -o $output_directory > 
 print "Coallating fusions\n";
 my $results_filename = $output_directory."/results.txt";
 my $filtered_results_filename = $output_directory."/results.filtered.txt";
-$runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$annotations_filename,$mapping_stats_filename], [$results_filename]);
-$runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$filtered_filename,$annotations_filename,$mapping_stats_filename], [$filtered_results_filename]);
+$runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$annotations_filename], [$results_filename]);
+$runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$filtered_filename], [$filtered_results_filename]);
+
+print "Running adaboost classifier\n";
+my $results_classify = $output_directory."/results.classify.txt";
+$runner->run("$adaboost_rscript $positive_controls #<1 #>1", [$results_filename], [$results_classify]);
 
 print "Success\n";
 $status = "success";

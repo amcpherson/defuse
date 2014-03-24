@@ -9,7 +9,6 @@ use Cwd qw[abs_path];
 
 use lib dirname($0);
 use configdata;
-use cmdrunner;
 
 my @usage;
 push @usage, "Usage: $0 [options]\n";
@@ -17,29 +16,44 @@ push @usage, "Retrieve the fastq files.\n";
 push @usage, "  -h, --help      Displays this information\n";
 push @usage, "  -c, --config    Configuration Filename\n";
 push @usage, "  -d, --data      Source Data Directory\n";
-push @usage, "  -o, --output    Output Directory\n";
-push @usage, "  -s, --submit    Submitter Type\n";
+push @usage, "  -1,             Fastq file for end 1\n";
+push @usage, "  -2,             Fastq file for end 2\n";
+push @usage, "  -i, --index     Fastq index file\n";
+push @usage, "  -n, --names     Fastq names file\n";
+push @usage, "  -s, --sources   Fastq sources file\n";
+push @usage, "  -f, --filter    Filter Garbage\n";
 
 my $help;
 my $config_filename;
 my $source_directory;
-my $output_directory;
-my $submitter_type;
+my $reads_end_1_fastq;
+my $reads_end_2_fastq;
+my $reads_index_filename;
+my $reads_names_filename;
+my $reads_sources_filename;
+my $filter_garbage;
 
 GetOptions
 (
 	'help'        => \$help,
 	'config=s'    => \$config_filename,
 	'data=s'      => \$source_directory,
-	'output=s'    => \$output_directory,
-	'submit=s'    => \$submitter_type,
+	'1=s'         => \$reads_end_1_fastq,
+	'2=s'         => \$reads_end_2_fastq,
+	'index=s'     => \$reads_index_filename,
+	'names=s'     => \$reads_names_filename,
+	'sources=s'   => \$reads_sources_filename,
+	'filter'      => \$filter_garbage,
 );
 
 not defined $help or die @usage;
 defined $config_filename or die @usage;
 defined $source_directory or die @usage;
-defined $output_directory or die @usage;
-defined $submitter_type or die @usage;
+defined $reads_end_1_fastq or die @usage;
+defined $reads_end_2_fastq or die @usage;
+defined $reads_index_filename or die @usage;
+defined $reads_names_filename or die @usage;
+defined $reads_sources_filename or die @usage;
 
 my $config = configdata->new();
 $config->read($config_filename);
@@ -52,20 +66,8 @@ my $filter_fastq_garbage_script = "$scripts_directory/filter_paired_fastq_garbag
 my $index_fastq_script = "$scripts_directory/index_paired_fastq.pl";
 
 $source_directory = abs_path($source_directory);
-$output_directory = abs_path($output_directory);
 
 -e $source_directory or die "Error: Source directory $source_directory does not exist.\n";
--e $output_directory or die "Error: Output directory $output_directory does not exist.\n";
-
-my $log_directory = $output_directory."/log";
-my $log_prefix = $log_directory."/retrieve_fastq";
-
-mkdir $log_directory if not -e $log_directory;
-
-my $runner = cmdrunner->new();
-$runner->name("retrieve_fastq");
-$runner->prefix($log_prefix);
-$runner->submitter($submitter_type);
 
 # Read in all data regex's and conversion scripts
 my @data_lane_regexs;
@@ -115,16 +117,11 @@ while (1)
 	$converter_num++;
 }
 
-my $reads_end_1_fastq = $output_directory."/reads.1.fastq";
-my $reads_end_2_fastq = $output_directory."/reads.2.fastq";
-my $reads_sources = $output_directory."/reads.sources";
-my $reads_prefix = $output_directory."/reads";
-
 # Look for a previous source list
 my @previous_source_list;
-if (-e $reads_sources)
+if (-e $reads_sources_filename)
 {
-	open RSRC, $reads_sources or die "Error: Unable to read $reads_prefix: $!\n";
+	open RSRC, $reads_sources_filename or die "Error: Unable to read $reads_sources_filename: $!\n";
 	@previous_source_list = <RSRC>;
 	close RSRC;
 	
@@ -210,7 +207,7 @@ foreach my $raw_listing (@raw_listings)
 	
 	if (not $convertable)
 	{
-		print "Found unconvertable file $raw_filename\n";
+		print "Ignoring unconvertable file $raw_filename\n";
 	}
 }
 
@@ -225,8 +222,10 @@ foreach my $lane (keys %convert_filename)
 		
 		if (not defined $convert_filename{$lane}{$other_end})
 		{
-			print "Found unpaired file $filename\n";
-			delete $convert_filename{$lane}{$end};
+			print "Ignoring unpaired file $filename\n";
+			delete $convert_filename{$lane};
+			delete $convert_command{$lane};
+			last;
 		}
 	}
 }
@@ -259,46 +258,131 @@ if ($same_source_files and -e $reads_end_1_fastq and -e $reads_end_2_fastq)
 	exit;
 }
 
-# Remove previous fastq files and sources file
-unlink $reads_end_1_fastq;
-unlink $reads_end_2_fastq;
-unlink $reads_sources;
+# Open both fastq files for simultaneous writing
+open FQ1, ">".$reads_end_1_fastq or die "Error: Unable to write to $reads_end_1_fastq: $!\n";
+open FQ2, ">".$reads_end_2_fastq or die "Error: Unable to write to $reads_end_2_fastq: $!\n";
+open FQI, ">".$reads_index_filename or die "Error: Unable to open $reads_index_filename\n"; binmode(FQI);
+open NAM, ">".$reads_names_filename or die "Error: Unable to open $reads_names_filename\n";
 
-# Fastq files hashed by end
-my %fastq_end_filenames;
-$fastq_end_filenames{'1'} = $reads_end_1_fastq;
-$fastq_end_filenames{'2'} = $reads_end_2_fastq;	
-
-# Run conversion command for each source file
+# Iterate through each lane and add fastq sequences
+my $current_fragment_index = 0;
 foreach my $lane (keys %convert_command)
 {
-	die if not defined $convert_command{$lane}{'1'} or not defined $convert_command{$lane}{'2'};
+	die "Error: lane $lane is unpaired\n" if not defined $convert_command{$lane}{'1'} or not defined $convert_command{$lane}{'2'};
 	
-	foreach my $end ('1','2')
+	print "Converting ".$convert_filename{$lane}{'1'}." and ".$convert_filename{$lane}{'2'}."\n";
+	
+	open IN1, $convert_command{$lane}{"1"}." |" or die "Error: Unable to start command ".$convert_command{$lane}{"1"}."\n";
+	open IN2, $convert_command{$lane}{"2"}." |" or die "Error: Unable to start command ".$convert_command{$lane}{"2"}."\n";
+	
+	while (1)
 	{
-		print "Converting raw file $convert_filename{$lane}{$end} containing $end end for $lane\n";
+		my $readid1 = <IN1>;
+		my $sequence1 = <IN1>;
+		my $comment1 = <IN1>;
+		my $quality1 = <IN1>;
 
-		$runner->run("$convert_command{$lane}{$end} >> $fastq_end_filenames{$end}", [], []);
+		last if not defined $quality1;
+
+		chomp($readid1);
+		chomp($sequence1);
+		chomp($comment1);
+		chomp($quality1);
+
+		my $readid2 = <IN2>;
+		my $sequence2 = <IN2>;
+		my $comment2 = <IN2>;
+		my $quality2 = <IN2>;
+
+		last if not defined $quality2;
+
+		chomp($readid2);
+		chomp($sequence2);
+		chomp($comment2);
+		chomp($quality2);
+		
+		next if $filter_garbage and (is_garbage($sequence1) or is_garbage($sequence2));
+		
+		my $filepos1 = pack('q',tell(FQ1));
+		my $filepos2 = pack('q',tell(FQ2));
+	
+		$readid1 =~ /^\@(.*)\/([12])$/ or die "Fastq error, unable to interpret readid $readid1\n";
+		my $fragment1 = $1;
+		my $end1 = $2;
+		
+		$readid2 =~ /^\@(.*)\/([12])$/ or die "Fastq error, unable to interpret readid $readid2\n";
+		my $fragment2 = $1;
+		my $end2 = $2;
+		
+		die "Fastq error: read id mismatch for $readid1 and $readid2\n" if $fragment1 ne $fragment2 or $end1 ne '1' or $end2 ne '2';
+	
+		print FQI $filepos1;
+		print FQI $filepos2;
+		print FQ1 "\@$current_fragment_index/1\n$sequence1\n$comment1\n$quality1\n";
+		print FQ2 "\@$current_fragment_index/2\n$sequence2\n$comment2\n$quality2\n";
+		print NAM "$current_fragment_index\t$fragment1\n";
+		
+		$current_fragment_index++;
+	}
+	
+	close IN1;
+	my $retcode1 = $? >> 8;
+	
+	close IN2;
+	my $retcode2 = $? >> 8;
+
+	if ($retcode1 != 0)
+	{
+		print STDERR "Error: the following command failed:\n".$convert_command{$lane}{"1"}."\n";
+	}
+	
+	if ($retcode2 != 0)
+	{
+		print STDERR "Error: the following command failed:\n".$convert_command{$lane}{"2"}."\n";
+	}
+	
+	if ($retcode1 != 0 or $retcode2 != 0)
+	{
+		die "Conversion Failed\n";
 	}
 }
 
-# Heuristic filter of reads that are likely garbage
-print "Filtering garbage\n";
-$runner->run("$filter_fastq_garbage_script $reads_prefix", [], []);
-
-# Index the fastq files
-print "Indexing\n";
-$runner->run("$index_fastq_script $reads_prefix", [], []);
+# Finished writing fastq sequences
+close FQ1;
+close FQ2;
+close FQI;
+close NAM;
 
 # Write out source list
-my $reads_sources_temp = $reads_sources.".tmp";
+my $reads_sources_temp = $reads_sources_filename.".tmp";
 open RSRC, ">".$reads_sources_temp or die "Error: Unable to write to source list $reads_sources_temp: $!\n";
 foreach my $source_filename (@source_list)
 {
 	print RSRC $source_filename."\n";
 }
 close RSRC;
-rename $reads_sources_temp, $reads_sources;
+rename $reads_sources_temp, $reads_sources_filename;
 
 print "Finished Retrieval\n";
+
+sub is_garbage
+{
+	my $sequence = $_[0];
+
+	my $max_single_nt = 0.9 * length($sequence);
+	my $max_run_nt = 0.5 * length($sequence);
+
+	return 1 if @{[$sequence =~ /(A)/g]} > $max_single_nt;
+	return 1 if @{[$sequence =~ /(C)/g]} > $max_single_nt;
+	return 1 if @{[$sequence =~ /(T)/g]} > $max_single_nt;
+	return 1 if @{[$sequence =~ /(G)/g]} > $max_single_nt;
+	return 1 if @{[$sequence =~ /(N)/g]} > $max_single_nt;
+	return 1 if $sequence =~ /(A{$max_run_nt,})/;
+	return 1 if $sequence =~ /(C{$max_run_nt,})/;
+	return 1 if $sequence =~ /(T{$max_run_nt,})/;
+	return 1 if $sequence =~ /(G{$max_run_nt,})/;
+	return 1 if $sequence =~ /(N{$max_run_nt,})/;
+
+	return 0;
+}
 
