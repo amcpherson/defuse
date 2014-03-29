@@ -68,7 +68,7 @@ my @prefilter_fastas            = $config->get_list("prefilter");
 my $bowtie_build_bin            = $config->get_value("bowtie_build_bin");
 my $samtools_bin                = $config->get_value("samtools_bin");
 my $fatotwobit_bin              = $config->get_value("fatotwobit_bin");
-my $gmap_setup_bin              = $config->get_value("gmap_setup_bin");
+my $gmap_build_bin              = $config->get_value("gmap_build_bin");
 my $gmap_index_directory        = $config->get_value("gmap_index_directory");
 my $scripts_directory           = $config->get_value("scripts_directory");
 
@@ -557,15 +557,8 @@ sub create_gmap_indices
 	
 	print "Creating $name gmap index\n";
 	
-	my $gmap_makefile = $gmap_index_directory."/Makefile.$name";
-	$runner->run("$gmap_setup_bin -D $gmap_index_directory -d $name -o #>1 #<1", [$fasta], [$gmap_makefile]);
-	
-	my $gmap_coords_log = $gmap_index_directory."/Makefile.$name.coords.log";
-	my $gmap_gmapdb_log = $gmap_index_directory."/Makefile.$name.gmapdb.log";
-	my $gmap_install_log = $gmap_index_directory."/Makefile.$name.install.log";
-	$runner->run("make -C $gmap_index_directory -f #<1 coords > #>1", [$gmap_makefile], [$gmap_coords_log]);
-	$runner->run("make -C $gmap_index_directory -f #<1 gmapdb > #>1", [$gmap_makefile], [$gmap_gmapdb_log]);
-	$runner->run("make -C $gmap_index_directory -f #<1 install > #>1", [$gmap_makefile], [$gmap_install_log]);
+	my $gmap_build_log = $gmap_index_directory."/defuse.gmap_build.$name.log";
+	$runner->run("$gmap_build_bin -D $gmap_index_directory -d $name #<1 > #>1", [$fasta], [$gmap_build_log]);
 }
 
 create_gmap_indices($cdna_fasta, "cdna");

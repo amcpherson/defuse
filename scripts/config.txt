@@ -40,7 +40,7 @@ fatotwobit_bin                              = [path of your faToTwoBit binary fr
 r_bin                                       = [path of your R binary]
 rscript_bin                                 = [path of your Rscript binary]
 gmap_bin                                    = [path of your gmap binary]
-gmap_setup_bin                              = [path of your gmap_setup binary]
+gmap_build_bin                              = [path of your gmap_build binary]
 
 # Directory where you want your dataset
 gmap_index_directory                        = $(dataset_directory)/gmap
