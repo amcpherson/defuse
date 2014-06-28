@@ -12,6 +12,30 @@ The deFuse algorithm and results from an application to ovarian tumours and sarc
 
 deFuse has been used to discover gene fusions in tumour samples for the following publications: 
 
+[Genetic alterations activating kinase and cytokine receptor signaling in high-risk acute lymphoblastic leukemia](http://www.ncbi.nlm.nih.gov/pubmed/22897847)
+
+[14-3-3 fusion oncogenes in high-grade endometrial stromal sarcoma](http://www.ncbi.nlm.nih.gov/pubmed/22223660)
+
+[Whole-genome sequencing identifies genetic alterations in pediatric low-grade gliomas](http://www.ncbi.nlm.nih.gov/pubmed/23583981)
+
+[Recurrent somatic alterations of FGFR1 and NTRK2 in pilocytic astrocytoma](http://www.ncbi.nlm.nih.gov/pubmed/23817572)
+
+[Integrated genome and transcriptome sequencing identifies a novel form of hybrid and aggressive prostate cancer](http://www.ncbi.nlm.nih.gov/pubmed/22294438)
+
+[Poly-gene fusion transcripts and chromothripsis in prostate cancer](http://www.ncbi.nlm.nih.gov/pubmed/22927308)
+
+[Identification of recurrent FGFR3 fusion genes in lung cancer through kinome-centred RNA sequencing](http://www.ncbi.nlm.nih.gov/pubmed/23661334)
+
+[CUX1 is a haploinsufficient tumor suppressor gene on chromosome 7 frequently inactivated in acute myeloid leukemia](http://www.ncbi.nlm.nih.gov/pubmed/23212519)
+
+[Characterization of novel genomic alterations and therapeutic approaches using acute megakaryoblastic leukemia xenograft models](http://www.ncbi.nlm.nih.gov/pubmed/23045605)
+
+[TBL1XR1/TP63: a novel recurrent gene fusion in B-cell non-Hodgkin lymphoma](http://www.ncbi.nlm.nih.gov/pubmed/22496164)
+
+[CBFA2T3-GLIS2 fusion transcript is a novel common feature in pediatric, cytogenetically normal AML, not restricted to FAB M7 subtype](http://www.ncbi.nlm.nih.gov/pubmed/23407549)
+
+[Recurrent mutations in epigenetic regulators, RHOA and FYN kinase in peripheral T cell lymphomas](http://www.ncbi.nlm.nih.gov/pubmed/24413734)
+
 [MHC class II transactivator CIITA is a recurrent gene fusion partner in lymphoid cancers, Nature 2011](http://www.nature.com/nature/journal/v471/n7338/full/nature09754.html)
 
 ## Issues
@@ -31,7 +55,7 @@ Four of the granulosa cell tumour datasets analysed in the PLoS Comp. Bio. paper
 
 ## Setup
 
-Running the deFuse pipeline is simple as running a single script. 
+To run the deFuse pipeline, you will be required to install some prerequisite software, modify a configuration file, and run a setup script.
 
 ### deFuse code
 
