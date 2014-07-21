@@ -75,7 +75,7 @@ deFuse relies on other publically available tools as part of its pipeline. Some 
 
 Download samtools: 
 
-The latest version of samtools can be downloaded from the [samtools sourceforge site]](https://sourceforge.net/projects/samtools/files/samtools). 
+The latest version of samtools can be downloaded from the [samtools sourceforge site](https://sourceforge.net/projects/samtools/files/samtools). 
 
 Set the `samtools_bin` entry in `config.txt` to the fully qualified paths of the `samtools` binary.
 
