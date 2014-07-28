@@ -71,7 +71,8 @@ int main(int argc, char* argv[])
 	double covSampleDensity;
 	int splitMinAnchor;
 	int trimLength;
-	
+	bool multiExonTransripts;
+
 	try
 	{
 		TCLAP::CmdLine cmd("Calculate covariance stats from concordant alignments");
@@ -82,7 +83,8 @@ int main(int argc, char* argv[])
 		TCLAP::ValueArg<string> splitMinSamplesFilenameArg("m","min","Split Minimum Samples Filename",true,"","string",cmd);
 		TCLAP::ValueArg<double> covSampleDensityArg("d","density","Covariance Sampling Density",true,0.0,"float",cmd);
 		TCLAP::ValueArg<int> splitMinAnchorArg("a","anchor","Gene Transcripts Filename",true,0,"integer",cmd);
-		TCLAP::ValueArg<int> trimLengthArg("t","trim","Trim Length for Spanning Alignments",true,0,"integer",cmd);		
+		TCLAP::ValueArg<int> trimLengthArg("t","trim","Trim Length for Spanning Alignments",true,0,"integer",cmd);
+		TCLAP::SwitchArg multiExonTransriptsArg("","multiexon","Use Multi-Exon Transcripts",cmd);
 		cmd.parse(argc,argv);
 		
 		concordantSamFilename = concordantSamFilenameArg.getValue();
@@ -93,6 +95,7 @@ int main(int argc, char* argv[])
 		covSampleDensity = covSampleDensityArg.getValue();
 		splitMinAnchor = splitMinAnchorArg.getValue();
 		trimLength = trimLengthArg.getValue();
+		multiExonTransripts = multiExonTransriptsArg.getValue();
 	}
 	catch (TCLAP::ArgException &e)
 	{
@@ -119,7 +122,7 @@ int main(int argc, char* argv[])
 	const StringVec& genes = geneTranscripts.GetGenes();
 	for (StringVecConstIter geneIter = genes.begin(); geneIter != genes.end(); geneIter++)
 	{
-		if (geneTranscripts.GetGeneTranscripts(*geneIter).size() == 1)
+		if (geneTranscripts.GetGeneTranscripts(*geneIter).size() == 1 || multiExonTransripts)
 		{
 			const string& transcript = geneTranscripts.GetGeneTranscripts(*geneIter)[0];
 			
