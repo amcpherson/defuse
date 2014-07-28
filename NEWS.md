@@ -1,10 +1,6 @@
-  
-## News
+# News
 
-### Version 0.6.1 is now available
-
-  * [manual page](DeFuse_Version_0.6.1) 
-  * [source code](http://sourceforge.net/projects/defuse/files/defuse/0.6)
+## Version 0.6.1 is now available
 
 Improvements: 
 
@@ -12,10 +8,7 @@ Improvements:
   * Reimplemented `interrupted_indexN` and `splicing_indexN`
   * Optionally compute `interrupted_indexN` and `splicing_indexN` using `calculate_extra_annotations`
 
-### Version 0.6.0 is now available
-
-  * [manual page](DeFuse_Version_0.6.0) 
-  * [source code](http://sourceforge.net/projects/defuse/files/defuse/0.6)
+## Version 0.6.0 is now available
 
 Improvements: 
 
@@ -30,16 +23,13 @@ Bugfixes:
 Other Changes: 
 
   * no longer filtering garbage reads since it was slow, and generally not useful 
-  * \--mm bowtie option for memory mapped bowtie index was removed from default options, add to `bowtie_options` if in the config if needed 
+  * `--mm` bowtie option for memory mapped bowtie index was removed from default options, add to `bowtie_options` if in the config if needed 
 
 Comments: 
 
   * The results for some longer read datasets are greatly improved by trimming a variable number of low quality bases from the ends of each read 
 
-### Version 0.5.0 is now available
-
-  * [manual page](DeFuse_Version_0.4.2) 
-  * [source code](http://sourceforge.net/projects/defuse/files/defuse/0.5)
+## Version 0.5.0 is now available
 
 Fixes the following bugs: 
 
@@ -50,10 +40,7 @@ Fixes the following bugs:
 
 No dataset rebuild required. 
 
-### Version 0.4.3 is now available
-
-  * [manual page](DeFuse_Version_0.4.2) 
-  * [source code](http://sourceforge.net/projects/defuse/files/defuse/0.4)
+## Version 0.4.3 is now available
 
 Added a simulated test dataset and deFuse output based on default parameters [here](http://sourceforge.net/projects/defuse/files/simulation/)
 
@@ -71,28 +58,19 @@ In addition, the script `get_reads.pl` has been added. Pass it the config filena
 
 No dataset rebuild required. 
 
-### Version 0.4.2 is now available
-
-  * [manual page](DeFuse_Version_0.4.2) 
-  * [source code](http://sourceforge.net/projects/defuse/files/)
+## Version 0.4.2 is now available
 
 Fixes the est island filter that was previously broken. Adds 50 A's to each cDNA sequence to allow for alignment of poly A tail reads. 
 
 Requires a dataset rebuild using the `create_reference_dataset.pl` script. 
 
-### Version 0.4.1 is now available
-
-  * [manual page](DeFuse_Version_0.4.1) 
-  * [source code](http://sourceforge.net/projects/defuse/files/)
+## Version 0.4.1 is now available
 
 Version 0.4.1 fixes the `too many reference sequences` bug of when using version 0.4.0 with the latest ensembl. 
 
 To start 0.4.1 where 0.4.0 left off, delete `*cluster*` from the output directory and run 0.4.1 on that output directory. There is no need to rebuild the reference dataset. 
 
-### Version 0.4.0 is now available
-
-  * [manual page](DeFuse_Version_0.4.0) 
-  * [source code](http://sourceforge.net/projects/defuse/files/)
+## Version 0.4.0 is now available
 
 Version 0.4.0 provides several advantages over version 0.3 defuse: 
 
@@ -103,11 +81,7 @@ Version 0.4.0 provides several advantages over version 0.3 defuse:
 
 From version 0.4.0 onwards, a prepackaged dataset will be replaced by step by step instructions on how to build your own dataset. The 0.3 dataset will not be compatible with version 0.4.0 and onwards. 
 
-### Version 0.3.7 is now available
-
-  * [manual page (0.3.6)](DeFuse_Version_0.3.6) 
-  * [source code](http://sourceforge.net/projects/defuse/files/)
-  * [hg19 dataset](http://compbio.bccrc.ca/wp-content/uploads/2010/04/dataset_hg19-0.3.X.tar.gz)
+## Version 0.3.7 is now available
 
 Version 0.3.7 fixes speed and memory issues that would occur with some datasets. If deFuse was taking a long time and generating a very large clusters.txt file, this update should help. In order to run the new version on a dataset that failed with version 0.3.6 or lower, first remove all files matching *clusters* in the output directory created by the previous version, then restart version 0.3.7 using the old output directory. The new version should pick up where the old version left off. 
 
@@ -115,11 +89,7 @@ Known issues:
 
   * blat may fail on low memory machines, to be fixed soon by splitting up the reference for blat
 
-### Version 0.3.6 is now available
-
-  * [manual page](DeFuse_Version_0.3.6) 
-  * [source code](http://sourceforge.net/projects/defuse/files/)
-  * [hg19 dataset](http://compbio.bccrc.ca/wp-content/uploads/2010/04/dataset_hg19-0.3.X.tar.gz)
+## Version 0.3.6 is now available
 
 Version 0.3.6 introduces new annotations that are leveraged using the adaboost classifier for slightly higher accuracy. The filtered output is now based on the probability produced by the adaboost classifier. deFuse 0.3.6 updates can be used to quickly reannotate a deFuse 0.3.5 analysis, however the repeats.txt file from the newly posted dataset is required. To reannotate: 
 
@@ -130,11 +100,7 @@ Known issues:
   * we are currently working on speed issues that may be a problem for some larger datasets
   * blat may fail on low memory machines, to be fixed soon by splitting up the reference for blat
 
-### Version 0.3.5 is now available
-
-  * [manual page](DeFuse_Version_0.3.5) 
-  * [source code](http://sourceforge.net/projects/defuse/files/)
-  * [hg19 dataset](http://compbio.bccrc.ca/wp-content/uploads/2010/04/dataset_hg19-0.3.X.tar.gz)
+## Version 0.3.5 is now available
 
 Version 0.3.5 is a minor update that fixes a number of small bugs and fixes `reannotate.pl` so that it can actually be used to classify the results of any defuse 0.3.X run. This functionality was not working for 0.3.4. Simply run the following to annotate any 0.3.X run and obtain the new annotations and adaboost probability score. It is not necessary to run `reannotate.pl` if you have already run version 0.3.5 of `defuse.pl`. 
 
@@ -145,11 +111,7 @@ Known issues:
   * blat may fail on low memory machines, to be fixed soon by splitting up the reference for blat
   * the method is somewhat sensitive to the max_insert_size parameter, set to 3 standard deviations above expected fragment length, but no higher
 
-### Version 0.3.4 is now available
-
-  * [manual page](DeFuse_Version_0.3.4) 
-  * [source code](http://sourceforge.net/projects/defuse/files/)
-  * [hg19 dataset](http://compbio.bccrc.ca/wp-content/uploads/2010/04/dataset_hg19-0.3.X.tar.gz)
+## Version 0.3.4 is now available
 
 Version 0.3.4 uses an adaboost classifier trained on 60 true positives and 61 false positives to produce a single probability score for each fusion. The R ada package is required. You can take full advantage of the adaboost classifier for results produced using other 0.3.X versions of defuse by simply running the `reannotate.pl` script ****Edit: this does not work, please update to version 0.3.5****. Doing a full rerun using 0.3.4 should not be necessary. Once again, the dataset has not changed. 
 
@@ -164,11 +126,7 @@ Known issues:
   * blat may fail on low memory machines, to be fixed soon by splitting up the reference for blat
   * the method is somewhat sensitive to the max_insert_size parameter, set to 3 standard deviations above expected fragment length, but no higher
 
-### Version 0.3.3 is now available
-
-  * [manual page (0.3.2)](DeFuse_Version_0.3.2) 
-  * [source code](http://sourceforge.net/projects/defuse/files/)
-  * [hg19 dataset](http://compbio.bccrc.ca/wp-content/uploads/2010/04/dataset_hg19-0.3.X.tar.gz)
+## Version 0.3.3 is now available
 
 Version 0.3.3 reworks the split alignments so they are much quicker and do not hit the disk as much as for previous versions. If your deFuse runs are taking a long time, its a good idea to upgrade. The dataset has not changed. 
 
@@ -183,11 +141,7 @@ Known issues:
   * blat may fail on low memory machines, to be fixed soon by splitting up the reference for blat
   * the method is somewhat sensitive to the max_insert_size parameter, set to 3 standard deviations above expected fragment length, but no higher
 
-### Version 0.3.2 is now available
-
-  * [manual page](DeFuse_Version_0.3.2) 
-  * [source code](http://sourceforge.net/projects/defuse/files/)
-  * [hg19 dataset](http://compbio.bccrc.ca/wp-content/uploads/2010/04/dataset_hg19-0.3.X.tar.gz)
+## Version 0.3.2 is now available
 
 If you were having problems previously with deFuse creating very large files, consuming large amounts of memory and taking long amounts of time, it could be because version 0.3.1 and 0.3.0 were not properly filtering IG rearrangements. The problems are exacerbated if your RNA-Seq data was produced from a tumour with high amounts of immune infiltration. This issue is now fixed in version 0.3.2. Note that results from 0.3.1 and 0.3.0 will not be wrong, but will include a superset of what you're interested in (assuming you are not interested in predicting IG rearrangements). 
 
@@ -208,21 +162,13 @@ Known issues:
   * blat may fail on low memory machines, to be fixed soon by splitting up the reference for blat
   * libraries with long read lengths and short fragment lengths (ie 75bp reads and 150 bp fragments) will not work, to be fixed by chopping large reads
 
-### Version 0.3.1 is now available
-
-  * [manual page (0.3.0)](DeFuse_Version_0.3.0) 
-  * [source code](http://sourceforge.net/projects/defuse/files/)
-  * [hg19 dataset](http://compbio.bccrc.ca/wp-content/uploads/2010/04/dataset_hg19-0.3.X.tar.gz)
+## Version 0.3.1 is now available
 
 Changes: 
 
   * Two unnecessary and potentially large files were being produced, this is no longer the case
 
-### Version 0.3.0 is now available
-
-  * [manual page](DeFuse_Version_0.3.0) 
-  * [source code](http://sourceforge.net/projects/defuse/files/)
-  * [hg19 dataset](http://compbio.bccrc.ca/wp-content/uploads/2010/04/dataset_hg19-0.3.X.tar.gz)
+## Version 0.3.0 is now available
 
 This version represents a major change to the way split reads are calculated and has produced more validated predicitons than 0.2.0.  Not backward compatible with 0.2.0. 
 
@@ -232,9 +178,6 @@ Changes:
   * Parallelized split read calculation
   * Output now includes column headers
 
-### Version 0.2.0 is now available
-
-  * [manual page](DeFuse_Version_0.2.0) 
-  * [source code](http://sourceforge.net/projects/defuse/files/)
+## Version 0.2.0 is now available
 
 This is the first official release of deFuse. 
