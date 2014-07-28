@@ -107,6 +107,10 @@ splice_bias                                 = 10
 positive_controls                           = $(data_directory)/controls.txt
 probability_threshold                       = 0.50
 
+# Use multiple exon transcripts for stats calculations (yes/no)
+# should be enabled for very small libraries
+multi_exon_transcripts_stats                = no
+
 # Position density when calculating covariance
 covariance_sampling_density                 = 0.01
 
