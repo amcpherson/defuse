@@ -1,5 +1,11 @@
 # News
 
+## Version 0.6.2 is now available
+
+Bugfixes: 
+
+  * Updated to work with newer version of gmap
+
 ## Version 0.6.1 is now available
 
 Improvements: 
