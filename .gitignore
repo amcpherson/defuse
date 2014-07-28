@@ -1,0 +1,13 @@
+*.o
+*.a
+tools/bamfastq
+tools/calccov
+tools/clustermatepairs
+tools/dosplitalign
+tools/estislands
+tools/evalsplitalign
+tools/initsplitalign
+tools/localalign
+tools/matealign
+tools/setcover
+tools/splitseq
