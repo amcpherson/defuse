@@ -217,7 +217,7 @@ print "Calculating read statistics\n";
 $runner->run("$read_stats_script < #<1 > #>1", [$cdna_pair_sam], [$read_stats]);
 
 print "Calculating covariance samples\n";
-my $multi_exon_transcripts_arg = (lc($config->get_value("multi_exon_transcripts_stats")) == "yes") ? "--multiexon" : "";
+my $multi_exon_transcripts_arg = (lc($config->get_value("multi_exon_transcripts_stats")) eq "yes") ? "--multiexon" : "";
 $runner->run("$calccov_bin -t $discord_read_trim -a $split_min_anchor -d $cov_samp_density -g $cdna_regions $multi_exon_transcripts_arg -c #<1 -l #>1 -p #>2 -m #>3", [$cdna_pair_sam], [$spanlength_samples, $splitpos_samples, $splitmin_samples]);
 
 print "Calculating expression\n";
