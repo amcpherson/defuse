@@ -222,7 +222,7 @@ if (not -e $unigene_fasta)
 my $dna_db = Bio::DB::Fasta->new($genome_fasta);
 
 
-my $line_number = 1;
+my $line_number = 0;
 
 my %candidate_genes;
 my %candidate_transcripts;
@@ -246,11 +246,20 @@ my %chromosome_genes;
 
 my %ig_genes;
 
+my %accepted_feature_types;
+$accepted_feature_types{CDS} = 1;
+$accepted_feature_types{exon} = 1;
+$accepted_feature_types{start_codon} = 1;
+$accepted_feature_types{stop_codon} = 1;
+
 print "Reading gene models\n";
 open GFF, $gene_models or die "Error: Unable to open $gene_models\n";
 while (<GFF>)
 {
+	$line_number++;
+
 	chomp;
+	next if /^#/;
 	my @gff_fields = split /\t/;
 
 	my $chromosome = $gff_fields[0];
@@ -260,6 +269,8 @@ while (<GFF>)
 	my $end = $gff_fields[4];
 	my $strand = $gff_fields[6];
 	my @features = split /;/, $gff_fields[8];
+
+	next unless $accepted_feature_types{$feature_type};
 
 	my $gene_id;
 	my $transcript_id;
@@ -321,8 +332,6 @@ while (<GFF>)
 
 	$transcript_tss{$transcript_id} = [$start,$end] if $feature_type eq "start_codon";
 	$transcript_tts{$transcript_id} = [$start,$end] if $feature_type eq "stop_codon";
-
-	$line_number++;
 }
 close GFF;
 
