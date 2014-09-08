@@ -5,6 +5,11 @@ args <- commandArgs(TRUE)
 controls <- read.table(args[1], header=T);
 data <- read.table(args[2], header=T);
 
+if (length(rownames(data)) == 0) {
+	write.table(data, file=args[3], quote=F, sep="\t", eol="\n", row.names=F)
+	q()
+}
+
 features <- c(
 "break_adj_entropy_min",
 "cdna_breakseqs_percident",
