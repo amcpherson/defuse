@@ -9,6 +9,12 @@ use List::Util qw[min max];
 # Gene models constructor
 sub new
 {
+	my %accepted_feature_types;
+	$accepted_feature_types{CDS} = 1;
+	$accepted_feature_types{exon} = 1;
+	$accepted_feature_types{start_codon} = 1;
+	$accepted_feature_types{stop_codon} = 1;
+
 	my $proto = shift;
 	my $class = ref($proto) || $proto;
 	my $gene_models_filename = shift;
@@ -20,6 +26,7 @@ sub new
 	while (<GFF>)
 	{
 		chomp;
+		next if /^#/;
 		my @gff_fields = split /\t/;
 	
 		my $chromosome = $gff_fields[0];
@@ -29,7 +36,9 @@ sub new
 		my $end = $gff_fields[4];
 		my $strand = $gff_fields[6];
 		my @features = split /;/, $gff_fields[8];
-	
+
+		next unless $accepted_feature_types{$feature_type};
+		
 		my $gene_id;
 		my $transcript_id;
 		my $gene_name;
