@@ -561,7 +561,14 @@ sub do_breakpoint_jobs
 	
 	foreach my $merge_job (@merge_jobs)
 	{
-		$runner->padd("cat #<A > #>1", $merge_job->[0], [$merge_job->[1]]);
+		if (@{$merge_job->[0]} == 0)
+		{
+			system "touch $merge_job->[1]";
+		}
+		else
+		{
+			$runner->padd("cat #<A > #>1", $merge_job->[0], [$merge_job->[1]]);
+		}
 	}
 	$runner->prun();
 }
