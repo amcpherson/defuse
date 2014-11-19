@@ -82,9 +82,9 @@ max_insert_size                             = 500
 # Parameters for building the dataset
 chromosomes                                 = 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,X,Y,MT
 mt_chromosome                               = MT
-gene_sources                                = IG_C_gene,IG_D_gene,IG_J_gene,IG_V_gene,processed_transcript,protein_coding
-ig_gene_sources                             = IG_C_gene,IG_D_gene,IG_J_gene,IG_V_gene,IG_pseudogene
-rrna_gene_sources                           = Mt_rRNA,rRNA,rRNA_pseudogene
+gene_biotypes                               = IG_C_gene,IG_D_gene,IG_J_gene,IG_V_gene,processed_transcript,protein_coding
+ig_gene_biotypes                            = IG_C_gene,IG_D_gene,IG_J_gene,IG_V_gene,IG_pseudogene
+rrna_gene_biotypes                          = Mt_rRNA,rRNA,rRNA_pseudogene
 
 # Blat sequences per job
 num_blat_sequences                          = 10000
