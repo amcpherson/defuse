@@ -606,6 +606,9 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	my $genome_strand1 = $genomic_strand1{$cluster_id};
 	my $genome_strand2 = $genomic_strand2{$cluster_id};
 
+	my $transcript1 = (defined $gene_models->{transcripts}{$ref_name1}) ? $ref_name1 : 'NA';
+	my $transcript2 = (defined $gene_models->{transcripts}{$ref_name2}) ? $ref_name2 : 'NA';
+
 	my $orf = "N";
 	foreach my $start_index1 (0..$#{$cds_align_strand{$cluster_id}{$gene1}})
 	{
@@ -789,6 +792,8 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\tlibrary_name\t".$library_name."\n";
 
 	print $cluster_id."\tgene1\t".$gene1."\n";
+	print $cluster_id."\ttranscript1\t".$transcript1."\n";
+
 	print $cluster_id."\tgene_name1\t".$gene_models->{genes}{$gene1}{name}."\n";
 	print $cluster_id."\tgene_chromosome1\t".$gene_models->{genes}{$gene1}{chromosome}."\n";
 	print $cluster_id."\tgene_strand1\t".$gene_models->{genes}{$gene1}{strand}."\n";
@@ -796,6 +801,8 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\tgene_end1\t".$gene_models->{genes}{$gene1}{region}->[1]."\n";
 
 	print $cluster_id."\tgene2\t".$gene2."\n";
+	print $cluster_id."\ttranscript2\t".$transcript2."\n";
+
 	print $cluster_id."\tgene_name2\t".$gene_models->{genes}{$gene2}{name}."\n";
 	print $cluster_id."\tgene_chromosome2\t".$gene_models->{genes}{$gene2}{chromosome}."\n";
 	print $cluster_id."\tgene_strand2\t".$gene_models->{genes}{$gene2}{strand}."\n";
