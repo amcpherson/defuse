@@ -186,6 +186,10 @@ my %genomic_breakpos1;
 my %genomic_breakpos2;
 my %genomic_strand1;
 my %genomic_strand2;
+my %genomic_starts1;
+my %genomic_starts2;
+my %genomic_ends1;
+my %genomic_ends2;
 my %gene_location1;
 my %gene_location2;
 my %break_adj_entropy1;
@@ -220,6 +224,20 @@ sub calcentropy
 	}
 	
 	return $entropy;
+}
+
+sub get_start_end
+{
+	my $regions = shift;
+	my $idx = shift;
+
+	my @positions;
+	foreach my $region (@{$regions})
+	{
+		push @positions, $region->[$idx];
+	}
+
+	return \@positions;
 }
 
 my %clusters;
@@ -307,7 +325,13 @@ foreach my $cluster_id (keys %break)
 	
 	$genomic_strand1{$cluster_id} = $genomic_strand1;
 	$genomic_strand2{$cluster_id} = $genomic_strand2;
-	
+
+	$genomic_starts1{$cluster_id} = join ",", @{get_start_end(\@genomic_regions1, 0)};
+	$genomic_starts2{$cluster_id} = join ",", @{get_start_end(\@genomic_regions2, 0)};
+
+	$genomic_ends1{$cluster_id} = join ",", @{get_start_end(\@genomic_regions1, 1)};
+	$genomic_ends2{$cluster_id} = join ",", @{get_start_end(\@genomic_regions2, 1)};
+
 	$gene_location1{$cluster_id} = $gene_location1;
 	$gene_location2{$cluster_id} = $gene_location2;
 	
@@ -815,7 +839,12 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\tgenomic_break_pos1\t".$genomic_breakpos1{$cluster_id}."\n";
 	print $cluster_id."\tgenomic_break_pos2\t".$genomic_breakpos2{$cluster_id}."\n";	
 	print $cluster_id."\tgenomic_strand1\t".$genome_strand1."\n";
-	print $cluster_id."\tgenomic_strand2\t".$genome_strand2."\n";	
+	print $cluster_id."\tgenomic_strand2\t".$genome_strand2."\n";
+
+	print $cluster_id."\tgenomic_starts1\t".$genomic_starts1{$cluster_id}."\n";	
+	print $cluster_id."\tgenomic_starts2\t".$genomic_starts2{$cluster_id}."\n";	
+	print $cluster_id."\tgenomic_ends1\t".$genomic_ends1{$cluster_id}."\n";	
+	print $cluster_id."\tgenomic_ends2\t".$genomic_ends2{$cluster_id}."\n";	
 
 	print $cluster_id."\tsplicing_index1\t".$fusion_splicing_index1{$cluster_id}."\n";
 	print $cluster_id."\tsplicing_index2\t".$fusion_splicing_index2{$cluster_id}."\n";
@@ -1305,4 +1334,5 @@ sub overlap
 		return 1;
 	}
 }
+
 
