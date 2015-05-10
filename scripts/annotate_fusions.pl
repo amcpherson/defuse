@@ -263,10 +263,22 @@ foreach my $cluster_id (keys %clusters)
 		}
 
 		my $break_pos = $break{$cluster_id}{$cluster_end}{breakpos};
+		my $strand = $break{$cluster_id}{$cluster_end}{strand};
 
-		$fusion_region{$cluster_id}{$cluster_end} = [0, 0];
-		$fusion_region{$cluster_id}{$cluster_end}->[0] = min($fusion_align_region{$cluster_id}{$cluster_end}->[0], $break_pos);
-		$fusion_region{$cluster_id}{$cluster_end}->[1] = max($fusion_align_region{$cluster_id}{$cluster_end}->[1], $break_pos);
+		@{$fusion_region{$cluster_id}{$cluster_end}} = @{$fusion_align_region{$cluster_id}{$cluster_end}};
+
+		if ($strand eq "+")
+		{
+			$fusion_region{$cluster_id}{$cluster_end}->[1] = $break_pos;
+		}
+		elsif ($strand eq "-")
+		{
+			$fusion_region{$cluster_id}{$cluster_end}->[0] = $break_pos;
+		}
+		else
+		{
+			die;
+		}
 	}
 }
 
