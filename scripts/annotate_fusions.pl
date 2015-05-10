@@ -298,8 +298,8 @@ foreach my $cluster_id (keys %break)
 	my @genomic_align_regions1 = $gene_models->calc_genomic_regions($ref_name1, $fusion_align_region{$cluster_id}{"0"});
 	my @genomic_align_regions2 = $gene_models->calc_genomic_regions($ref_name2, $fusion_align_region{$cluster_id}{"1"});
 
-	my @genomic_regions1 = $gene_models->calc_genomic_regions($ref_name1, $fusion_align_region{$cluster_id}{"0"});
-	my @genomic_regions2 = $gene_models->calc_genomic_regions($ref_name2, $fusion_align_region{$cluster_id}{"1"});
+	my @genomic_regions1 = $gene_models->calc_genomic_regions($ref_name1, $fusion_region{$cluster_id}{"0"});
+	my @genomic_regions2 = $gene_models->calc_genomic_regions($ref_name2, $fusion_region{$cluster_id}{"1"});
 	
 	my $chromosome1 = $gene_models->calc_genomic_chromosome($ref_name1);
 	my $chromosome2 = $gene_models->calc_genomic_chromosome($ref_name2);
