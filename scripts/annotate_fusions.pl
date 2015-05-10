@@ -262,7 +262,7 @@ foreach my $cluster_id (keys %clusters)
 			$fusion_align_region{$cluster_id}{$cluster_end}->[1] = max($fusion_align_region{$cluster_id}{$cluster_end}->[1], $align_end);
 		}
 
-		$break_pos = $break{$cluster_id}{$cluster_end}{breakpos};
+		my $break_pos = $break{$cluster_id}{$cluster_end}{breakpos};
 
 		$fusion_region{$cluster_id}{$cluster_end} = [0, 0];
 		$fusion_region{$cluster_id}{$cluster_end}->[0] = min($fusion_align_region{$cluster_id}{$cluster_end}->[0], $break_pos);
