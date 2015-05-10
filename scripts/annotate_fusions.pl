@@ -245,6 +245,7 @@ my $clusters_sc = $output_directory."/clusters.sc";
 read_clusters($clusters_sc, \%clusters);
 
 # Calculate fusion align regions
+my %fusion_region;
 my %fusion_align_region;
 foreach my $cluster_id (keys %clusters)
 {
@@ -260,6 +261,12 @@ foreach my $cluster_id (keys %clusters)
 			$fusion_align_region{$cluster_id}{$cluster_end}->[0] = min($fusion_align_region{$cluster_id}{$cluster_end}->[0], $align_start);
 			$fusion_align_region{$cluster_id}{$cluster_end}->[1] = max($fusion_align_region{$cluster_id}{$cluster_end}->[1], $align_end);
 		}
+
+		$break_pos = $break{$cluster_id}{$cluster_end}{breakpos};
+
+		$fusion_region{$cluster_id}{$cluster_end} = [0, 0]
+		$fusion_region{$cluster_id}{$cluster_end}->[0] = min($fusion_align_region{$cluster_id}{$cluster_end}->[0], $break_pos);
+		$fusion_region{$cluster_id}{$cluster_end}->[1] = max($fusion_align_region{$cluster_id}{$cluster_end}->[1], $break_pos);
 	}
 }
 
@@ -288,14 +295,17 @@ foreach my $cluster_id (keys %break)
 	my $gene_location1 = $gene_models->calc_gene_location($gene1, $genomic_breakpos1);
 	my $gene_location2 = $gene_models->calc_gene_location($gene2, $genomic_breakpos2);
 	
+	my @genomic_align_regions1 = $gene_models->calc_genomic_regions($ref_name1, $fusion_align_region{$cluster_id}{"0"});
+	my @genomic_align_regions2 = $gene_models->calc_genomic_regions($ref_name2, $fusion_align_region{$cluster_id}{"1"});
+
 	my @genomic_regions1 = $gene_models->calc_genomic_regions($ref_name1, $fusion_align_region{$cluster_id}{"0"});
 	my @genomic_regions2 = $gene_models->calc_genomic_regions($ref_name2, $fusion_align_region{$cluster_id}{"1"});
 	
 	my $chromosome1 = $gene_models->calc_genomic_chromosome($ref_name1);
 	my $chromosome2 = $gene_models->calc_genomic_chromosome($ref_name2);
 	
-	$fusion_repeat_proportion1{$cluster_id} = get_repeat_proportion($chromosome1, \@genomic_regions1, \%repeats);
-	$fusion_repeat_proportion2{$cluster_id} = get_repeat_proportion($chromosome2, \@genomic_regions2, \%repeats);
+	$fusion_repeat_proportion1{$cluster_id} = get_repeat_proportion($chromosome1, \@genomic_align_regions1, \%repeats);
+	$fusion_repeat_proportion2{$cluster_id} = get_repeat_proportion($chromosome2, \@genomic_align_regions2, \%repeats);
 	
 	my $gene_strand_a = ($gene1 lt $gene2) ? $gene1.$strand1 : $gene2.$strand2;
 	my $gene_strand_b = ($gene1 lt $gene2) ? $gene2.$strand2 : $gene1.$strand1;
