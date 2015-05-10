@@ -195,6 +195,8 @@ The output directory specified on the command line of `defuse.pl` will contain t
   * **library_name** : library name given on the command line of deFuse
   * **gene1** : ensembl id of gene 1
   * **gene2** : ensembl id of gene 2
+  * **transcript1** : transcript id of gene 1, or 'NA' for non-exonic fusions
+  * **transcript2** : transcript id of gene 2, or 'NA' for non-exonic fusions
   * **gene_name1** : name of gene 1
   * **gene_name2** : name of gene 2
 
