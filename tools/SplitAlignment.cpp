@@ -750,7 +750,10 @@ void SplitAlignment::WriteReadIDs(ostream& out, SplitAlignmentMap& splitAlignmen
 			
 			if (split == splitAlignment.mBestSplit)
 			{
-				out << id << "\t" << splitAlignment.mAlignmentReadID[alignmentIndex] << endl;
+				ReadID readID;
+				readID.id = splitAlignment.mAlignmentReadID[alignmentIndex];
+
+				out << id << "\t" << readID.fragmentIndex << ((readID.readEnd == 0) ? "/1" : "/2") << endl;
 			}
 		}
 	}

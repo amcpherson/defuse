@@ -124,7 +124,9 @@ sub read_splitread_ids
 		my @fields = split /\t/;
 
 		my $cluster_id = $fields[0];
-		my $fragment_id = $fields[1];
+		my $read_id = $fields[1];
+
+		my ($fragment_id, $read_end) = split /\//, $read_id;
 		
 		next unless defined $cluster_ids->{$cluster_id};
 
