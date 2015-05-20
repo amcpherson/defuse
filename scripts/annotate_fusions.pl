@@ -356,11 +356,11 @@ foreach my $cluster_id (keys %break)
 	$genomic_ends1{$cluster_id} = join ",", @{get_start_end(\@genomic_regions1, 1)};
 	$genomic_ends2{$cluster_id} = join ",", @{get_start_end(\@genomic_regions2, 1)};
 
-	$genomic_starts1{$cluster_id} = ($genomic_starts1{$cluster_id} == "") ? "NA" : $genomic_starts1{$cluster_id};
-	$genomic_starts2{$cluster_id} = ($genomic_starts2{$cluster_id} == "") ? "NA" : $genomic_starts2{$cluster_id};
+	$genomic_starts1{$cluster_id} = ($genomic_starts1{$cluster_id} eq "") ? "NA" : $genomic_starts1{$cluster_id};
+	$genomic_starts2{$cluster_id} = ($genomic_starts2{$cluster_id} eq "") ? "NA" : $genomic_starts2{$cluster_id};
 
-	$genomic_ends1{$cluster_id} = ($genomic_ends1{$cluster_id} == "") ? "NA" : $genomic_ends1{$cluster_id};
-	$genomic_ends2{$cluster_id} = ($genomic_ends2{$cluster_id} == "") ? "NA" : $genomic_ends2{$cluster_id};
+	$genomic_ends1{$cluster_id} = ($genomic_ends1{$cluster_id} eq "") ? "NA" : $genomic_ends1{$cluster_id};
+	$genomic_ends2{$cluster_id} = ($genomic_ends2{$cluster_id} eq "") ? "NA" : $genomic_ends2{$cluster_id};
 
 	$gene_location1{$cluster_id} = $gene_location1;
 	$gene_location2{$cluster_id} = $gene_location2;
