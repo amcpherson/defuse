@@ -270,10 +270,12 @@ foreach my $cluster_id (keys %clusters)
 		if ($strand eq "+")
 		{
 			$fusion_region{$cluster_id}{$cluster_end}->[1] = $break_pos;
+			$fusion_region{$cluster_id}{$cluster_end}->[0] = min($fusion_region{$cluster_id}{$cluster_end}->[0], $break_pos);
 		}
 		elsif ($strand eq "-")
 		{
 			$fusion_region{$cluster_id}{$cluster_end}->[0] = $break_pos;
+			$fusion_region{$cluster_id}{$cluster_end}->[1] = max($fusion_region{$cluster_id}{$cluster_end}->[1], $break_pos);
 		}
 		else
 		{
