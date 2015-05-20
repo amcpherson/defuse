@@ -37,7 +37,7 @@ public:
 	static void ReadCandidateRefSeqs(istream& in, SplitAlignmentMap& splitAlignments);
 	static void ReadCandidateMateRegions(istream& in, SplitAlignmentMap& splitAlignments);
 	
-	static bool FindCandidates(AlignmentStream* alignments, SplitAlignmentMap& splitAlignments);
+	static void FindCandidates(AlignmentStream* alignments, SplitAlignmentMap& splitAlignments);
 	
 	static void ReadCandidateSequences(IReadStream* readStream, SplitAlignmentMap& splitAlignments);
 	static void ReadCandidateSequences(const ReadIndex& readIndex, SplitAlignmentMap& splitAlignments);

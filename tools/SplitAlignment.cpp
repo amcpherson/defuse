@@ -332,7 +332,7 @@ private:
 	unordered_map<int,Region> mRegions;
 };
 
-bool SplitAlignment::FindCandidates(AlignmentStream* alignments, SplitAlignmentMap& splitAlignments)
+void SplitAlignment::FindCandidates(AlignmentStream* alignments, SplitAlignmentMap& splitAlignments)
 {
 	BinnedLocations binnedMateRegions(2000);
 	
@@ -750,7 +750,7 @@ void SplitAlignment::WriteReadIDs(ostream& out, SplitAlignmentMap& splitAlignmen
 			
 			if (split == splitAlignment.mBestSplit)
 			{
-				out << id << "\t" << splitAlignment.mAlignmentReadID[alignmentIndex];
+				out << id << "\t" << splitAlignment.mAlignmentReadID[alignmentIndex] << endl;
 			}
 		}
 	}
