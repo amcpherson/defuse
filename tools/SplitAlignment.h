@@ -52,6 +52,7 @@ public:
 	static void WriteSequences(ostream& out, SplitAlignmentMap& splitAlignments);
 	static void WriteBreaks(ostream& out, SplitAlignmentMap& splitAlignments);
 	static void WriteAlignText(ostream& out, SplitAlignmentMap& splitAlignments);
+	static void WriteReadIDs(ostream& out, SplitAlignmentMap& splitAlignments);
 	
 private:	
 	inline void CalculateBreakRegion(int minReadLength, int maxReadLength, int maxFragmentLength, int alignStart, 

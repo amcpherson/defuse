@@ -737,6 +737,25 @@ void SplitAlignment::WriteAlignText(ostream& out, SplitAlignmentMap& splitAlignm
 	}
 }
 
+void SplitAlignment::WriteReadIDs(ostream& out, SplitAlignmentMap& splitAlignments)
+{
+	for (SplitAlignmentMapConstIter splitAlignIter = splitAlignments.begin(); splitAlignIter != splitAlignments.end(); splitAlignIter++)
+	{
+		int id = splitAlignIter->first;
+		const SplitAlignment& splitAlignment = splitAlignIter->second;
+
+		for (int alignmentIndex = 0; alignmentIndex < splitAlignment.mAlignmentReadID.size(); alignmentIndex++)
+		{
+			const IntegerPair& split = splitAlignment.mAlignmentRefSplit[alignmentIndex];
+			
+			if (split == splitAlignment.mBestSplit)
+			{
+				out << id << "\t" << splitAlignment.mAlignmentReadID[alignmentIndex];
+			}
+		}
+	}
+}
+
 void SplitAlignment::CalculateBreakRegion(int minReadLength, int maxReadLength, int maxFragmentLength, int alignStart, int alignEnd, int strand, int& breakStart, int& breakLength)
 {
 	int alignRegionLength = alignEnd - alignStart + 1;
