@@ -177,7 +177,7 @@ sub submitter_sge_cluster
 
 	my $job_mem = $cmdrunner->{jobmem};
 	my $job_mem_formatted = ($job_mem / 1000000000)."G";
-	my $qsub_commands = "-l mem_free=$job_mem";
+	my $qsub_commands = "-V -l mem_free=$job_mem";
 	
 	# Do the command with qsub and write the stdout and stderr to the log file
 	#  '-sync y' means block until finished
