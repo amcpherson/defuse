@@ -41,6 +41,8 @@ foreach my $id (keys %samples)
 	$count++;
 }
 
+$count > 100 or die "Error: not enough concordant read samples, set multi_exon_transcripts_stats = yes in config.txt";
+
 my $mean = ($sum1 + $sum2) / (2.0 * $count);
 my $cov = ($crossSum - $sum1 * $sum2 / $count) / $count;
 
