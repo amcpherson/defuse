@@ -37,7 +37,7 @@ public:
 	static void ReadCandidateRefSeqs(istream& in, SplitAlignmentMap& splitAlignments);
 	static void ReadCandidateMateRegions(istream& in, SplitAlignmentMap& splitAlignments);
 	
-	static bool FindCandidates(AlignmentStream* alignments, SplitAlignmentMap& splitAlignments);
+	static void FindCandidates(AlignmentStream* alignments, SplitAlignmentMap& splitAlignments);
 	
 	static void ReadCandidateSequences(IReadStream* readStream, SplitAlignmentMap& splitAlignments);
 	static void ReadCandidateSequences(const ReadIndex& readIndex, SplitAlignmentMap& splitAlignments);
@@ -52,6 +52,7 @@ public:
 	static void WriteSequences(ostream& out, SplitAlignmentMap& splitAlignments);
 	static void WriteBreaks(ostream& out, SplitAlignmentMap& splitAlignments);
 	static void WriteAlignText(ostream& out, SplitAlignmentMap& splitAlignments);
+	static void WriteReadIDs(ostream& out, SplitAlignmentMap& splitAlignments);
 	
 private:	
 	inline void CalculateBreakRegion(int minReadLength, int maxReadLength, int maxFragmentLength, int alignStart, 

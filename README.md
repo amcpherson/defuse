@@ -195,6 +195,8 @@ The output directory specified on the command line of `defuse.pl` will contain t
   * **library_name** : library name given on the command line of deFuse
   * **gene1** : ensembl id of gene 1
   * **gene2** : ensembl id of gene 2
+  * **transcript1** : transcript id of gene 1, or 'NA' for non-exonic fusions
+  * **transcript2** : transcript id of gene 2, or 'NA' for non-exonic fusions
   * **gene_name1** : name of gene 1
   * **gene_name2** : name of gene 2
 
@@ -253,6 +255,10 @@ The output directory specified on the command line of `defuse.pl` will contain t
   * **genomic_break_pos2** : genomic position in gene 2 of fusion splice / breakpoint
   * **genomic_strand1** : genomic strand in gene 1 of fusion splice / breakpoint, retained sequence upstream on this strand, breakpoint is downstream
   * **genomic_strand2** : genomic strand in gene 2 of fusion splice / breakpoint, retained sequence upstream on this strand, breakpoint is downstream
+  * **genomic_starts1** : comma separated list of starts of fusion sequence alignment in gene 1
+  * **genomic_starts2** : comma separated list of starts of fusion sequence alignment in gene 2
+  * **genomic_ends1** : comma separated list of ends of fusion sequence alignment in gene 1
+  * **genomic_ends2** : comma separated list of ends of fusion sequence alignment in gene 2
   * **interchromosomal** : fusion produced by an interchromosomal translocation
   * **interrupted_index1** : ratio of coverage before and after the fusion splice / breakpoint in gene 1
   * **interrupted_index2** : ratio of coverage before and after the fusion splice / breakpoint in gene 2

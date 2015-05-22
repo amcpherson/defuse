@@ -332,7 +332,7 @@ private:
 	unordered_map<int,Region> mRegions;
 };
 
-bool SplitAlignment::FindCandidates(AlignmentStream* alignments, SplitAlignmentMap& splitAlignments)
+void SplitAlignment::FindCandidates(AlignmentStream* alignments, SplitAlignmentMap& splitAlignments)
 {
 	BinnedLocations binnedMateRegions(2000);
 	
@@ -732,6 +732,28 @@ void SplitAlignment::WriteAlignText(ostream& out, SplitAlignmentMap& splitAlignm
 			if (split == splitAlignment.mBestSplit)
 			{
 				out << splitAlignment.mAlignmentText[alignmentIndex];
+			}
+		}
+	}
+}
+
+void SplitAlignment::WriteReadIDs(ostream& out, SplitAlignmentMap& splitAlignments)
+{
+	for (SplitAlignmentMapConstIter splitAlignIter = splitAlignments.begin(); splitAlignIter != splitAlignments.end(); splitAlignIter++)
+	{
+		int id = splitAlignIter->first;
+		const SplitAlignment& splitAlignment = splitAlignIter->second;
+
+		for (int alignmentIndex = 0; alignmentIndex < splitAlignment.mAlignmentReadID.size(); alignmentIndex++)
+		{
+			const IntegerPair& split = splitAlignment.mAlignmentRefSplit[alignmentIndex];
+			
+			if (split == splitAlignment.mBestSplit)
+			{
+				ReadID readID;
+				readID.id = splitAlignment.mAlignmentReadID[alignmentIndex];
+
+				out << id << "\t" << readID.fragmentIndex << ((readID.readEnd == 0) ? "/1" : "/2") << endl;
 			}
 		}
 	}

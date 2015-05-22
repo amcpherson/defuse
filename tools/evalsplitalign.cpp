@@ -27,6 +27,7 @@ int main(int argc, char* argv[])
 	string splitAlignmentsFilename;
 	string seqFilename;
 	string breakFilename;
+	string readIDsFilename;
 
 	try
 	{
@@ -35,12 +36,14 @@ int main(int argc, char* argv[])
 		TCLAP::ValueArg<string> splitAlignmentsFilenameArg("a","align","Split Alignments Filename",true,"","string",cmd);
 		TCLAP::ValueArg<string> seqFilenameArg("q","seq","Sequences Filename",true,"","string",cmd);
 		TCLAP::ValueArg<string> breakFilenameArg("b","break","Break Positions Filename",true,"","string",cmd);
+		TCLAP::ValueArg<string> readIDsFilenameArg("i","ids","Read IDs Filename",true,"","string",cmd);
 		cmd.parse(argc,argv);
 
 		candidateRefSeqsFilename = candidateRefSeqsFilenameArg.getValue();
 		splitAlignmentsFilename = splitAlignmentsFilenameArg.getValue();
 		seqFilename = seqFilenameArg.getValue();
 		breakFilename = breakFilenameArg.getValue();
+		readIDsFilename = readIDsFilenameArg.getValue();
 	}
 	catch (TCLAP::ArgException &e)
 	{
@@ -52,11 +55,13 @@ int main(int argc, char* argv[])
 	ifstream splitAlignmentsFile(splitAlignmentsFilename.c_str());
 	ofstream seqFile(seqFilename.c_str());
 	ofstream breakFile(breakFilename.c_str());
+	ofstream readIDsFile(readIDsFilename.c_str());
 	
 	CheckFile(candidateRefSeqsFile, candidateRefSeqsFilename);
 	CheckFile(splitAlignmentsFile, splitAlignmentsFilename);
 	CheckFile(seqFile, seqFilename);
 	CheckFile(breakFile, breakFilename);
+	CheckFile(readIDsFile, readIDsFilename);
 	
 	SplitAlignment::SplitAlignmentMap splitAlignments;
 	
@@ -71,11 +76,13 @@ int main(int argc, char* argv[])
 	}
 	
 	SplitAlignment::WriteSequences(seqFile, splitAlignments);
-	SplitAlignment::WriteBreaks(breakFile, splitAlignments);	
+	SplitAlignment::WriteBreaks(breakFile, splitAlignments);
+	SplitAlignment::WriteReadIDs(readIDsFile, splitAlignments);
 	
 	candidateRefSeqsFile.close();
 	splitAlignmentsFile.close();
 	seqFile.close();
 	breakFile.close();
+	readIDsFile.close();
 }
 

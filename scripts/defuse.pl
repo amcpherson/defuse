@@ -447,7 +447,8 @@ $runner->run("cat #<A > #>1", [@job_splitreads_alignments], [$splitreads_alignme
 print "Evaluating split reads\n";
 my $splitreads_break = $output_directory."/splitreads.break";
 my $splitreads_seq = $output_directory."/splitreads.seq";
-$runner->run("$evalsplitalign_bin -r #<1 -a #<2 -b #>1 -q #>2", [$splitreads_refseqs,$splitreads_alignments], [$splitreads_break,$splitreads_seq]);
+my $splitreads_readids = $output_directory."/splitreads.readids";
+$runner->run("$evalsplitalign_bin -r #<1 -a #<2 -b #>1 -q #>2 -i #>3", [$splitreads_refseqs,$splitreads_alignments], [$splitreads_break,$splitreads_seq,$splitreads_readids]);
 
 print "Calculating spanning stats\n";
 my $splitreads_span_stats = $output_directory."/splitreads.span.stats";
@@ -561,7 +562,14 @@ sub do_breakpoint_jobs
 	
 	foreach my $merge_job (@merge_jobs)
 	{
-		$runner->padd("cat #<A > #>1", $merge_job->[0], [$merge_job->[1]]);
+		if (@{$merge_job->[0]} == 0)
+		{
+			system "touch $merge_job->[1]";
+		}
+		else
+		{
+			$runner->padd("cat #<A > #>1", $merge_job->[0], [$merge_job->[1]]);
+		}
 	}
 	$runner->prun();
 }

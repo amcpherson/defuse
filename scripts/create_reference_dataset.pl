@@ -61,9 +61,9 @@ my $ig_gene_list                = $config->get_value("ig_gene_list");
 my $reference_fasta             = $config->get_value("reference_fasta");
 my $repeats_filename            = $config->get_value("repeats_filename");
 my $repeats_regions             = $config->get_value("repeats_regions");
-my %gene_sources                = $config->get_hash("gene_sources");
-my %ig_gene_sources             = $config->get_hash("ig_gene_sources");
-my %rrna_gene_sources           = $config->get_hash("rrna_gene_sources");
+my %gene_biotypes               = $config->get_hash("gene_biotypes");
+my %ig_gene_biotypes            = $config->get_hash("ig_gene_biotypes");
+my %rrna_gene_biotypes          = $config->get_hash("rrna_gene_biotypes");
 my @prefilter_fastas            = $config->get_list("prefilter");
 my $bowtie_build_bin            = $config->get_value("bowtie_build_bin");
 my $samtools_bin                = $config->get_value("samtools_bin");
@@ -130,9 +130,16 @@ foreach my $chromosome (keys %chromosomes)
 	next if -e $chromosome_fasta;
 	
 	my $chromosome_tmp = $chromosome_prefix.".".$chromosome.".tmp.fa";
-	
-	wget_gunzip("ftp://ftp.ensembl.org/pub/release-$ensembl_version/fasta/homo_sapiens/dna/Homo_sapiens.$ensembl_genome_version.$ensembl_version.dna.chromosome.$chromosome.fa.gz", $chromosome_tmp);
-	
+
+	if ($ensembl_version < 76)
+	{
+		wget_gunzip("ftp://ftp.ensembl.org/pub/release-$ensembl_version/fasta/homo_sapiens/dna/Homo_sapiens.$ensembl_genome_version.$ensembl_version.dna.chromosome.$chromosome.fa.gz", $chromosome_tmp);
+	}
+	else
+	{
+		wget_gunzip("ftp://ftp.ensembl.org/pub/release-$ensembl_version/fasta/homo_sapiens/dna/Homo_sapiens.$ensembl_genome_version.dna.chromosome.$chromosome.fa.gz", $chromosome_tmp);
+	}
+
 	my $chromosome_tmp2 = $chromosome_prefix.".".$chromosome.".tmp2.fa";
 	
 	system_with_check("$remove_fasta_description_script < $chromosome_tmp > $chromosome_tmp2");
@@ -207,14 +214,14 @@ if (not -e $est_alignments)
 	}
 	else
 	{
-		wget_gunzip("ftp://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/intronEst.txt.gz", $est_alignments);
+		wget_gunzip("ftp://hgdownload.cse.ucsc.edu/goldenPath/$ucsc_genome_version/database/intronEst.txt.gz", $est_alignments);
 	}
 }
 
 # Retrieve the unigene fasta
 if (not -e $unigene_fasta)
 {
-	wget_gunzip("ftp://ftp.ncbi.nih.gov/repository/UniGene/Homo_sapiens/Hs.seq.uniq.gz", $unigene_fasta);
+	wget_gunzip("ftp://ftp.ncbi.nlm.nih.gov/repository/UniGene/Homo_sapiens/Hs.seq.uniq.gz", $unigene_fasta);
 }
 
 
@@ -263,7 +270,6 @@ while (<GFF>)
 	my @gff_fields = split /\t/;
 
 	my $chromosome = $gff_fields[0];
-	my $source = $gff_fields[1];
 	my $feature_type = $gff_fields[2];
 	my $start = $gff_fields[3];
 	my $end = $gff_fields[4];
@@ -276,6 +282,7 @@ while (<GFF>)
 	my $transcript_id;
 	my $exon_number;
 	my $gene_name;
+	my $biotype;
 	foreach my $feature (@features)
 	{
 		if ($feature =~ /(\S+)\s+(.*)/)
@@ -289,6 +296,7 @@ while (<GFF>)
 			$transcript_id = $value if $key eq "transcript_id";
 			$exon_number = $value if $key eq "exon_number";
 			$gene_name = $value if $key eq "gene_name";
+			$biotype = $value if $key eq "gene_biotype";
 		}
 	}
 
@@ -296,23 +304,24 @@ while (<GFF>)
 	defined $transcript_id or die "Error: line $line_number has no transcript_id\n";
 	defined $exon_number or die "Error: line $line_number has no exon_number\n";
 	defined $gene_name or die "Error: line $line_number has no gene_name\n";
+	defined $biotype or die "Error: line $line_number has no biotype\n";
 
 	# Keep a list of ig genes
-	$ig_genes{$gene_id} = 1 if $ig_gene_sources{$source};
+	$ig_genes{$gene_id} = 1 if $ig_gene_biotypes{$biotype};
 	
-	# Only keep requested genes from requested sources
-	next unless defined $gene_sources{$source} or $rrna_gene_sources{$source};
+	# Only keep requested genes from requested biotypes
+	next unless defined $gene_biotypes{$biotype} or $rrna_gene_biotypes{$biotype};
 
 	# Only keep requested genes from requested chromosomes
 	next unless defined $chromosomes{$chromosome};
 	
 	# Keep a list of candidate fusion partner genes and transcripts
-	$candidate_genes{$gene_id} = 1 if $gene_sources{$source};
-	$candidate_transcripts{$transcript_id} = 1 if $gene_sources{$source};
+	$candidate_genes{$gene_id} = 1 if $gene_biotypes{$biotype};
+	$candidate_transcripts{$transcript_id} = 1 if $gene_biotypes{$biotype};
 
 	# Keep a list of rrna genes and transcripts
-	$rrna_genes{$gene_id} = 1 if $rrna_gene_sources{$source};
-	$rrna_transcripts{$transcript_id} = 1 if $rrna_gene_sources{$source};
+	$rrna_genes{$gene_id} = 1 if $rrna_gene_biotypes{$biotype};
+	$rrna_transcripts{$transcript_id} = 1 if $rrna_gene_biotypes{$biotype};
 
 	# Store gene info
 	$gene_name{$gene_id} = $gene_name;

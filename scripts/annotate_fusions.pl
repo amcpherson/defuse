@@ -186,6 +186,10 @@ my %genomic_breakpos1;
 my %genomic_breakpos2;
 my %genomic_strand1;
 my %genomic_strand2;
+my %genomic_starts1;
+my %genomic_starts2;
+my %genomic_ends1;
+my %genomic_ends2;
 my %gene_location1;
 my %gene_location2;
 my %break_adj_entropy1;
@@ -222,11 +226,26 @@ sub calcentropy
 	return $entropy;
 }
 
+sub get_start_end
+{
+	my $regions = shift;
+	my $idx = shift;
+
+	my @positions;
+	foreach my $region (@{$regions})
+	{
+		push @positions, $region->[$idx];
+	}
+
+	return \@positions;
+}
+
 my %clusters;
 my $clusters_sc = $output_directory."/clusters.sc";
 read_clusters($clusters_sc, \%clusters);
 
 # Calculate fusion align regions
+my %fusion_region;
 my %fusion_align_region;
 foreach my $cluster_id (keys %clusters)
 {
@@ -241,6 +260,26 @@ foreach my $cluster_id (keys %clusters)
 			
 			$fusion_align_region{$cluster_id}{$cluster_end}->[0] = min($fusion_align_region{$cluster_id}{$cluster_end}->[0], $align_start);
 			$fusion_align_region{$cluster_id}{$cluster_end}->[1] = max($fusion_align_region{$cluster_id}{$cluster_end}->[1], $align_end);
+		}
+
+		my $break_pos = $break{$cluster_id}{$cluster_end}{breakpos};
+		my $strand = $break{$cluster_id}{$cluster_end}{strand};
+
+		@{$fusion_region{$cluster_id}{$cluster_end}} = @{$fusion_align_region{$cluster_id}{$cluster_end}};
+
+		if ($strand eq "+")
+		{
+			$fusion_region{$cluster_id}{$cluster_end}->[1] = $break_pos;
+			$fusion_region{$cluster_id}{$cluster_end}->[0] = min($fusion_region{$cluster_id}{$cluster_end}->[0], $break_pos);
+		}
+		elsif ($strand eq "-")
+		{
+			$fusion_region{$cluster_id}{$cluster_end}->[0] = $break_pos;
+			$fusion_region{$cluster_id}{$cluster_end}->[1] = max($fusion_region{$cluster_id}{$cluster_end}->[1], $break_pos);
+		}
+		else
+		{
+			die;
 		}
 	}
 }
@@ -270,14 +309,17 @@ foreach my $cluster_id (keys %break)
 	my $gene_location1 = $gene_models->calc_gene_location($gene1, $genomic_breakpos1);
 	my $gene_location2 = $gene_models->calc_gene_location($gene2, $genomic_breakpos2);
 	
-	my @genomic_regions1 = $gene_models->calc_genomic_regions($ref_name1, $fusion_align_region{$cluster_id}{"0"});
-	my @genomic_regions2 = $gene_models->calc_genomic_regions($ref_name2, $fusion_align_region{$cluster_id}{"1"});
+	my @genomic_align_regions1 = $gene_models->calc_genomic_regions($ref_name1, $fusion_align_region{$cluster_id}{"0"});
+	my @genomic_align_regions2 = $gene_models->calc_genomic_regions($ref_name2, $fusion_align_region{$cluster_id}{"1"});
+
+	my @genomic_regions1 = $gene_models->calc_genomic_regions($ref_name1, $fusion_region{$cluster_id}{"0"});
+	my @genomic_regions2 = $gene_models->calc_genomic_regions($ref_name2, $fusion_region{$cluster_id}{"1"});
 	
 	my $chromosome1 = $gene_models->calc_genomic_chromosome($ref_name1);
 	my $chromosome2 = $gene_models->calc_genomic_chromosome($ref_name2);
 	
-	$fusion_repeat_proportion1{$cluster_id} = get_repeat_proportion($chromosome1, \@genomic_regions1, \%repeats);
-	$fusion_repeat_proportion2{$cluster_id} = get_repeat_proportion($chromosome2, \@genomic_regions2, \%repeats);
+	$fusion_repeat_proportion1{$cluster_id} = get_repeat_proportion($chromosome1, \@genomic_align_regions1, \%repeats);
+	$fusion_repeat_proportion2{$cluster_id} = get_repeat_proportion($chromosome2, \@genomic_align_regions2, \%repeats);
 	
 	my $gene_strand_a = ($gene1 lt $gene2) ? $gene1.$strand1 : $gene2.$strand2;
 	my $gene_strand_b = ($gene1 lt $gene2) ? $gene2.$strand2 : $gene1.$strand1;
@@ -307,7 +349,19 @@ foreach my $cluster_id (keys %break)
 	
 	$genomic_strand1{$cluster_id} = $genomic_strand1;
 	$genomic_strand2{$cluster_id} = $genomic_strand2;
-	
+
+	$genomic_starts1{$cluster_id} = join ",", @{get_start_end(\@genomic_regions1, 0)};
+	$genomic_starts2{$cluster_id} = join ",", @{get_start_end(\@genomic_regions2, 0)};
+
+	$genomic_ends1{$cluster_id} = join ",", @{get_start_end(\@genomic_regions1, 1)};
+	$genomic_ends2{$cluster_id} = join ",", @{get_start_end(\@genomic_regions2, 1)};
+
+	$genomic_starts1{$cluster_id} = ($genomic_starts1{$cluster_id} eq "") ? "NA" : $genomic_starts1{$cluster_id};
+	$genomic_starts2{$cluster_id} = ($genomic_starts2{$cluster_id} eq "") ? "NA" : $genomic_starts2{$cluster_id};
+
+	$genomic_ends1{$cluster_id} = ($genomic_ends1{$cluster_id} eq "") ? "NA" : $genomic_ends1{$cluster_id};
+	$genomic_ends2{$cluster_id} = ($genomic_ends2{$cluster_id} eq "") ? "NA" : $genomic_ends2{$cluster_id};
+
 	$gene_location1{$cluster_id} = $gene_location1;
 	$gene_location2{$cluster_id} = $gene_location2;
 	
@@ -606,6 +660,9 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	my $genome_strand1 = $genomic_strand1{$cluster_id};
 	my $genome_strand2 = $genomic_strand2{$cluster_id};
 
+	my $transcript1 = (defined $gene_models->{transcripts}{$ref_name1}) ? $ref_name1 : 'NA';
+	my $transcript2 = (defined $gene_models->{transcripts}{$ref_name2}) ? $ref_name2 : 'NA';
+
 	my $orf = "N";
 	foreach my $start_index1 (0..$#{$cds_align_strand{$cluster_id}{$gene1}})
 	{
@@ -789,6 +846,8 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\tlibrary_name\t".$library_name."\n";
 
 	print $cluster_id."\tgene1\t".$gene1."\n";
+	print $cluster_id."\ttranscript1\t".$transcript1."\n";
+
 	print $cluster_id."\tgene_name1\t".$gene_models->{genes}{$gene1}{name}."\n";
 	print $cluster_id."\tgene_chromosome1\t".$gene_models->{genes}{$gene1}{chromosome}."\n";
 	print $cluster_id."\tgene_strand1\t".$gene_models->{genes}{$gene1}{strand}."\n";
@@ -796,6 +855,8 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\tgene_end1\t".$gene_models->{genes}{$gene1}{region}->[1]."\n";
 
 	print $cluster_id."\tgene2\t".$gene2."\n";
+	print $cluster_id."\ttranscript2\t".$transcript2."\n";
+
 	print $cluster_id."\tgene_name2\t".$gene_models->{genes}{$gene2}{name}."\n";
 	print $cluster_id."\tgene_chromosome2\t".$gene_models->{genes}{$gene2}{chromosome}."\n";
 	print $cluster_id."\tgene_strand2\t".$gene_models->{genes}{$gene2}{strand}."\n";
@@ -808,7 +869,12 @@ foreach my $cluster_id (sort {$a <=> $b} keys %cluster_ids)
 	print $cluster_id."\tgenomic_break_pos1\t".$genomic_breakpos1{$cluster_id}."\n";
 	print $cluster_id."\tgenomic_break_pos2\t".$genomic_breakpos2{$cluster_id}."\n";	
 	print $cluster_id."\tgenomic_strand1\t".$genome_strand1."\n";
-	print $cluster_id."\tgenomic_strand2\t".$genome_strand2."\n";	
+	print $cluster_id."\tgenomic_strand2\t".$genome_strand2."\n";
+
+	print $cluster_id."\tgenomic_starts1\t".$genomic_starts1{$cluster_id}."\n";	
+	print $cluster_id."\tgenomic_starts2\t".$genomic_starts2{$cluster_id}."\n";	
+	print $cluster_id."\tgenomic_ends1\t".$genomic_ends1{$cluster_id}."\n";	
+	print $cluster_id."\tgenomic_ends2\t".$genomic_ends2{$cluster_id}."\n";	
 
 	print $cluster_id."\tsplicing_index1\t".$fusion_splicing_index1{$cluster_id}."\n";
 	print $cluster_id."\tsplicing_index2\t".$fusion_splicing_index2{$cluster_id}."\n";
@@ -1298,4 +1364,5 @@ sub overlap
 		return 1;
 	}
 }
+
 
