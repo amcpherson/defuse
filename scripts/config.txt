@@ -124,3 +124,21 @@ mailto                                      = andrew.mcpherson@gmail.com
 remove_job_files                            = yes
 remove_job_temp_files                       = yes
 
+# Qsub parameters
+# The `qsub_params` string will be evaluated using perl `eval` with
+# the following variables available:
+#  - `job_mem`: job memory in bytes
+#  - `job_mem_kb`: job memory in kilobytes
+#  - `job_mem_mb`: job memory in megabytes
+#  - `job_mem_gb`: job memory in gigabytes
+# The evaluated string will be added to the qsub command line
+# examples:
+#  SGE:
+# qsub_params                                 = "-V -l mem_free=${job_mem_gb}G"
+#  LSF:
+# qsub_params                                 = "-q all -R 'select[mem>$job_mem_mb] rusage[mem=$job_mem_mb]'"
+#  PBS:
+# qsub_params                                 = "-l mem=$job_mem_formatted"
+qsub_params                                 = ""
+
+

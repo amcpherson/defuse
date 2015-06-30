@@ -16,6 +16,7 @@ sub new
 	$self->{prefix} = "cmdrunner";
 	$self->{logfilename} = $self->{prefix}.".log";
 	$self->{submitter} = \&submitter_direct;
+	$self->{qsub_params} = "";
 	$self->{maxparallel} = 200;
 	$self->{filetimeout} = 100;
 	$self->{jobmem} = "2000000000";
@@ -64,6 +65,12 @@ sub submitter
 	}
 }
 
+sub qsub_params
+{
+	my $self = shift;
+	$self->{qsub_params} = shift;
+}
+
 sub maxparallel
 {
 	my $self = shift;
@@ -80,6 +87,20 @@ sub jobmem
 {
 	my $self = shift;
 	$self->{jobmem} = shift;
+}
+
+sub interp_qsub_params
+{
+	my $self = shift;
+
+	my $job_mem = $self->{jobmem};
+	my $job_mem_kb = ($job_mem / 1000); 		# Kb
+	my $job_mem_mb = ($job_mem / 1000000); 		# Mb
+	my $job_mem_gb = ($job_mem / 1000000000); 	# Gb
+
+	my $qsub_params = eval($self->{qsub_params});
+
+	return $qsub_params;
 }
 
 sub DESTROY
@@ -175,9 +196,7 @@ sub submitter_sge_cluster
 
 	create_job_bash_script($job_cmd, $job_script);
 
-	my $job_mem = $cmdrunner->{jobmem};
-	my $job_mem_formatted = ($job_mem / 1000000000)."G";
-	my $qsub_commands = "-V -l mem_free=$job_mem";
+	my $qsub_params = $cmdrunner->interp_qsub_params();
 	
 	# Do the command with qsub and write the stdout and stderr to the log file
 	#  '-sync y' means block until finished
@@ -188,7 +207,7 @@ sub submitter_sge_cluster
 	#  '-N' just specifies the job name for qstat
 	#  '$qsub_commands' are things like queue requests or resource requests.
 	
-	my $qsub_output = `qsub -sync y -notify -b y -j y -o $job_out -N $job_name $qsub_commands -S /bin/bash 'bash $job_script' 2>&1`;
+	my $qsub_output = `qsub -sync y -notify -b y -j y -o $job_out -N $job_name $qsub_params -S /bin/bash 'bash $job_script' 2>&1`;
 	my $sysretcode = $? >> 8;
 	
 	return ($sysretcode,$qsub_output);
@@ -216,28 +235,16 @@ sub submitter_lsf_cluster
 
 	create_job_bash_script($job_cmd, $job_script);
 
-	my $job_mem = $cmdrunner->{jobmem};
-	my $job_mem_mb = ($job_mem / 1000000); #Mb
-	my $job_mem_kb = ($job_mem / 1000); #Kb
-
-	# Set a hard memory cap of 4 Gb, unless the job is going to request more (then use that amount as the hard cap)
-	my $hard_cap = 4000000;
-	if ($job_mem_kb > $hard_cap) {$hard_cap = $job_mem_kb;}
-
-	my $bsub_commands = "-q techd -R 'select[mem>$job_mem_mb] rusage[mem=$job_mem_mb]'";
+	my $qsub_params = $cmdrunner->interp_qsub_params();
 	
 	# Do the command with bsub and write the stdout and stderr to the log file
 	#  '-K' means block until finished
 	#  '-N' prevents extra output after the exit codes (which was interferring with the sysretcode parsing downstream)
-	#  '-notify' means warn the script with a signal before killing.  On oursystem the interrupt signal is sent, but that had to be configured properly in the sge cluster config.  basically this allows alignment jobs to clean up after themselves by removing temporary files, which is important if you are writing to a local disk and dont want to have to go and clean up each nodes disk after a cancel.
-	# '-b y' means run as a binary rather than in a bash shell, and from memory is required for the above to work
 	# '-oo $job_out' sends std out and std in to the job_out file
 	# '-J' specifies the job name
-	# '$bsub_commands' are things like queue requests or resource requests.
-	# '-q techd'  - use 'long' or 'techd' 
-	# -R "rusage[mem=$job_mem]" 
+	# '$qsub_params' are things like queue requests or resource requests.
 
-	my $cmd = "bsub -M $hard_cap -N -K -oo $job_out -J $job_name $bsub_commands 'bash $job_script' > /dev/null 2>&1";
+	my $cmd = "bsub -N -K -oo $job_out -J $job_name $qsub_params 'bash $job_script' > /dev/null 2>&1";
 	#print STDERR "\n\nAttempting job submission as follows:\n\n$cmd\n\n";
 	my $sysretcode = system $cmd;
 	#print STDERR "\n\nDEBUG sysretcode: $sysretcode\n\n";
@@ -269,12 +276,10 @@ sub submitter_pbs_cluster
 
 	create_job_bash_script($job_cmd, $job_script);
 
-	my $job_mem = $cmdrunner->{jobmem};
-	my $job_mem_formatted = ($job_mem / 1000000000)."gb";
-	my $qsub_commands = "-l mem=$job_mem_formatted";
-	
+	my $qsub_params = $cmdrunner->interp_qsub_params();
+
 	# Do the command with qsub and write the stdout and stderr to the log file
-	my $job_id = `qsub -j oe -o $job_out -N $job_name $qsub_commands 'bash $job_script' > /dev/null 2>&1`;
+	my $job_id = `qsub -j oe -o $job_out -N $job_name $qsub_params 'bash $job_script' > /dev/null 2>&1`;
 	chomp($job_id);
 	
 	# Wait for the job state to be complete

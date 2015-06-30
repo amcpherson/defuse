@@ -134,6 +134,7 @@ my $blat_bin              = $config->get_value("blat_bin");
 my $dna_concordant_len    = $config->get_value("dna_concordant_length");
 my $gmap_bin              = $config->get_value("gmap_bin");
 my $gmap_index_directory  = $config->get_value("gmap_index_directory");
+my $qsub_params           = $config->get_value("qsub_params");
 
 my $cdna_fasta_fai        = $cdna_fasta.".fai";
 
@@ -236,6 +237,7 @@ $runner->name("defuse");
 $runner->prefix($log_prefix);
 $runner->maxparallel($max_parallel);
 $runner->submitter($submitter_type);
+$runner->qsub_params($qsub_params);
 $runner->jobmem(4000000000);
 
 # Fastq files and prefix for index and name map
