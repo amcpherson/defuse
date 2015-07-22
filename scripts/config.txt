@@ -118,7 +118,7 @@ covariance_sampling_density                 = 0.01
 reads_per_job                               = 1000000
 
 # If you have command line 'mail' and wish to be notified
-mailto                                      = andrew.mcpherson@gmail.com
+mailto                                      = 
 
 # Remove temp files
 remove_job_files                            = yes

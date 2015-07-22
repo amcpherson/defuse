@@ -147,7 +147,7 @@ if ($config->has_value("mailto"))
 my $status = "failure";
 sub mailme
 {
-	return if not defined $mailto;
+	return if not defined $mailto or not $mailto;
 
 	my $text = "Fusion analysis of library $library_name finished with status $status";
 
