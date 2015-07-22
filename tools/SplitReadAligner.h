@@ -34,9 +34,9 @@ typedef vector<SplitReadAlignment> SplitReadAlignVec;
 class SplitReadAligner
 {
 public:
-	SplitReadAligner(int matchScore, int misMatchScore, int gapScore, bool endGaps, int minSplitScore, const string& reference1, const string& reference2);
+	SplitReadAligner(int matchScore, int misMatchScore, int gapScore, bool endGaps, int minSplitScore);
 	
-	void Align(const string& read);
+	void Align(const string& read, const string& reference1, const string& reference2);
 	void GetAlignments(SplitReadAlignVec& alignments, int minScore, bool forceSplits, bool firstOnly, bool backtrace);
 	
 private:

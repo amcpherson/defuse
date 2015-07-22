@@ -25,7 +25,7 @@ int SimpleAligner::Align(const string& reference, const string& sequence)
 	int matrixLength = reference.size() + 1;
 	int matrixHeight = sequence.size() + 1;
 
-	mMatrix.Resize(matrixLength, matrixHeight);
+	mMatrix.SetSize(matrixLength, matrixHeight);
 	
 	int overallMaxScore = 0;
 	

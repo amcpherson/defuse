@@ -77,6 +77,7 @@ my $remove_job_temp_files    = $config->get_value("remove_job_temp_files");
 my $bowtie_quals             = $config->get_value("bowtie_quals");
 my $split_min_anchor         = $config->get_value("split_min_anchor");
 my $cov_samp_density         = $config->get_value("covariance_sampling_density");
+my $max_paired_alignments    = $config->get_value("max_paired_alignments");
 
 sub verify_file_exists
 {
@@ -117,6 +118,7 @@ my $filter_sam_readids_script = "$scripts_directory/filter_sam_readids.pl";
 my $filter_sam_genes_script = "$scripts_directory/filter_sam_genes.pl";
 my $read_stats_script = "$scripts_directory/read_stats.pl";
 my $expression_script = "$scripts_directory/calculate_expression_simple.pl";
+my $find_unmappable_script = "$scripts_directory/find_unmappable.pl";
 my $find_concordant_gene_script = "$scripts_directory/find_concordant_gene.pl";
 my $find_concordant_region_script = "$scripts_directory/find_concordant_region.pl";
 my $sam_readids_script = "$scripts_directory/sam_readids.pl";
@@ -245,6 +247,11 @@ $runner->run("$align_single_bin $genome_fasta #<1 #>1", [$trim_reads_end_1_fastq
 $runner->run("$align_single_bin $genome_fasta #<1 #>1", [$trim_reads_end_2_fastq], [$dna_end_2_sam]);
 
 my @concordant_readids;
+
+print "Finding unmappable read ids\n";
+my $unmappable_readids = get_local_filename("unmappable.readids");
+$runner->run("cat #<A | $find_unmappable_script $gene_models $max_paired_alignments > #>1", [$dna_end_1_sam, $dna_end_2_sam, $cdna_end_1_sam, $cdna_end_2_sam], [$unmappable_readids]);
+push @concordant_readids, $unmappable_readids;
 
 print "Finding same gene concordant read ids for cdna\n";
 my $gene_concordant_readids = get_local_filename("gene.concordant.readids");

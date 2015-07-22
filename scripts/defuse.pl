@@ -209,7 +209,6 @@ my $filter_column_script = "$scripts_directory/filter_column.pl";
 my $remove_duplicates_script = "$scripts_directory/remove_duplicates.pl";
 my $setcover_bin = "$tools_directory/setcover";
 my $localalign_bin = "$tools_directory/localalign";
-my $initsplitalign_bin = "$tools_directory/initsplitalign";
 my $dosplitalign_bin = "$tools_directory/dosplitalign";
 my $evalsplitalign_bin = "$tools_directory/evalsplitalign";
 my $calc_span_stats_script = "$scripts_directory/calc_span_stats.pl";
@@ -238,7 +237,7 @@ $runner->prefix($log_prefix);
 $runner->maxparallel($max_parallel);
 $runner->submitter($submitter_type);
 $runner->qsub_params($qsub_params);
-$runner->jobmem(4000000000);
+$runner->jobmem(6000000000);
 
 # Fastq files and prefix for index and name map
 my $reads_prefix = $output_directory."/reads";
@@ -405,9 +404,9 @@ $runner->run("$segregate_mitochondrial_script $gene_models $mt_chromosome < #<1 
 
 print "Generating maximum parsimony solution\n";
 my $clusters_sc_all = $output_directory."/clusters.sc.all";
-$runner->jobmem(10000000000);
+$runner->jobmem(32000000000);
 $runner->run("$setcover_bin -m $span_count_threshold -c #<1 -o #>1", [$clusters], [$clusters_sc_all]);
-$runner->jobmem(4000000000);
+$runner->jobmem(8000000000);
 
 print "Selecting fusion clusters\n";
 my $clusters_sc_unfilt = $output_directory."/clusters.sc.unfilt";
@@ -429,28 +428,23 @@ print "Generating spanning alignment regions file\n";
 my $clusters_sc_regions = $output_directory."/clusters.sc.regions";
 $runner->run("$get_align_regions_script < #<1 > #>1", [$clusters_sc], [$clusters_sc_regions]);
 
-print "Initializing split read alignments\n";
-my $splitreads_refseqs = $output_directory."/splitreads.refseqs";
-my $splitreads_materegions = $output_directory."/splitreads.materegions";
-$runner->run("$initsplitalign_bin -i #<1 -r #>1 -m #>2 -n $read_length_min -x $read_length_max -u $fragment_mean -s $fragment_stddev -e $cdna_regions -f $reference_fasta", [$clusters_sc_regions], [$splitreads_refseqs,$splitreads_materegions]);
-
 print "Calculating split read alignments\n";
 my @job_splitreads_alignments;
 foreach my $job_info (@job_infos)
 {
 	$job_info->{splitalign} = $job_info->{prefix}.".splitreads.alignments";
-	$runner->padd("$dosplitalign_bin -1 #<1 -2 #<2 -r #<3 -m #<4 -a #<5 -s #>1", [$job_info->{fastq1},$job_info->{fastq2},$splitreads_refseqs,$splitreads_materegions,$job_info->{improper_sam}], [$job_info->{splitalign}]);
+	$runner->padd("$dosplitalign_bin -r #<1 -n $read_length_min -x $read_length_max -u $fragment_mean -s $fragment_stddev -e $cdna_regions -f $reference_fasta -1 #<2 -2 #<3 -i #<4 -a #>1", [$clusters_sc_regions,$job_info->{fastq1},$job_info->{fastq2},$job_info->{improper_sam}], [$job_info->{splitalign}]);
 	push @job_splitreads_alignments, $job_info->{splitalign};
 }
 $runner->prun();
 my $splitreads_alignments = $output_directory."/splitreads.alignments";
-$runner->run("cat #<A > #>1", [@job_splitreads_alignments], [$splitreads_alignments]);
+$runner->run("sort -n -k 1 #<A > #>1", [@job_splitreads_alignments], [$splitreads_alignments]);
 
 print "Evaluating split reads\n";
 my $splitreads_break = $output_directory."/splitreads.break";
 my $splitreads_seq = $output_directory."/splitreads.seq";
-my $splitreads_readids = $output_directory."/splitreads.readids";
-$runner->run("$evalsplitalign_bin -r #<1 -a #<2 -b #>1 -q #>2 -i #>3", [$splitreads_refseqs,$splitreads_alignments], [$splitreads_break,$splitreads_seq,$splitreads_readids]);
+my $splitreads_predalign = $output_directory."/splitreads.predalign";
+$runner->run("$evalsplitalign_bin -r #<1 -n $read_length_min -x $read_length_max -u $fragment_mean -s $fragment_stddev -e $cdna_regions -f $reference_fasta -a #<2 -b #>1 -q #>2 -p #>3", [$clusters_sc_regions,$splitreads_alignments], [$splitreads_break,$splitreads_seq,$splitreads_predalign]);
 
 print "Calculating spanning stats\n";
 my $splitreads_span_stats = $output_directory."/splitreads.span.stats";

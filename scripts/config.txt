@@ -114,6 +114,10 @@ multi_exon_transcripts_stats                = no
 # Position density when calculating covariance
 covariance_sampling_density                 = 0.01
 
+# Maximum number of alignments for a read pair
+# Pairs with more alignments are filtered
+max_paired_alignments                       = 10
+
 # Number of reads for each job in split
 reads_per_job                               = 1000000
 

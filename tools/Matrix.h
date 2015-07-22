@@ -92,18 +92,18 @@ public:
 
 	void Clear(const TType& clearValue)
 	{
-		fill(mMatrix.begin(), mMatrix.end(), clearValue);
+		fill(mMatrix.begin(), mMatrix.begin() + mLength * mHeight, clearValue);
 	}
 	
-	void Resize(int length, int height)
+	void SetSize(int length, int height)
 	{
-		if (length != mLength || height != mHeight)
+		if (length > mLength || height > mHeight)
 		{
-			mLength = length;
-			mHeight = height;
-			
 			mMatrix.resize(length * height);
 		}
+		
+		mLength = length;
+		mHeight = height;
 	}
 	
 private:

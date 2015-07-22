@@ -8,6 +8,7 @@
 #include "Common.h"
 #include "DebugCheck.h"
 #include "SplitAlignment.h"
+#include "Parsers.h"
 
 #include <fstream>
 #include <iostream>
@@ -19,31 +20,56 @@
 #include <boost/algorithm/string.hpp>
 
 using namespace boost;
-using namespace std;		
+using namespace std;
 
 int main(int argc, char* argv[])
 {
-	string candidateRefSeqsFilename;
+	string referenceFasta;
+	string exonRegionsFilename;
+	double fragmentLengthMean;
+	double fragmentLengthStdDev;
+	int minReadLength;
+	int maxReadLength;
+	string fusionRegionsFilename;
+
 	string splitAlignmentsFilename;
+
 	string seqFilename;
 	string breakFilename;
-	string readIDsFilename;
+	string predAlignFilename;
 
 	try
 	{
 		TCLAP::CmdLine cmd("Fusion sequence prediction by split reads");
-		TCLAP::ValueArg<string> candidateRefSeqsFilenameArg("r","refseqs","Candidate Reference Sequences Filename",true,"","string",cmd);
+		TCLAP::ValueArg<string> referenceFastaArg("f","fasta","Reference Fasta",true,"","string",cmd);
+		TCLAP::ValueArg<string> exonRegionsFilenameArg("e","exons","Exon Regions Filename",true,"","string",cmd);
+		TCLAP::ValueArg<double> fragmentLengthMeanArg("u","ufrag","Fragment Length Mean",true,0.0,"float",cmd);
+		TCLAP::ValueArg<double> fragmentLengthStdDevArg("s","sfrag","Fragment Length Standard Deviation",true,0.0,"float",cmd);
+		TCLAP::ValueArg<int> minReadLengthArg("n","minread","Minimum Read Length",true,-1,"integer",cmd);
+		TCLAP::ValueArg<int> maxReadLengthArg("x","maxread","Maximum Read Length",true,-1,"integer",cmd);
+		TCLAP::ValueArg<string> fusionRegionsFilenameArg("r","regions","Fusion Regions Filename",true,"","string",cmd);
+
 		TCLAP::ValueArg<string> splitAlignmentsFilenameArg("a","align","Split Alignments Filename",true,"","string",cmd);
+
 		TCLAP::ValueArg<string> seqFilenameArg("q","seq","Sequences Filename",true,"","string",cmd);
 		TCLAP::ValueArg<string> breakFilenameArg("b","break","Break Positions Filename",true,"","string",cmd);
-		TCLAP::ValueArg<string> readIDsFilenameArg("i","ids","Read IDs Filename",true,"","string",cmd);
+		TCLAP::ValueArg<string> predAlignFilenameArg("p","predalign","Prediction Split Alignments Filename",true,"","string",cmd);
+		
 		cmd.parse(argc,argv);
 
-		candidateRefSeqsFilename = candidateRefSeqsFilenameArg.getValue();
+		referenceFasta = referenceFastaArg.getValue();
+		exonRegionsFilename = exonRegionsFilenameArg.getValue();
+		fragmentLengthMean = fragmentLengthMeanArg.getValue();
+		fragmentLengthStdDev = fragmentLengthStdDevArg.getValue();
+		minReadLength = minReadLengthArg.getValue();
+		maxReadLength = maxReadLengthArg.getValue();
+		fusionRegionsFilename = fusionRegionsFilenameArg.getValue();
+
 		splitAlignmentsFilename = splitAlignmentsFilenameArg.getValue();
+
 		seqFilename = seqFilenameArg.getValue();
 		breakFilename = breakFilenameArg.getValue();
-		readIDsFilename = readIDsFilenameArg.getValue();
+		predAlignFilename = predAlignFilenameArg.getValue();
 	}
 	catch (TCLAP::ArgException &e)
 	{
@@ -51,38 +77,40 @@ int main(int argc, char* argv[])
 		exit(1);
 	}
 	
-	ifstream candidateRefSeqsFile(candidateRefSeqsFilename.c_str());
+	LocationVecMap fusionRegions;
+	ReadAlignRegionPairs(fusionRegionsFilename, fusionRegions);
+	
+	unordered_map<int,SplitAlignmentTask> alignTasks = CreateTasks(referenceFasta, exonRegionsFilename,
+		fragmentLengthMean, fragmentLengthStdDev, minReadLength, maxReadLength, fusionRegions);
+
 	ifstream splitAlignmentsFile(splitAlignmentsFilename.c_str());
 	ofstream seqFile(seqFilename.c_str());
 	ofstream breakFile(breakFilename.c_str());
-	ofstream readIDsFile(readIDsFilename.c_str());
+	ofstream predAlignFile(predAlignFilename.c_str());
 	
-	CheckFile(candidateRefSeqsFile, candidateRefSeqsFilename);
 	CheckFile(splitAlignmentsFile, splitAlignmentsFilename);
 	CheckFile(seqFile, seqFilename);
 	CheckFile(breakFile, breakFilename);
-	CheckFile(readIDsFile, readIDsFilename);
-	
-	SplitAlignment::SplitAlignmentMap splitAlignments;
-	
-	SplitAlignment::ReadAlignments(splitAlignmentsFile, splitAlignments);
-	SplitAlignment::ReadCandidateRefSeqs(candidateRefSeqsFile, splitAlignments);
+	CheckFile(predAlignFile, predAlignFilename);
 
-	for (SplitAlignment::SplitAlignmentMapIter splitAlignIter = splitAlignments.begin(); splitAlignIter != splitAlignments.end(); splitAlignIter++)
+	while (splitAlignmentsFile)
 	{
-		SplitAlignment& splitAlignment = splitAlignIter->second;		
+		vector<SplitAlignment> alignments = SplitAlignment::ReadSortedAlignments(splitAlignmentsFile);
 
-		splitAlignment.Evaluate();
+		if (alignments.empty())
+		{
+			break;
+		}
+
+		int fusionID = alignments.front().fusionID;
+
+		const SplitAlignmentTask& alignTask = alignTasks[fusionID];
+
+		BreakPrediction prediction = alignTask.Evaluate(alignments);
+
+		prediction.WriteSequence(seqFile);
+		prediction.WriteBreak(breakFile);
+		prediction.WriteAlignments(predAlignFile);
 	}
-	
-	SplitAlignment::WriteSequences(seqFile, splitAlignments);
-	SplitAlignment::WriteBreaks(breakFile, splitAlignments);
-	SplitAlignment::WriteReadIDs(readIDsFile, splitAlignments);
-	
-	candidateRefSeqsFile.close();
-	splitAlignmentsFile.close();
-	seqFile.close();
-	breakFile.close();
-	readIDsFile.close();
 }
 

@@ -71,7 +71,7 @@ else
 
 my $reads_prefix = $output_directory."/reads";
 my $clusters_sc = $output_directory."/clusters.sc";
-my $split_read_ids = $output_directory."/splitreads.readids";
+my $split_pred_align = $output_directory."/splitreads.predalign";
 
 my $reads_fastq_index = $reads_prefix.".fqi";
 my $reads_end_1_fastq = $reads_prefix.".1.fastq";
@@ -80,7 +80,7 @@ my $reads_end_2_fastq = $reads_prefix.".2.fastq";
 my %fragment_ids;
 my %fragment_names;
 read_clusters($clusters_sc, \%cluster_ids, \%fragment_ids, \%fragment_names);
-read_splitread_ids($split_read_ids, \%cluster_ids, \%fragment_ids, \%fragment_names);
+read_splitread_ids($split_pred_align, \%cluster_ids, \%fragment_ids, \%fragment_names);
 
 output_reads_to_fastq(\%fragment_ids, \%fragment_names, $reads_fastq_index, 
 	$reads_end_1_fastq, $reads_end_2_fastq, 
@@ -124,9 +124,7 @@ sub read_splitread_ids
 		my @fields = split /\t/;
 
 		my $cluster_id = $fields[0];
-		my $read_id = $fields[1];
-
-		my ($fragment_id, $read_end) = split /\//, $read_id;
+		my $fragment_id = $fields[1];
 		
 		next unless defined $cluster_ids->{$cluster_id};
 

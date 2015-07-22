@@ -16,10 +16,9 @@
 using namespace std;
 
 
-SplitReadAligner::SplitReadAligner(int matchScore, int misMatchScore, int gapScore, bool endGaps, int minSplitScore, const string& reference1, const string& reference2)
-: mMatchScore(matchScore), mMisMatchScore(misMatchScore), mGapScore(gapScore), mEndGaps(endGaps), mMinSplitScore(minSplitScore), mReference1(reference1), mReference2(reference2)
+SplitReadAligner::SplitReadAligner(int matchScore, int misMatchScore, int gapScore, bool endGaps, int minSplitScore)
+: mMatchScore(matchScore), mMisMatchScore(misMatchScore), mGapScore(gapScore), mEndGaps(endGaps), mMinSplitScore(minSplitScore)
 {
-	reverse(mReference2.begin(), mReference2.end());	
 }
 
 void SplitReadAligner::FillMatrix(const string& seq1, const string& seq2, Matrix<int>& matrix, Matrix<Cell>& backTrace)
@@ -27,8 +26,8 @@ void SplitReadAligner::FillMatrix(const string& seq1, const string& seq2, Matrix
 	int matrixLength = seq1.size() + 1;
 	int matrixHeight = seq2.size() + 1;
 
-	matrix.Resize(matrixLength, matrixHeight);
-	backTrace.Resize(matrixLength, matrixHeight);
+	matrix.SetSize(matrixLength, matrixHeight);
+	backTrace.SetSize(matrixLength, matrixHeight);
 
 	for (int i = 0; i < matrixLength; i++) 
 	{
@@ -75,10 +74,13 @@ void SplitReadAligner::FillMatrix(const string& seq1, const string& seq2, Matrix
 	}				
 }
 
-void SplitReadAligner::Align(const string& read)
+void SplitReadAligner::Align(const string& read, const string& reference1, const string& reference2)
 {
+	mReference1 = reference1;
+	mReference2 = reference2;
+	reverse(mReference2.begin(), mReference2.end());	
+
 	mRead1 = read;
-	
 	mRead2 = read;
 	reverse(mRead2.begin(), mRead2.end());
 	

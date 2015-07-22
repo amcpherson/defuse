@@ -98,20 +98,6 @@ setcover: \
 		./Parsers.o\
 		./setcover.o
 
-initsplitalign: \
-		./AlignmentStream.o\
-		./FastaIndex.o\
-		./Common.o\
-		./DebugCheck.o\
-		./ExonRegions.o\
-		./ReadIndex.o\
-		./SplitAlignment.o\
-		./SplitReadAligner.o\
-		./Parsers.o\
-		./initsplitalign.o\
-		$(BAMDIR)/$(BAMLIB)\
-		$(ZDIR)/$(ZLIB)
-
 dosplitalign: \
 		./AlignmentStream.o\
 		./FastaIndex.o\
@@ -135,6 +121,7 @@ evalsplitalign: \
 		./ReadIndex.o\
 		./SplitAlignment.o\
 		./SplitReadAligner.o\
+		./Parsers.o\
 		./ReadStream.o\
 		./evalsplitalign.o\
 		$(BAMDIR)/$(BAMLIB)\
@@ -187,7 +174,7 @@ bamfastq : \
 		$(BAMTOOLSSRC)\
 		$(ZDIR)/$(ZLIB)
 
-tools : clustermatepairs setcover calccov estislands initsplitalign dosplitalign evalsplitalign localalign splitseq matealign bamfastq
+tools : clustermatepairs setcover calccov estislands dosplitalign evalsplitalign localalign splitseq matealign bamfastq
 	
 
 clean : 

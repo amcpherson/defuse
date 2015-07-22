@@ -244,6 +244,14 @@ my %clusters;
 my $clusters_sc = $output_directory."/clusters.sc";
 read_clusters($clusters_sc, \%clusters);
 
+foreach my $cluster_id (keys %clusters)
+{
+	if (not defined $break{$cluster_id})
+	{
+		delete $clusters{$cluster_id};
+	}
+}
+
 # Calculate fusion align regions
 my %fusion_region;
 my %fusion_align_region;

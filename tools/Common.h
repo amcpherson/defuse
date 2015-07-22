@@ -94,9 +94,9 @@ typedef vector<LocationVec> LocationTable;
 typedef vector<LocationVec>::iterator LocationTableIter;
 typedef vector<LocationVec>::const_iterator LocationTableConstIter;
 
-typedef unordered_map<int,LocationVec> LocationVecMap;
-typedef unordered_map<int,LocationVec>::iterator LocationVecMapIter;
-typedef unordered_map<int,LocationVec>::const_iterator LocationVecMapConstIter;
+typedef map<int,LocationVec> LocationVecMap;
+typedef map<int,LocationVec>::iterator LocationVecMapIter;
+typedef map<int,LocationVec>::const_iterator LocationVecMapConstIter;
 
 struct Counter
 {
@@ -197,6 +197,20 @@ struct ReadID
 		{
 			unsigned fragmentIndex : 31;
 			unsigned readEnd : 1;
+		};
+
+		int id;
+	};
+};
+
+struct ClusterID
+{
+	union
+	{
+		struct
+		{
+			unsigned clusterID : 31;
+			unsigned clusterEnd : 1;
 		};
 
 		int id;

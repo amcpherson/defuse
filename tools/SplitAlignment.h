@@ -13,53 +13,46 @@
 #include "FastaIndex.h"
 #include "ReadStream.h"
 #include "ReadIndex.h"
+#include "SplitReadAligner.h"
 #include <boost/unordered_set.hpp>
 
 #include <vector>
+#include <map>
 
 using namespace std;
 using namespace boost;
- 
-class SplitAlignment
+
+struct SplitReadInfo;
+struct SplitAlignment;
+struct BreakPrediction;
+
+class SplitAlignmentTask
 {
 public:
-	typedef unordered_map<int,SplitAlignment> SplitAlignmentMap;
-	typedef unordered_map<int,SplitAlignment>::iterator SplitAlignmentMapIter;
-	typedef unordered_map<int,SplitAlignment>::const_iterator SplitAlignmentMapConstIter;
+	SplitAlignmentTask() : GenerateAlignmentText(false) {}
 
-	bool Initialize(const LocationVec& alignPair, const FastaIndex& reference, 
-					const ExonRegions& exonRegions, double fragmentLengthMean, 
-					double fragmentLengthStdDev, int maxReadLength, int minReadLength);
-	
-	static void WriteCandidateRefSeqs(ostream& out, SplitAlignmentMap& splitAlignments);
-	static void WriteCandidateMateRegions(ostream& out, SplitAlignmentMap& splitAlignments);
-	
-	static void ReadCandidateRefSeqs(istream& in, SplitAlignmentMap& splitAlignments);
-	static void ReadCandidateMateRegions(istream& in, SplitAlignmentMap& splitAlignments);
-	
-	static void FindCandidates(AlignmentStream* alignments, SplitAlignmentMap& splitAlignments);
-	
-	static void ReadCandidateSequences(IReadStream* readStream, SplitAlignmentMap& splitAlignments);
-	static void ReadCandidateSequences(const ReadIndex& readIndex, SplitAlignmentMap& splitAlignments);
+	bool Initialize(int id, const LocationVec& alignPair, const FastaIndex& reference,
+			const ExonRegions& exonRegions, double fragmentLengthMean, 
+			double fragmentLengthStdDev, int maxReadLength, int minReadLength);
 
-	bool Align(bool generateAlignmentText);
+	void CalculateBreakRegion(int minReadLength, int maxReadLength, int maxFragmentLength,
+			int alignStart, int alignEnd, int strand, int& breakStart, int& breakLength);
 
-	static void WriteAlignments(ostream& out, SplitAlignmentMap& splitAlignments);
-	static void ReadAlignments(istream& in, SplitAlignmentMap& splitAlignments);
-	
-	bool Evaluate();
-	
-	static void WriteSequences(ostream& out, SplitAlignmentMap& splitAlignments);
-	static void WriteBreaks(ostream& out, SplitAlignmentMap& splitAlignments);
-	static void WriteAlignText(ostream& out, SplitAlignmentMap& splitAlignments);
-	static void WriteReadIDs(ostream& out, SplitAlignmentMap& splitAlignments);
-	
-private:	
-	inline void CalculateBreakRegion(int minReadLength, int maxReadLength, int maxFragmentLength, int alignStart, 
-									 int alignEnd, int strand, int& breakStart, int& breakLength);
-	inline void CalculateSplitMateRegion(int minReadLength, int maxReadLength, int minFragmentLength, 
-										 int maxFragmentLength, int breakRegionStart, int breakRegionLength, 
-										 int strand, int& mateRegionStart, int& mateRegionEnd);
+	vector<SplitAlignment> Align(SplitReadAligner& aligner, const SplitReadInfo& readInfo,
+			const string& readSeq);
+
+	SplitAlignment ReAlign(SplitReadAligner& aligner, const ReadIndex& readIndex,
+			const SplitAlignment& alignment);
+	vector<SplitAlignment> ReAlign(SplitReadAligner& aligner, const ReadIndex& readIndex,
+			const vector<SplitAlignment>& alignments);
+
+	BreakPrediction Evaluate(const vector<SplitAlignment>& alignments) const;
+
+	void WriteAlignText(ostream& out, const vector<SplitAlignment>& alignments);
+
+    bool GenerateAlignmentText;
+
+	int mFusionID;
 
 	string mAlignRefName[2];
 	int mAlignStrand[2];
@@ -73,25 +66,87 @@ private:
 	string mSplitRemainderSeq[2];
 	
 	LocationVec mMateRegions[2];
-	
-	IntegerVec mCandidateReadID;
-	IntegerVec mCandidateRevComp;
-	
-	StringVec mCandidateSequence;
-	
-	IntegerVec mAlignmentReadID;
-	IntegerPairVec mAlignmentRefSplit;
-	IntegerPairVec mAlignmentReadSplit;
-	IntegerVec mAlignmentScore;
-	StringVec mAlignmentText;
-	
-	IntegerPair mBestSplit;
-	IntegerVec mBreakPos;
-	string mSequence;
-	int mSplitReadCount;
-	double mSplitPosAvg;
-	double mSplitMinAvg;	
 };
+
+class BinnedLocations
+{
+public:
+	BinnedLocations(int binSpacing);
+
+	void Add(int id, const Location& location);
+	void Overlapping(const RawAlignment& alignment, unordered_set<int>& ids) const;
+	
+private:	
+	int mBinSpacing;
+	unordered_map<string,unordered_map<int,IntegerVec> > mBinned[2];
+	vector<int> mIDs;
+	vector<Region> mRegions;
+};
+
+class SplitReadRealigner
+{
+public:
+	SplitReadRealigner();
+
+	void AddTask(const SplitAlignmentTask& alignTasks);
+	void AddReads(IReadStream* readStream);
+	void DoAlignment(AlignmentStream* mateAlignments, ostream& alignmentsOut);
+
+	SplitReadAligner& GetAligner() { return mAligner; }
+
+private:
+	unordered_map<int,SplitAlignmentTask> mAlignTasks;
+	unordered_map<int,string> mReads;
+	BinnedLocations mBinnedMateRegions;
+	SplitReadAligner mAligner;
+};
+
+struct SplitReadInfo
+{
+	ReadID readID;
+	bool revComp;
+};
+
+struct SplitAlignment
+{
+	int fusionID;
+	SplitReadInfo readInfo;
+
+	pair<int,int> refSplit;
+	pair<int,int> readSplit;
+
+	int score;
+
+	string text;
+
+	void WriteAlignment(ostream& out);
+	static vector<SplitAlignment> ReadSortedAlignments(istream& in);
+};
+
+struct BreakPrediction
+{
+	int fusionID;
+
+	string alignRefName[2];
+	int alignStrand[2];
+	int breakPos[2];
+
+	string sequence;
+
+	int splitReadCount;
+	double splitPosAvg;
+	double splitMinAvg;
+
+	vector<SplitAlignment> alignments;
+
+	void WriteSequence(ostream& out);
+	void WriteBreak(ostream& out);
+	void WriteAlignments(ostream& out);
+};
+
+unordered_map<int,SplitAlignmentTask> CreateTasks(const string& referenceFasta,
+		const string& exonRegionsFilename, double fragmentLengthMean, double fragmentLengthStdDev,
+		int minReadLength, int maxReadLength, const LocationVecMap& fusionRegions);
 
 #endif
 

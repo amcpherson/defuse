@@ -73,16 +73,10 @@ if (not defined $cluster_info{"0"}{ref_name})
 	die "Unable to find cluster $query_cluster_id\n";
 }
 
-my $align1 = $cluster_info{"0"}{ref_name}.$cluster_info{"0"}{strand}.":".$cluster_info{"0"}{start}."-".$cluster_info{"0"}{end};
-my $align2 = $cluster_info{"1"}{ref_name}.$cluster_info{"1"}{strand}.":".$cluster_info{"1"}{start}."-".$cluster_info{"1"}{end};
-
 print "Split Reads:\n";
-my $improper_sams = "";
-foreach my $split_fastq_prefix (@split_fastq_prefixes)
-{
-	$improper_sams .= $split_fastq_prefix.".improper.sam ";
-}
-system("cat $improper_sams | $splitseq_bin -1 '$align1' -2 '$align2' -m $read_length_min -x $read_length_max -u $fragment_mean -s $fragment_stddev -e $cdna_regions -r $reads_prefix -f $reference_fasta -a -") == 0 or die;
+my $clusters_sc_regions = $output_directory."/clusters.sc.regions";
+my $splitreads_predalign = $output_directory."/splitreads.predalign";
+system("$splitseq_bin -r $clusters_sc_regions -n $read_length_min -x $read_length_max -u $fragment_mean -s $fragment_stddev -e $cdna_regions -f $reference_fasta -p $reads_prefix -a $splitreads_predalign -i $query_cluster_id") == 0 or die;
 print "\n";
 
 print "Spanning Reads:\n";
