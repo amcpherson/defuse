@@ -75,6 +75,7 @@ my $bowtie_threads           = $config->get_value("bowtie_threads");
 my @prefilter_fastas         = $config->get_list("prefilter");
 my $remove_job_temp_files    = $config->get_value("remove_job_temp_files");
 my $bowtie_quals             = $config->get_value("bowtie_quals");
+my $bowtie_params            = $config->get_value("bowtie_params");
 my $split_min_anchor         = $config->get_value("split_min_anchor");
 my $cov_samp_density         = $config->get_value("covariance_sampling_density");
 my $max_paired_alignments    = $config->get_value("max_paired_alignments");
@@ -109,8 +110,8 @@ verify_directory_exists($scripts_directory);
 verify_directory_exists($local_directory);
 verify_directory_exists($output_directory);
 
-my $align_pair_bin = "$bowtie_bin $bowtie_quals --sam-nohead -S -t -X $max_insert_size";
-my $align_single_bin = "$bowtie_bin $bowtie_quals --sam-nohead -S -t -k 100 -m 100";
+my $align_pair_bin = "$bowtie_bin $bowtie_params $bowtie_quals --sam-nohead -S -t -X $max_insert_size";
+my $align_single_bin = "$bowtie_bin $bowtie_params $bowtie_quals --sam-nohead -S -t -k 100 -m 100";
 my $sort_cmd = "sort";
 
 my $filter_fastq_script = "$scripts_directory/filter_fastq.pl";
