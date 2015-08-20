@@ -116,8 +116,8 @@ sub write_fastq_entry
 
 sub check_fastq_entries
 {
-	return defined $_[0]->[0] and defined $_[0]->[1] and defined $_[0]->[2] and defined $_[0]->[3] and
-	       defined $_[1]->[0] and defined $_[1]->[1] and defined $_[1]->[2] and defined $_[1]->[3];
+	return (defined $_[0]->[0] and defined $_[0]->[1] and defined $_[0]->[2] and defined $_[0]->[3] and
+	        defined $_[1]->[0] and defined $_[1]->[1] and defined $_[1]->[2] and defined $_[1]->[3]);
 }
 
 sub interpret_read_id
