@@ -429,16 +429,22 @@ my $clusters_sc_regions = $output_directory."/clusters.sc.regions";
 $runner->run("$get_align_regions_script < #<1 > #>1", [$clusters_sc], [$clusters_sc_regions]);
 
 print "Calculating split read alignments\n";
-my @job_splitreads_alignments;
 foreach my $job_info (@job_infos)
 {
 	$job_info->{splitalign} = $job_info->{prefix}.".splitreads.alignments";
 	$runner->padd("$dosplitalign_bin -r #<1 -n $read_length_min -x $read_length_max -u $fragment_mean -s $fragment_stddev -e $cdna_regions -f $reference_fasta -1 #<2 -2 #<3 -i #<4 -a #>1", [$clusters_sc_regions,$job_info->{fastq1},$job_info->{fastq2},$job_info->{improper_sam}], [$job_info->{splitalign}]);
-	push @job_splitreads_alignments, $job_info->{splitalign};
 }
 $runner->prun();
+my @job_splitreads_alignments;
+foreach my $job_info (@job_infos)
+{
+	$job_info->{splitalignsorted} = $job_info->{prefix}.".splitreads.alignments.sorted";
+	$runner->padd("sort -T $joblocal_directory -n -k 1 #<1 > #>1", [$job_info->{splitalign}], [$job_info->{splitalignsorted}]);
+	push @job_splitreads_alignments, $job_info->{splitalignsorted};
+}
 my $splitreads_alignments = $output_directory."/splitreads.alignments";
-$runner->run("sort -n -k 1 #<A > #>1", [@job_splitreads_alignments], [$splitreads_alignments]);
+$runner->prun();
+$runner->run("sort -m -n -k 1 #<A > #>1", [@job_splitreads_alignments], [$splitreads_alignments]);
 
 print "Evaluating split reads\n";
 my $splitreads_break = $output_directory."/splitreads.break";
