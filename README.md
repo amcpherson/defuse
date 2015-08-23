@@ -113,6 +113,8 @@ create_reference_dataset.pl -c config.txt
 
 deFuse now takes only paired fastq as input. To help create paired fastq files, the scripts `fq_all2std.pl`, `qseq2fastq.pl` are available for export and qseq formats, and the tool `bamfastq` is available for bam files. 
 
+> Important! Using fastqs converted directly from a position sorted bam will cause performance issues.  Difficult to align reads will end up in the same alignment jobs, resulting in a slower overall analysis.  It is recommended that you sort your bam by read name before converting to fastq.
+
 ## How to run
 
 Running the deFuse pipeline is simple as running a single script. To run the deFuse pipeline, run `defuse.pl` from the scripts directory with the appropriate command line parameters. The parameters are listed below: 
