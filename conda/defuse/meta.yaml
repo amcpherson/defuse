@@ -1,0 +1,20 @@
+package:
+  name: defuse
+  version: '0.7.0'
+
+source:
+  git_url: https://dranew@bitbucket.org/dranew/defuse.git
+  git_rev: v0.7.0
+
+requirements:
+  build:
+    - perl ==5.22.0
+    - boost_source ==1.60.0
+
+  run:
+    - perl ==5.22.0
+
+about:
+  home: http://bitbucket.org/dranew/defuse
+  summary: 'Bioinformatics tool for gene fusion discovery using RNA-Seq data'
+
