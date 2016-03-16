@@ -1,9 +1,11 @@
 #!/bin/bash
 
+# Build tools
 export CPLUS_INCLUDE_PATH=$PREFIX/src/boost/
 cd tools
 make
-mkdir -p $PREFIX/bin
-cp clustermatepairs setcover calccov estislands dosplitalign evalsplitalign localalign splitseq matealign bamfastq $PREFIX/bin
+cd ..
 
-
+# Move to opt directory
+mkdir -p $PREFIX/opt/defuse/
+cp -R * $PREFIX/opt/defuse/

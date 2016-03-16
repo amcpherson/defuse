@@ -8,11 +8,11 @@ source:
 
 requirements:
   build:
-    - perl ==5.22.0
+    - perl
     - boost_source ==1.60.0
 
   run:
-    - perl ==5.22.0
+    - perl
 
 about:
   home: http://bitbucket.org/dranew/defuse
