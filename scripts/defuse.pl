@@ -19,6 +19,9 @@ push @usage, "Run the defuse pipeline for fusion discovery.\n";
 push @usage, "  -h, --help      Displays this information\n";
 push @usage, "  -c, --config    Configuration Filename\n";
 push @usage, "  -o, --output    Output Directory\n";
+push @usage, "  -r, --res       Main results filename (default: results.tsv in Output Directory)\n";
+push @usage, "  -a, --rescla    Results with a probability column filename (default: results.classify.tsv in Output Directory)\n";
+push @usage, "  -b, --resfil    Filtered by the probability threshold results filename (default: results.filtered.tsv in Output Directory)\n";
 push @usage, "  -1, --1fastq    Fastq filename 1\n";
 push @usage, "  -2, --2fastq    Fastq filename 2\n";
 push @usage, "  -n, --name      Library Name (default: Output Directory Suffix)\n";
@@ -31,6 +34,9 @@ my $config_filename;
 my $fastq1_filename;
 my $fastq2_filename;
 my $output_directory;
+my $results_filename;
+my $results_classify_filename;
+my $results_filtered_filename;
 my $library_name;
 my $joblocal_directory;
 my $submitter_type;
@@ -43,6 +49,9 @@ GetOptions
 	'1fastq=s'    => \$fastq1_filename,
 	'2fastq=s'    => \$fastq2_filename,
 	'output=s'    => \$output_directory,
+	'res=s'       => \$results_filename,
+	'rescla=s'    => \$results_classify_filename,
+	'resfil=s'    => \$results_filtered_filename,
 	'name=s'      => \$library_name,
 	'local=s'     => \$joblocal_directory,
 	'submit=s'    => \$submitter_type,
@@ -59,6 +68,25 @@ mkdir $output_directory if not -d $output_directory;
 
 $output_directory = abs_path($output_directory);
 $config_filename = abs_path($config_filename);
+
+# Main results filename
+if (not defined $results_filename)
+{
+	$results_filename = $output_directory."/results.tsv";
+}
+
+# Results with a probability column filename
+if (not defined $results_classify_filename)
+{
+	$results_classify_filename = $output_directory."/results.classify.tsv";
+}
+
+# Filtered according to the probability threshold results filename
+if (not defined $results_filtered_filename)
+{
+	$results_filtered_filename = $output_directory."/results.filtered.tsv";
+}
+
 
 # Guess library name
 if (not defined $library_name)
@@ -500,16 +528,13 @@ my $annotations_filename = $output_directory."/annotations";
 $runner->run("$annotate_fusions_script -c $config_filename -o $output_directory -n $library_name > #>1", [$splitreads_span_pval,$splitreads_break,$splitreads_seq,$clusters_sc], [$annotations_filename]);
 
 print "Coallating fusions\n";
-my $results_filename = $output_directory."/results.tsv";
 $runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$annotations_filename], [$results_filename]);
 
 print "Running adaboost classifier\n";
-my $results_classify = $output_directory."/results.classify.tsv";
-$runner->run("$adaboost_rscript $positive_controls #<1 #>1", [$results_filename], [$results_classify]);
+$runner->run("$adaboost_rscript $positive_controls #<1 #>1", [$results_filename], [$results_classify_filename]);
 
 print "Filtering fusions\n";
-my $filtered_results_filename = $output_directory."/results.filtered.tsv";
-$runner->run("$filter_script probability '> $probability_threshold' < #<1 > #>1", [$results_classify], [$filtered_results_filename]);
+$runner->run("$filter_script probability '> $probability_threshold' < #<1 > #>1", [$results_classify_filename], [$results_filtered_filename]);
 
 print "Success\n";
 
