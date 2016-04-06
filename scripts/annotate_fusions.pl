@@ -58,12 +58,15 @@ my $cds_fasta				= $config->get_value("cds_fasta");
 my $est_fasta				= $config->get_value("est_fasta");
 my $est_alignments			= $config->get_value("est_alignments");
 my $repeats_regions			= $config->get_value("repeats_regions");
-my $splice_bias             = $config->get_value("splice_bias");
+my $splice_bias				= $config->get_value("splice_bias");
 my $tools_directory			= $config->get_value("tools_directory");
 my $scripts_directory		= $config->get_value("scripts_directory");
 my $samtools_bin			= $config->get_value("samtools_bin");
 my $percident_threshold		= $config->get_value("percent_identity_threshold");
-my $calc_extra_anno         = $config->get_value("calculate_extra_annotations");
+my $calc_extra_anno			= $config->get_value("calculate_extra_annotations");
+
+# Get samtools major version (0.1.x or 1.x)
+my $samtools_version_major		= $1 if `$samtools_bin 2>&1` =~ /^Version:\s(\d+\.\d+).*$/m;
 
 my $genome_max_ins = 2000;
 my $est_max_ins = 10000;
@@ -425,7 +428,8 @@ my $cdna_pair_bam_bai = $cdna_pair_bam.".bai";
 my $cdna_pair_bam_prefix = $cdna_pair_bam.".sort";
 if ($calc_extra_anno eq "yes")
 {
-	$runner->run("$samtools_bin view -bt $cdna_fasta_index #<1 | $samtools_bin sort -o - $cdna_pair_bam_prefix > #>1", [$cdna_pair_sam], [$cdna_pair_bam]);
+	my $samtools_sort_cmd = "$samtools_bin view -bt $cdna_fasta_index #<1 | $samtools_bin sort -o ".(($samtools_version_major < 1) ? "- $cdna_pair_bam_prefix > #>1" : "$cdna_pair_bam_prefix - > #>1");
+	$runner->run($samtools_sort_cmd, [$cdna_pair_sam], [$cdna_pair_bam]);
 	$runner->run("$samtools_bin index #<1", [$cdna_pair_bam], [$cdna_pair_bam_bai]);
 }
 
