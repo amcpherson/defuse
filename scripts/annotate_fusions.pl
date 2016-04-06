@@ -66,7 +66,7 @@ my $percident_threshold		= $config->get_value("percent_identity_threshold");
 my $calc_extra_anno			= $config->get_value("calculate_extra_annotations");
 
 # Get samtools major version (0.1.x or 1.x)
-my $samtools_version_major		= $1 if `$samtools_bin 2>&1` =~ /^Version:\s(\d+\.\d+).*$/m;
+my $samtools_version_major	= $1 if `$samtools_bin 2>&1` =~ /^Version:\s(\d+\.\d+).*$/m;
 
 my $genome_max_ins = 2000;
 my $est_max_ins = 10000;
@@ -428,7 +428,7 @@ my $cdna_pair_bam_bai = $cdna_pair_bam.".bai";
 my $cdna_pair_bam_prefix = $cdna_pair_bam.".sort";
 if ($calc_extra_anno eq "yes")
 {
-	my $samtools_sort_cmd = "$samtools_bin view -bt $cdna_fasta_index #<1 | $samtools_bin sort -o ".(($samtools_version_major < 1) ? "- $cdna_pair_bam_prefix > #>1" : "$cdna_pair_bam_prefix - > #>1");
+	my $samtools_sort_cmd = "$samtools_bin view -bt $cdna_fasta_index #<1 | $samtools_bin sort ".(($samtools_version_major < 1) ? "-o - $cdna_pair_bam_prefix > #>1" : "-T $cdna_pair_bam_prefix -O bam - > #>1");
 	$runner->run($samtools_sort_cmd, [$cdna_pair_sam], [$cdna_pair_bam]);
 	$runner->run("$samtools_bin index #<1", [$cdna_pair_bam], [$cdna_pair_bam_bai]);
 }
