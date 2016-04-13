@@ -7,6 +7,7 @@ use Getopt::Long;
 use File::Basename;
 use Cwd qw[abs_path];
 use File::Spec;
+use POSIX qw(strftime);
 
 use lib dirname($0);
 use configdata;
@@ -15,7 +16,7 @@ use parsers;
 
 my @usage;
 push @usage, "Usage: ".basename($0)." [options]\n";
-push @usage, "Run the defuse pipeline for fusion discovery.\n";
+push @usage, "Run the deFuse pipeline for fusion discovery.\n";
 push @usage, "  -h, --help      Displays this information\n";
 push @usage, "  -c, --config    Configuration Filename\n";
 push @usage, "  -o, --output    Output Directory\n";
@@ -41,6 +42,8 @@ my $library_name;
 my $joblocal_directory;
 my $submitter_type;
 my $max_parallel;
+my $timestamp;
+my $datestring;
 
 GetOptions
 (
@@ -62,6 +65,11 @@ not defined $help or die @usage;
 
 defined $config_filename or die @usage;
 defined $output_directory or die @usage;
+
+$timestamp = time();
+my $timestamp0 = $timestamp;
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Starting deFuse v0.7.0 for files ".basename($fastq1_filename)." and ".basename($fastq2_filename)."\n";
 
 mkdir $output_directory if not -d $output_directory;
 -e $config_filename or die "Error: Unable to find config file $config_filename\n";
@@ -179,7 +187,8 @@ sub mailme
 
 	my $text = "Fusion analysis of library $library_name finished with status $status";
 
-	print "Attempting to mail $mailto the result\n";
+	my $datestring = strftime "%Y-%m-%d %H:%M:%S", localtime;
+	print "[$datestring]  Attempting to mail $mailto the result\n";
 
 	system "echo '$text' | mail -s '[AUTO] $text' $mailto";
 }
@@ -278,7 +287,9 @@ my $reads_sources_filename = $reads_prefix.".sources";
 # Optionally retrieve fastq files
 if (defined $fastq1_filename and defined $fastq2_filename)
 {
-	print "Importing fastq files\n";
+	$timestamp = time();
+	$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+	print "[$datestring]  Importing fastq files";
 	-e $fastq1_filename or die "Error: Unable to find fastq $fastq1_filename\n";
 	-e $fastq2_filename or die "Error: Unable to find fastq $fastq2_filename\n";
 	$fastq1_filename = abs_path($fastq1_filename);
@@ -286,7 +297,10 @@ if (defined $fastq1_filename and defined $fastq2_filename)
 	$runner->run("$index_paired_fastq_script #<1 #<2 #>1 #>2 #>3 #>4", [$fastq1_filename,$fastq2_filename], [$reads_end_1_fastq,$reads_end_2_fastq,$reads_index_filename,$reads_names_filename]);
 }
 
-print "Splitting fastq files\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Splitting fastq files";
 my $reads_split_prefix = $job_directory."/reads";
 my $reads_split_catalog = $output_directory."/reads.split.catalog";
 $runner->run("$split_fastq_script $reads_prefix $reads_per_job $reads_split_prefix > #>1", [$reads_end_1_fastq,$reads_end_2_fastq], [$reads_split_catalog]);
@@ -307,7 +321,10 @@ foreach my $split_fastq_prefix (@split_fastq_prefixes)
 	push @job_infos, \%job_info;
 }
 
-print "Discordant alignments\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Discordant alignments";
 my @job_read_stats;
 my @job_spanlength_samples;
 my @job_splitpos_samples;
@@ -380,7 +397,10 @@ my $fragment_mean = $read_stat_values{"fraglength_mean"};
 my $fragment_stddev = $read_stat_values{"fraglength_stddev"};
 my $fragment_max = int($fragment_mean + 3 * $fragment_stddev);
 
-print "Read Stats\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Read Stats\n";
 print "\tFragment mean $fragment_mean stddev $fragment_stddev\n";
 print "\tRead length min $read_length_min max $read_length_max\n";
 
@@ -411,7 +431,9 @@ foreach my $job_info (@job_infos)
 	close SFL;
 }
 
-print "Generating discordant alignment clusters\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Generating discordant alignment clusters";
 my @chr_cluster_filenames;
 foreach my $chr1 (keys %spanning_filenames)
 {
@@ -426,37 +448,61 @@ $runner->prun();
 my $clusters_all = $output_directory."/clusters.all";
 $runner->run("$merge_clusters_script #<A > #>1", [@chr_cluster_filenames], [$clusters_all]);
 
-print "Remove mitochondrial-genomic clusters\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Remove mitochondrial-genomic clusters";
 my $clusters = $output_directory."/clusters";
 $runner->run("$segregate_mitochondrial_script $gene_models $mt_chromosome < #<1 > #>1", [$clusters_all], [$clusters]);
 
-print "Generating maximum parsimony solution\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Generating maximum parsimony solution";
 my $clusters_sc_all = $output_directory."/clusters.sc.all";
 $runner->jobmem(32000000000);
 $runner->run("$setcover_bin -m $span_count_threshold -c #<1 -o #>1", [$clusters], [$clusters_sc_all]);
 $runner->jobmem(8000000000);
 
-print "Selecting fusion clusters\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Selecting fusion clusters";
 my $clusters_sc_unfilt = $output_directory."/clusters.sc.unfilt";
 $runner->run("$select_fusion_clusters_script $gene_models < #<1 > #>1", [$clusters_sc_all], [$clusters_sc_unfilt]);
 
-print "Preparing sequences for local realignment\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Preparing sequences for local realignment";
 my $clusters_sc_local_seq = $output_directory."/clusters.sc.local.seq";
 $runner->run("$prep_local_alignment_seqs_script -r $reference_fasta -g $gene_models -c #<1 -s $dna_concordant_len > #>1", [$clusters_sc_unfilt], [$clusters_sc_local_seq]);
 
-print "Performing local realignment\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Performing local realignment";
 my $clusters_sc_local_align = $output_directory."/clusters.sc.local.align";
 $runner->run("$localalign_bin -m 10 -x -5 -g -5 -t 0.8 < #<1 > #>1", [$clusters_sc_local_seq], [$clusters_sc_local_align]);
 
-print "Filtering concordant clusters\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Filtering concordant clusters";
 my $clusters_sc = $output_directory."/clusters.sc";
 $runner->run("cat #<1 | $filter_column_script #<2 0 1 | $remove_duplicates_script $span_count_threshold > #>1", [$clusters_sc_unfilt,$clusters_sc_local_align], [$clusters_sc]);
 
-print "Generating spanning alignment regions file\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Generating spanning alignment regions file";
 my $clusters_sc_regions = $output_directory."/clusters.sc.regions";
 $runner->run("$get_align_regions_script < #<1 > #>1", [$clusters_sc], [$clusters_sc_regions]);
 
-print "Calculating split read alignments\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Calculating split read alignments";
 foreach my $job_info (@job_infos)
 {
 	$job_info->{splitalign} = $job_info->{prefix}.".splitreads.alignments";
@@ -474,37 +520,58 @@ my $splitreads_alignments = $output_directory."/splitreads.alignments";
 $runner->prun();
 $runner->run("sort -m -n -k 1 #<A > #>1", [@job_splitreads_alignments], [$splitreads_alignments]);
 
-print "Evaluating split reads\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Evaluating split reads";
 my $splitreads_break = $output_directory."/splitreads.break";
 my $splitreads_seq = $output_directory."/splitreads.seq";
 my $splitreads_predalign = $output_directory."/splitreads.predalign";
 $runner->run("$evalsplitalign_bin -r #<1 -n $read_length_min -x $read_length_max -u $fragment_mean -s $fragment_stddev -e $cdna_regions -f $reference_fasta -a #<2 -b #>1 -q #>2 -p #>3", [$clusters_sc_regions,$splitreads_alignments], [$splitreads_break,$splitreads_seq,$splitreads_predalign]);
 
-print "Calculating spanning stats\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Calculating spanning stats";
 my $splitreads_span_stats = $output_directory."/splitreads.span.stats";
 $runner->padd("$calc_span_stats_script -c #<1 -b #<2 -s #<3 > #>1", [$clusters_sc,$splitreads_break,$splitreads_seq], [$splitreads_span_stats]);
 $runner->prun();
 
-print "Calculating spanning p-values\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Calculating spanning p-values";
 my $splitreads_span_pval = $output_directory."/splitreads.span.pval";
 $runner->padd("$evaluate_fraglength_rscript #<1 #<2 $discord_read_trim #<3 #>1", [$read_stats,$spanlength_cov,$splitreads_span_stats], [$splitreads_span_pval]);
 $runner->prun();
 
-print "Calculating split read pvalues\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Calculating split read pvalues";
 my $splitreads_split_pval = $output_directory."/splitreads.split.pval";
 $runner->run("$evaluate_split_rscript #<1 #<2 #<3 #>1", [$splitpos_cov,$splitmin_cov,$splitreads_seq], [$splitreads_split_pval]);
 
-print "Creating fastas\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Creating fastas";
 my $breakpoints_fasta = $output_directory."/breakpoints.fa";
 $runner->run("cut -f1,2 #<1 | $make_fasta_script > #>1", [$splitreads_seq], [$breakpoints_fasta]);
 
-print "Splitting fastas\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Splitting fastas";
 my $breakpoints_split_prefix = $job_directory."/breakpoints";
 my $breakpoints_split_catalog = $output_directory."/breakpoints.split.catalog";
 $runner->run("$split_fasta_script #<1 $num_blat_sequences $breakpoints_split_prefix > #>1", [$breakpoints_fasta], [$breakpoints_split_catalog]);
 my @breakpoints_split_fastas = readsplitcatalog($breakpoints_split_catalog);
 
-print "Breakpoint alignments\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Breakpoint alignments";
 my $breakpoints_genome_psl = $output_directory."/breakpoints.genome.psl";
 my $breakpoints_genome_nointron_psl = $output_directory."/breakpoints.genome.nointron.psl";
 my $breakpoints_cdna_psl = $output_directory."/breakpoints.cdna.psl";
@@ -522,21 +589,36 @@ push @breakpoint_jobs, [$breakpoints_fasta, $breakpoints_cds_psl, \@breakpoints_
 
 do_breakpoint_jobs(@breakpoint_jobs);
 
-print "Annotating fusions\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Annotating fusions";
 $runner->jobmem(16000000000);
 my $annotations_filename = $output_directory."/annotations";
 $runner->run("$annotate_fusions_script -c $config_filename -o $output_directory -n $library_name > #>1", [$splitreads_span_pval,$splitreads_break,$splitreads_seq,$clusters_sc], [$annotations_filename]);
 
-print "Coallating fusions\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Coallating fusions";
 $runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$annotations_filename], [$results_filename]);
 
-print "Running adaboost classifier\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Running adaboost classifier";
 $runner->run("$adaboost_rscript $positive_controls #<1 #>1", [$results_filename], [$results_classify_filename]);
 
-print "Filtering fusions\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Filtering fusions";
 $runner->run("$filter_script probability '> $probability_threshold' < #<1 > #>1", [$results_classify_filename], [$results_filtered_filename]);
 
-print "Success\n";
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  Success";
 
 # Remove job files
 if (lc($remove_job_files) eq "yes")
@@ -551,6 +633,11 @@ if (lc($remove_job_files) eq "yes")
 }
 
 $status = "success";
+
+print " [".(time() - $timestamp)." sec]\n";
+$timestamp = time();
+$datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
+print "[$datestring]  deFuse finished. Total time: ".(time() - $timestamp0)." sec.\n";
 
 sub readsplitcatalog
 {
