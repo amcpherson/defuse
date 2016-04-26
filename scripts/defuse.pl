@@ -401,8 +401,8 @@ print " [".(time() - $timestamp)." sec]\n";
 $timestamp = time();
 $datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
 print "[$datestring]  Read Stats\n";
-print "\tFragment mean $fragment_mean stddev $fragment_stddev\n";
-print "\tRead length min $read_length_min max $read_length_max\n";
+print "                         Fragment mean $fragment_mean stddev $fragment_stddev\n";
+print "                         Read length min $read_length_min max $read_length_max\n";
 
 if ($fragment_mean / $discord_read_trim < 3)
 {
