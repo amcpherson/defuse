@@ -68,9 +68,6 @@ my $calc_extra_anno			= $config->get_value("calculate_extra_annotations");
 # Get samtools major version (0.1.x or 1.x)
 my $samtools_version_major	= $1 if `$samtools_bin 2>&1` =~ /^Version:\s(\d+\.\d+).*$/m;
 
-# Get samtools major version (0.1.x or 1.x)
-my $samtools_version_major	= $1 if `$samtools_bin 2>&1` =~ /^Version:\s(\d+\.\d+).*$/m;
-
 my $genome_max_ins = 2000;
 my $est_max_ins = 10000;
 my $cdna_max_ins = 10000000;
