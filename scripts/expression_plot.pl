@@ -20,6 +20,7 @@ push @usage, "Generate expression plot for a specific gene.\n";
 push @usage, "  -h, --help        Displays this information\n";
 push @usage, "  -c, --config      Configuration Filename\n";
 push @usage, "  -o, --output      Library Output directory\n";
+push @usage, "  -r, --res         Results filename for fusion breakpoint position (default: results.tsv in Output Directory)\n";
 push @usage, "  -f, --fusid       Fusion ID (optional)\n";
 push @usage, "  -g, --gene        Ensembl Gene ID\n";
 push @usage, "  -p, --pdf         Interrupted Expression PDF\n";
@@ -27,6 +28,7 @@ push @usage, "  -p, --pdf         Interrupted Expression PDF\n";
 my $help;
 my $config_filename;
 my $output_directory;
+my $results_filename;
 my $fusion_id;
 my $gene_id;
 my $expression_pdf;
@@ -36,6 +38,7 @@ GetOptions
 	'help'        => \$help,
 	'config=s'    => \$config_filename,
 	'output=s'    => \$output_directory,
+	'res=s'       => \$results_filename,
 	'fusid=s'     => \$fusion_id,
 	'gene=s'      => \$gene_id,
 	'pdf=s'       => \$expression_pdf,
@@ -47,6 +50,14 @@ defined $config_filename or die @usage;
 defined $output_directory or die @usage;
 defined $gene_id or die @usage;
 defined $expression_pdf or die @usage;
+
+# Results filename for fusion breakpoint position
+if (not defined $results_filename)
+{
+	$results_filename = $output_directory."/results.tsv";
+}
+
+
 
 my $config = configdata->new();
 $config->read($config_filename);
@@ -64,9 +75,6 @@ my $fusion_breakpos;
 my $fusion_breakstrand;
 if (defined $fusion_id)
 {
-	# Results filename for fusion breakpoint position
-	my $results_filename = $output_directory."/results.tsv";
-
 	my $first_line = 1;
 	my %fi;
 	open RES, $results_filename or die "Error: Unable to open $results_filename: $!\n";

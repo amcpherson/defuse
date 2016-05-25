@@ -132,6 +132,15 @@ Fastq filename 2
 -o, --output 
 Output Directory
 
+-r, --res 
+Main results filename (default: results.tsv in Output Directory)
+
+-a, --rescla 
+Results with a probability column filename (default: results.classify.tsv in Output Directory)
+
+-b, --resfil
+Filtered by the probability threshold results filename (default: results.filtered.tsv in Output Directory)
+
 -n, --name 
 Library Name
 
@@ -159,6 +168,12 @@ The above example will not be the fastest way to run deFuse. Given a machine wit
 
 ```
 defuse.pl -c config.txt -1 reads1.fq -2 reads2.fq -o output_dir -p 8
+```
+
+If you want to specify output results' files: 
+
+```
+defuse.pl -c config.txt -1 reads1.fq -2 reads2.fq -o output_dir -r output_dir/myresults.tsv -a path/to/my/dir/myresults_cl.tsv -b path/to/my/dir/myresults_fil.tsv
 ```
 
 If you have access to a cluster, you may be able to run deFuse as follows for a sun grid engine (SGE) cluster: 
