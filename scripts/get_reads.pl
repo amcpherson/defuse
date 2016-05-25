@@ -8,7 +8,8 @@ use File::Basename;
 use File::Spec;
 use List::Util qw[min max];
 
-use lib dirname($0);
+use FindBin;
+use lib "$FindBin::RealBin";
 use configdata;
 use parsers;
 
@@ -17,11 +18,13 @@ push @usage, "Usage: ".basename($0)." [options]\n";
 push @usage, "Retrieve reads supporting a fusion.\n";
 push @usage, "  -h, --help      Displays this information\n";
 push @usage, "  -c, --config    Configuration Filename\n";
+push @usage, "  -d, --dataset   Dataset Directory\n";
 push @usage, "  -o, --output    Output Directory\n";
 push @usage, "  -i, --id        Cluster ID\n";
 
 my $help;
 my $config_filename;
+my $dataset_directory;
 my $output_directory;
 my $query_cluster_id;
 
@@ -29,6 +32,7 @@ GetOptions
 (
 	'help'        => \$help,
 	'config=s'    => \$config_filename,
+	'dataset=s'   => \$dataset_directory,
 	'output=s'    => \$output_directory,
 	'id=s'        => \$query_cluster_id,
 );
@@ -36,10 +40,13 @@ GetOptions
 not defined $help or die @usage;
 
 defined $config_filename or die @usage;
+defined $dataset_directory or die @usage;
 defined $output_directory or die @usage;
 
+my $source_directory = abs_path("$FindBin::RealBin/../");
+
 my $config = configdata->new();
-$config->read($config_filename);
+$config->read($config_filename, $dataset_directory, $source_directory);
 
 # Config values
 my $reference_fasta = $config->get_value("reference_fasta");

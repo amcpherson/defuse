@@ -4,7 +4,8 @@ use strict;
 use warnings;
 use File::Basename;
 
-use lib dirname($0)."/../external/BioPerl-1.6.1";
+use FindBin;
+use lib "$FindBin::RealBin/../external/BioPerl-1.6.1";
 use Bio::SeqIO;
 
 my $in = Bio::SeqIO->new(-format => "fasta", -fh => \*STDIN);

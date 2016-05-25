@@ -6,11 +6,13 @@ use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
 use List::Util qw[min max];
+use Cwd qw[abs_path];
 
-use lib dirname($0);
+use FindBin;
+use lib "$FindBin::RealBin";
 use configdata;
 
-use lib dirname($0)."/../external/BioPerl-1.6.1";
+use lib "$FindBin::RealBin/../external/BioPerl-1.6.1";
 use Bio::DB::Fasta;
 use Bio::SeqIO;
 
@@ -19,6 +21,7 @@ push @usage, "Usage: ".basename($0)." [options]\n";
 push @usage, "Generate expression plot for a specific gene.\n";
 push @usage, "  -h, --help        Displays this information\n";
 push @usage, "  -c, --config      Configuration Filename\n";
+push @usage, "  -d, --dataset   Dataset Directory\n";
 push @usage, "  -o, --output      Library Output directory\n";
 push @usage, "  -r, --res         Results filename for fusion breakpoint position (default: results.tsv in Output Directory)\n";
 push @usage, "  -f, --fusid       Fusion ID (optional)\n";
@@ -27,6 +30,7 @@ push @usage, "  -p, --pdf         Interrupted Expression PDF\n";
 
 my $help;
 my $config_filename;
+my $dataset_directory;
 my $output_directory;
 my $results_filename;
 my $fusion_id;
@@ -37,6 +41,7 @@ GetOptions
 (
 	'help'        => \$help,
 	'config=s'    => \$config_filename,
+	'dataset=s'   => \$dataset_directory,
 	'output=s'    => \$output_directory,
 	'res=s'       => \$results_filename,
 	'fusid=s'     => \$fusion_id,
@@ -47,6 +52,7 @@ GetOptions
 not defined $help or die @usage;
 
 defined $config_filename or die @usage;
+defined $dataset_directory or die @usage;
 defined $output_directory or die @usage;
 defined $gene_id or die @usage;
 defined $expression_pdf or die @usage;
@@ -57,10 +63,10 @@ if (not defined $results_filename)
 	$results_filename = $output_directory."/results.tsv";
 }
 
-
+my $source_directory = abs_path("$FindBin::RealBin/../");
 
 my $config = configdata->new();
-$config->read($config_filename);
+$config->read($config_filename, $dataset_directory, $source_directory);
 
 my $cdna_regions			= $config->get_value("cdna_regions");
 my $gene_tran_list			= $config->get_value("gene_tran_list");

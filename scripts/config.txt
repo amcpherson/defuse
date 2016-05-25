@@ -1,21 +1,10 @@
 #
 # Configuration file for defuse
 #
-# At a minimum, replace all values enclosed by []
-#
-# For example:
-# source_directory = /path/to/defuse
-#
 
 ensembl_version                             = 69
 ensembl_genome_version                      = GRCh37
 ucsc_genome_version                         = hg19
-
-# Directory where the defuse code was unpacked
-source_directory                            = [Where you unpacked the defuse code]
-
-# Directory where you want your dataset
-dataset_directory                           = [Where you intend to store the reference dataset]
 
 # Input genome and gene models
 gene_models                                 = $(dataset_directory)/Homo_sapiens.$(ensembl_genome_version).$(ensembl_version).gtf
@@ -32,15 +21,15 @@ est_alignments                              = $(dataset_directory)/intronEst.txt
 unigene_fasta                               = $(dataset_directory)/Hs.seq.uniq
 
 # Paths to external tools
-samtools_bin                                = [path of your samtools binary]
-bowtie_bin                                  = [path of your bowtie binary version 0.12.5 or greater recommended]
-bowtie_build_bin                            = [path of your bowtie-build binary version 0.12.5 or greater recommended]
-blat_bin                                    = [path of your blat binary]
-fatotwobit_bin                              = [path of your faToTwoBit binary from the blat suite]
-r_bin                                       = [path of your R binary]
-rscript_bin                                 = [path of your Rscript binary]
-gmap_bin                                    = [path of your gmap binary]
-gmap_build_bin                              = [path of your gmap_build binary]
+samtools_bin                                = samtools
+bowtie_bin                                  = bowtie
+bowtie_build_bin                            = bowtie-build
+blat_bin                                    = blat
+fatotwobit_bin                              = faToTwoBit
+r_bin                                       = R
+rscript_bin                                 = Rscript
+gmap_bin                                    = gmap
+gmap_build_bin                              = gmap_build
 
 # Directory where you want your dataset
 gmap_index_directory                        = $(dataset_directory)/gmap

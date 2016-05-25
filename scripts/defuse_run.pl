@@ -9,7 +9,8 @@ use Cwd qw[abs_path];
 use File::Spec;
 use POSIX qw(strftime);
 
-use lib dirname($0);
+use FindBin;
+use lib "$FindBin::RealBin";
 use configdata;
 use cmdrunner;
 use parsers;
@@ -19,6 +20,7 @@ push @usage, "Usage: ".basename($0)." [options]\n";
 push @usage, "Run the deFuse pipeline for fusion discovery.\n";
 push @usage, "  -h, --help      Displays this information\n";
 push @usage, "  -c, --config    Configuration Filename\n";
+push @usage, "  -d, --dataset   Dataset Directory\n";
 push @usage, "  -o, --output    Output Directory\n";
 push @usage, "  -r, --res       Main results filename (default: results.tsv in Output Directory)\n";
 push @usage, "  -a, --rescla    Results with a probability column filename (default: results.classify.tsv in Output Directory)\n";
@@ -32,6 +34,7 @@ push @usage, "  -p, --parallel  Maximum Number of Parallel Jobs (default: 1)\n";
 
 my $help;
 my $config_filename;
+my $dataset_directory;
 my $fastq1_filename;
 my $fastq2_filename;
 my $output_directory;
@@ -49,6 +52,7 @@ GetOptions
 (
 	'help'        => \$help,
 	'config=s'    => \$config_filename,
+	'dataset=s'   => \$dataset_directory,
 	'1fastq=s'    => \$fastq1_filename,
 	'2fastq=s'    => \$fastq2_filename,
 	'output=s'    => \$output_directory,
@@ -64,6 +68,7 @@ GetOptions
 not defined $help or die @usage;
 
 defined $config_filename or die @usage;
+defined $dataset_directory or die @usage;
 defined $output_directory or die @usage;
 
 $timestamp = time();
@@ -72,6 +77,14 @@ $datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
 print "[$datestring]  Starting deFuse v0.7.0 for files ".basename($fastq1_filename)." and ".basename($fastq2_filename)."\n";
 
 mkdir $output_directory if not -d $output_directory;
+
+my $source_directory = abs_path("$FindBin::RealBin/../");
+
+if (not defined $config_filename)
+{
+	my $config_filename = $source_directory."/config.txt";
+}
+
 -e $config_filename or die "Error: Unable to find config file $config_filename\n";
 
 $output_directory = abs_path($output_directory);
@@ -94,7 +107,6 @@ if (not defined $results_filtered_filename)
 {
 	$results_filtered_filename = $output_directory."/results.filtered.tsv";
 }
-
 
 # Guess library name
 if (not defined $library_name)
@@ -135,7 +147,7 @@ if (not defined $max_parallel)
 }
 
 my $config = configdata->new();
-$config->read($config_filename);
+$config->read($config_filename, $dataset_directory, $source_directory);
 
 # Config values
 my $gene_models           = $config->get_value("gene_models");
@@ -345,6 +357,7 @@ foreach my $job_info (@job_infos)
 	
 	my $job_cmd = $alignjob_script." ";
 	$job_cmd .= "-c ".$config_filename." ";
+	$job_cmd .= "-d ".$dataset_directory." ";
 	$job_cmd .= "-j ".$job_info->{name}." ";
 	$job_cmd .= "-l ".$joblocal_directory." ";
 	$job_cmd .= "-o ".$output_directory." ";
@@ -595,13 +608,13 @@ $datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
 print "[$datestring]  Annotating fusions";
 $runner->jobmem(16000000000);
 my $annotations_filename = $output_directory."/annotations";
-$runner->run("$annotate_fusions_script -c $config_filename -o $output_directory -n $library_name > #>1", [$splitreads_span_pval,$splitreads_break,$splitreads_seq,$clusters_sc], [$annotations_filename]);
+$runner->run("$annotate_fusions_script -c $config_filename -d $dataset_directory -o $output_directory -n $library_name > #>1", [$splitreads_span_pval,$splitreads_break,$splitreads_seq,$clusters_sc], [$annotations_filename]);
 
 print " [".(time() - $timestamp)." sec]\n";
 $timestamp = time();
 $datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
 print "[$datestring]  Coallating fusions";
-$runner->run("$coallate_fusions_script -c $config_filename -o $output_directory -l #<1 > #>1", [$annotations_filename], [$results_filename]);
+$runner->run("$coallate_fusions_script -c $config_filename -d $dataset_directory -o $output_directory -l #<1 > #>1", [$annotations_filename], [$results_filename]);
 
 print " [".(time() - $timestamp)." sec]\n";
 $timestamp = time();

@@ -6,40 +6,50 @@ use Getopt::Std;
 use Getopt::Long;
 use List::Util qw[min max];
 use File::Basename;
+use Cwd qw[abs_path];
 
-use lib dirname($0);
+use FindBin;
+use lib "$FindBin::RealBin";
 use cmdrunner;
 use configdata;
 
-use lib dirname($0)."/../external/BioPerl-1.6.1";
+use lib "$FindBin::RealBin/../external/BioPerl-1.6.1";
 use Bio::DB::Fasta;
 use Bio::SeqIO;
 
-sub usage
-{
-	print("Usage: ".basename($0)." [options]\n");
-	print("Create the reference dataset.\n");
-	print("  -h, --help      Displays this information\n");
-	print("  -c, --config    Configuration Filename\n");
-}
+my @usage;
+push @usage, "Usage: ".basename($0)." [options]\n";
+push @usage, "Create the reference dataset.\n";
+push @usage, "  -h, --help      Displays this information\n";
+push @usage, "  -c, --config    Configuration Filename\n";
+push @usage, "  -d, --dataset   Dataset Directory\n";
 
 my $help;
 my $config_filename;
+my $dataset_directory;
 
 GetOptions
 (
- 	'help'        => \$help,
+	'help'        => \$help,
 	'config=s'    => \$config_filename,
+	'dataset=s'   => \$dataset_directory,
 );
 
-not defined $help or usage() and exit;
-defined $config_filename or usage() and exit;
+not defined $help or die @usage;
+
+defined $dataset_directory or die @usage;
+
+my $source_directory = abs_path("$FindBin::RealBin/../");
+
+if (not defined $config_filename)
+{
+	my $config_filename = $source_directory."/config.txt";
+}
 
 my $config = configdata->new();
-$config->read($config_filename);
+$config->read($config_filename, $dataset_directory, $source_directory);
 
 # Filenames for reference files
-my $dataset_directory           = $config->get_value("dataset_directory");
 my $ensembl_version             = $config->get_value("ensembl_version");
 my $ensembl_genome_version      = $config->get_value("ensembl_genome_version");
 my $ucsc_genome_version         = $config->get_value("ucsc_genome_version");

@@ -8,7 +8,8 @@ use File::Basename;
 use File::Spec;
 use List::Util qw[min max];
 
-use lib dirname($0);
+use FindBin;
+use lib "$FindBin::RealBin";
 use configdata;
 use parsers;
 
@@ -24,6 +25,7 @@ push @usage, "      --fastq2    Filename of End 2 Fastq\n";
 
 my $help;
 my $config_filename;
+my $dataset_directory;
 my $output_directory;
 my $query_cluster_id;
 my $query_filename;

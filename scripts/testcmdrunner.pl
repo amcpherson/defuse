@@ -6,7 +6,8 @@ use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
 
-use lib dirname($0);
+use FindBin;
+use lib "$FindBin::RealBin";
 use cmdrunner;
 
 my $runname = shift;

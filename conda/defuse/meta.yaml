@@ -12,7 +12,14 @@ requirements:
     - boost_source ==1.60.0
 
   run:
+    - r
+    - r-ada
     - perl
+    - blat
+    - samtools
+    - ucsc-fatotwobit
+    - bowtie
+    - gmap
 
 about:
   home: http://bitbucket.org/dranew/defuse
