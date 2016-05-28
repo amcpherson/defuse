@@ -1,10 +1,10 @@
 package:
   name: defuse
-  version: '0.7.0'
+  version: '0.8.0'
 
 source:
   git_url: https://dranew@bitbucket.org/dranew/defuse.git
-  git_rev: v0.7.0
+  git_rev: v0.8.0
 
 requirements:
   build:
