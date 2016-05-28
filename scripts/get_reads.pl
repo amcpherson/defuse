@@ -7,6 +7,7 @@ use Getopt::Long;
 use File::Basename;
 use File::Spec;
 use List::Util qw[min max];
+use Cwd qw[abs_path];
 
 use FindBin;
 use lib "$FindBin::RealBin";
