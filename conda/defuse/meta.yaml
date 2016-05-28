@@ -8,13 +8,13 @@ source:
 
 requirements:
   build:
-    - perl
+    - perl ==5.22.0
     - boost_source ==1.60.0
 
   run:
     - r
     - r-ada
-    - perl
+    - perl ==5.22.0
     - blat
     - samtools
     - ucsc-fatotwobit
