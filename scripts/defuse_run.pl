@@ -67,14 +67,13 @@ GetOptions
 
 not defined $help or die @usage;
 
-defined $config_filename or die @usage;
 defined $dataset_directory or die @usage;
 defined $output_directory or die @usage;
 
 $timestamp = time();
 my $timestamp0 = $timestamp;
 $datestring = strftime("%Y-%m-%d %H:%M:%S", localtime($timestamp));
-print "[$datestring]  Starting deFuse v0.7.0 for files ".basename($fastq1_filename)." and ".basename($fastq2_filename)."\n";
+print "[$datestring]  Starting deFuse v0.8.0 for files ".basename($fastq1_filename)." and ".basename($fastq2_filename)."\n";
 
 mkdir $output_directory if not -d $output_directory;
 
@@ -82,7 +81,7 @@ my $source_directory = abs_path("$FindBin::RealBin/../");
 
 if (not defined $config_filename)
 {
-	my $config_filename = $source_directory."/config.txt";
+	$config_filename = $source_directory."/scripts/config.txt";
 }
 
 -e $config_filename or die "Error: Unable to find config file $config_filename\n";
