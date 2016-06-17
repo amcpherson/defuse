@@ -7,7 +7,8 @@ use Getopt::Long;
 use File::Basename;
 use List::Util qw[min max];
 
-use lib dirname($0);
+use FindBin;
+use lib "$FindBin::RealBin";
 use gene_models;
 
 my $gene_models_filename = shift;

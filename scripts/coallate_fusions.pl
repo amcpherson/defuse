@@ -5,8 +5,10 @@ use warnings FATAL => 'all';
 use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
+use Cwd qw[abs_path];
 
-use lib dirname($0);
+use FindBin;
+use lib "$FindBin::RealBin";
 use configdata;
 
 my @usage;
@@ -14,11 +16,13 @@ push @usage, "Usage: ".basename($0)." [options]\n";
 push @usage, "Coallate fusions\n";
 push @usage, "  -h, --help      Displays this information\n";
 push @usage, "  -c, --config    Configuration Filename\n";
+push @usage, "  -d, --dataset   Dataset Directory\n";
 push @usage, "  -o, --output    Output Directory\n";
 push @usage, "  -l, --list      List of Cluster IDs\n";
 
 my $help;
 my $config_filename;
+my $dataset_directory;
 my $output_directory;
 my $cluster_list;
 
@@ -26,6 +30,7 @@ GetOptions
 (
 	'help'        => \$help,
 	'config=s'    => \$config_filename,
+	'dataset=s'   => \$dataset_directory,
 	'output=s'    => \$output_directory,
 	'list=s'      => \$cluster_list,
 );
@@ -33,11 +38,14 @@ GetOptions
 not defined $help or usage() and exit;
 
 defined $config_filename or die @usage;
+defined $dataset_directory or die @usage;
 defined $output_directory or die @usage;
 defined $cluster_list or die @usage;
 
+my $source_directory = abs_path("$FindBin::RealBin/../");
+
 my $config = configdata->new();
-$config->read($config_filename);
+$config->read($config_filename, $dataset_directory, $source_directory);
 
 my $scripts_directory		= $config->get_value("scripts_directory");
 

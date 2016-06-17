@@ -1,5 +1,17 @@
 # News
 
+## Version 0.8.0 is now available
+
+Improvements: 
+
+  * Install via conda
+  * Removed paths from config
+  * Specify output files on the command line (courtesy Sergey Mitrofanov)
+  * Date and time logged for each step (courtesy Sergey Mitrofanov)
+
+Bugfixes:
+  * Samtools command line fixes (courtesy Dusan Randjelovic)
+
 ## Version 0.6.2 is now available
 
 Bugfixes: 

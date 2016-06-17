@@ -16,9 +16,14 @@ sub read
 {
 	my $self = shift;
 	my $config_filename = shift;
+	my $dataset_directory = shift;
+	my $source_directory = shift;
 
 	my %config_values;
-	
+
+	$config_values{"dataset_directory"} = $dataset_directory;
+	$config_values{"source_directory"} = $source_directory;
+
 	open CFG, $config_filename or die "Error: Unable to open $config_filename\n";
 	while (<CFG>)
 	{

@@ -7,10 +7,6 @@ use Getopt::Long;
 use File::Basename;
 use List::Util qw[min max];
 
-use lib dirname($0)."/../external/BioPerl-1.6.1";
-use Bio::DB::Fasta;
-use Bio::SeqIO;
-
 my %cluster_ref_name;
 my %cluster_strand;
 my %cluster_align_start;

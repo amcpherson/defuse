@@ -53,11 +53,29 @@ Four of the granulosa cell tumour datasets analysed in the PLoS Comp. Bio. paper
 | GCT0077            | GRC2               |
 | GCT0078            | GRC3               |
 
-## Setup
+## Installation
 
-To run the deFuse pipeline, you will be required to install some prerequisite software, modify a configuration file, and run a setup script.
+### Binary Distribution
 
-### deFuse code
+The recommended way of installing deFuse is using [`conda`](http://conda.pydata.org/docs/download.html).  Starting with version `v0.8.0`, OSX and Linux versions will be provided on my anaconda channel.  The Linux version is compiled using the [bioconda](https://bioconda.github.io) docker image for optimal compatibility.
+
+With conda installed, deFuse can be installed by first adding my anaconda channel.
+
+```
+conda config --add channels https://conda.anaconda.org/dranew
+```
+
+Then install deFuse.
+
+```
+conda install defuse
+```
+
+In the future, deFuse will be added to the bioconda project.
+
+### From Source
+
+#### deFuse code
 
 Download and untar/gunzip the deFuse code package to a directory. 
 
@@ -65,11 +83,7 @@ To build the deFuse toolset you must have the **boost c++ development libraries*
 
 To build the deFuse toolset, cd to the tools subdirectory and type `make`. 
 
-Create a directory for storing the reference dataset and bowtie indices. 
-
-Open the `config.txt` file in the scripts directory. You will need to set the entries enclosed with square brackets [] with files obtained as detailed below. To begin, set `code_directory` to the directory where you unpacked the deFuse code. Set `dataset_directory` to the directory you created for storing the reference dataset and bowtie indices. 
-
-### External Tools
+#### External Tools
 
 deFuse relies on other publically available tools as part of its pipeline. Some of these tools are not included with the deFuse download. Obtain these tools as detailed below. 
 
@@ -103,10 +117,18 @@ Install the ada package. Run R, then at the prompt type `install.packages("ada")
 
 The reference dataset setup process has been simplified as of deFuse 0.6.0, and deFuse now automatically downloads all required files. 
 
-The `create_reference_dataset.pl` script will download the genome and other source files, and build any derivative files including bowtie indices, gmap indices, and 2bit files. Run the following command. Expect this step to take at least 12 hours. 
+Create a directory for storing the reference dataset and bowtie indices (herein referred to as `dataset_directory`).
+
+The `defuse_create_ref.pl` script will download the genome and other source files, and build any derivative files including bowtie indices, gmap indices, and 2bit files. Run the following command. Expect this step to take at least 12 hours. 
 
 ```
-create_reference_dataset.pl -c config.txt
+defuse_create_ref.pl -d dataset_directory
+```
+
+The default config file is located at `scripts/config.txt` and builds a `hg19` reference.  To modify the reference or other parameters, copy the config and specify the filename of the modified config on the command line.
+
+```
+defuse_create_ref.pl -d dataset_directory -c myconfig.txt
 ```
 
 ## Input data formats
@@ -117,11 +139,14 @@ deFuse now takes only paired fastq as input. To help create paired fastq files, 
 
 ## How to run
 
-Running the deFuse pipeline is simple as running a single script. To run the deFuse pipeline, run `defuse.pl` from the scripts directory with the appropriate command line parameters. The parameters are listed below: 
+Running the deFuse pipeline is simple as running a single script. To run the deFuse pipeline, run `defuse_run.pl` from the scripts directory with the appropriate command line parameters. The parameters are listed below: 
 
 ```
 -c, --config
 Configuration Filename
+
+-d, --dataset
+Directory of reference genome indices
 
 -1, --1fastq 
 Fastq filename 1
@@ -131,6 +156,15 @@ Fastq filename 2
 
 -o, --output 
 Output Directory
+
+-r, --res 
+Main results filename (default: results.tsv in Output Directory)
+
+-a, --rescla 
+Results with a probability column filename (default: results.classify.tsv in Output Directory)
+
+-b, --resfil
+Filtered by the probability threshold results filename (default: results.filtered.tsv in Output Directory)
 
 -n, --name 
 Library Name
@@ -148,7 +182,13 @@ Maximum Number of Parallel Jobs (default: 1)
 In the simplest case, deFuse can be run as follows: 
 
 ```
-defuse.pl -c config.txt -1 reads1.fq -2 reads2.fq -o output_dir
+run_defuse.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir
+```
+
+If you have modified the config during building of the reference genome and indices, specify your config on the command line of defuse_run.pl also.
+
+```
+run_defuse.pl -c myconfig.txt -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir
 ```
 
 With the above parameters, deFuse will use reads from the files `reads1.fq` and `reads2.fq` the output will be in the `output_dir` directory. 
@@ -158,38 +198,44 @@ _**note: the output directory should be different from the directory containing 
 The above example will not be the fastest way to run deFuse. Given a machine with multiple processes, 8 for example, run deFuse as follows: 
 
 ```
-defuse.pl -c config.txt -1 reads1.fq -2 reads2.fq -o output_dir -p 8
+run_defuse.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -p 8
+```
+
+If you want to specify output results' files: 
+
+```
+run_defuse.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -r output_dir/myresults.tsv -a path/to/my/dir/myresults_cl.tsv -b path/to/my/dir/myresults_fil.tsv
 ```
 
 If you have access to a cluster, you may be able to run deFuse as follows for a sun grid engine (SGE) cluster: 
 
 ```
-defuse.pl -c config.txt -1 reads1.fq -2 reads2.fq -o output_dir -s sge
+run_defuse.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -s sge
 ```
 
 or as follows for a portable batch system (PBS) cluster: 
 
 ```
-defuse.pl -c config.txt -1 reads1.fq -2 reads2.fq -o output_dir -s pbs
+run_defuse.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -s pbs
 ```
 
 or as follows for a LSF cluster: 
 
 ```
-defuse.pl -c config.txt -1 reads1.fq -2 reads2.fq -o output_dir -s lsf
+run_defuse.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -s lsf
 ```
 
 In many cases it is beneficial to store intermediate results on a local disk rather than a network share. This can be done using the `--local` command line parameters as follows: 
 
 ```
-defuse.pl -c config.txt -1 reads1.fq -2 reads2.fq -o output_dir -s lsf -l /localdisk
+run_defuse.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -s lsf -l /localdisk
 ```
 
 to specify that intermediate files be stored on at /localdisk. 
 
 ## Output
 
-The output directory specified on the command line of `defuse.pl` will contain the files `results.tsv`, `results.filtered.tsv`, and `results.classify.tsv`. All three files have the same format, though `results.classify.tsv` has a probability column from the application of the classifier to `results.tsv`, and `results.filtered.tsv` has been filtered according to the threshold probability as set in `config.tsv`. The file format is tab delimited with one prediction per line, and the following fields per prediction. 
+The output directory specified on the command line of `run_defuse.pl` will contain the files `results.tsv`, `results.filtered.tsv`, and `results.classify.tsv`. All three files have the same format, though `results.classify.tsv` has a probability column from the application of the classifier to `results.tsv`, and `results.filtered.tsv` has been filtered according to the threshold probability as set in `config.tsv`. The file format is tab delimited with one prediction per line, and the following fields per prediction. 
 
 ### Identification
 

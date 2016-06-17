@@ -6,15 +6,17 @@ use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
 use List::Util qw[min max];
+use Cwd qw[abs_path];
 
 $| = 1;
 
-use lib dirname($0);
+use FindBin;
+use lib "$FindBin::RealBin";
 use configdata;
 use cmdrunner;
 use gene_models;
 
-use lib dirname($0)."/../external/BioPerl-1.6.1";
+use lib "$FindBin::RealBin/../external/BioPerl-1.6.1";
 use Bio::DB::Fasta;
 use Bio::SeqIO;
 
@@ -23,11 +25,13 @@ push @usage, "Usage: ".basename($0)." [options]\n";
 push @usage, "Annotate fusions\n";
 push @usage, "  -h, --help      Displays this information\n";
 push @usage, "  -c, --config    Configuration Filename\n";
+push @usage, "  -d, --dataset   Dataset Directory\n";
 push @usage, "  -o, --output    Output Directory\n";
 push @usage, "  -n, --name      Library Name\n";
 
 my $help;
 my $config_filename;
+my $dataset_directory;
 my $output_directory;
 my $library_name;
 
@@ -35,6 +39,7 @@ GetOptions
 (
 	'help'        => \$help,
 	'config=s'    => \$config_filename,
+	'dataset=s'   => \$dataset_directory,
 	'output=s'    => \$output_directory,
 	'name=s'      => \$library_name,
 );
@@ -42,11 +47,14 @@ GetOptions
 not defined $help or usage() and exit;
 
 defined $config_filename or die @usage;
+defined $dataset_directory or die @usage;
 defined $output_directory or die @usage;
 defined $library_name or die @usage;
 
+my $source_directory = abs_path("$FindBin::RealBin/../");
+
 my $config = configdata->new();
-$config->read($config_filename);
+$config->read($config_filename, $dataset_directory, $source_directory);
 
 # Config values
 my $reference_fasta			= $config->get_value("reference_fasta");
@@ -58,12 +66,15 @@ my $cds_fasta				= $config->get_value("cds_fasta");
 my $est_fasta				= $config->get_value("est_fasta");
 my $est_alignments			= $config->get_value("est_alignments");
 my $repeats_regions			= $config->get_value("repeats_regions");
-my $splice_bias             = $config->get_value("splice_bias");
+my $splice_bias				= $config->get_value("splice_bias");
 my $tools_directory			= $config->get_value("tools_directory");
 my $scripts_directory		= $config->get_value("scripts_directory");
 my $samtools_bin			= $config->get_value("samtools_bin");
 my $percident_threshold		= $config->get_value("percent_identity_threshold");
-my $calc_extra_anno         = $config->get_value("calculate_extra_annotations");
+my $calc_extra_anno			= $config->get_value("calculate_extra_annotations");
+
+# Get samtools major version (0.1.x or 1.x)
+my $samtools_version_major	= $1 if `$samtools_bin 2>&1` =~ /^Version:\s(\d+\.\d+).*$/m;
 
 my $genome_max_ins = 2000;
 my $est_max_ins = 10000;
@@ -425,7 +436,8 @@ my $cdna_pair_bam_bai = $cdna_pair_bam.".bai";
 my $cdna_pair_bam_prefix = $cdna_pair_bam.".sort";
 if ($calc_extra_anno eq "yes")
 {
-	$runner->run("$samtools_bin view -bt $cdna_fasta_index #<1 | $samtools_bin sort -o - $cdna_pair_bam_prefix > #>1", [$cdna_pair_sam], [$cdna_pair_bam]);
+	my $samtools_sort_cmd = "$samtools_bin view -bt $cdna_fasta_index #<1 | $samtools_bin sort ".(($samtools_version_major < 1) ? "-o - $cdna_pair_bam_prefix > #>1" : "-T $cdna_pair_bam_prefix -O bam - > #>1");
+	$runner->run($samtools_sort_cmd, [$cdna_pair_sam], [$cdna_pair_bam]);
 	$runner->run("$samtools_bin index #<1", [$cdna_pair_bam], [$cdna_pair_bam_bai]);
 }
 
@@ -1168,7 +1180,7 @@ sub calculate_mapping_stats
 	my $mapping_stats_ref = shift;
 	
 	my $mapping_stats_filename = $output_directory."/mapping.stats";
-	$runner->run("$calc_map_stats_script -c $config_filename -o $output_directory > #>1", [$clusters_sc], [$mapping_stats_filename]);
+	$runner->run("$calc_map_stats_script -c $config_filename -d $dataset_directory -o $output_directory > #>1", [$clusters_sc], [$mapping_stats_filename]);
 	
 	open MPS, $mapping_stats_filename or die "Error: Unable to find $mapping_stats_filename: $!\n";
 	while (<MPS>)
@@ -1192,7 +1204,7 @@ sub calculate_break_concordant
 
 	my $break_concordant_filename = $breaks_filename.".concordant.counts";
 
-	$runner->run("$break_concordant_script -c $config_filename -o $output_directory -b #<1 > #>1", [$breaks_filename], [$break_concordant_filename]);
+	$runner->run("$break_concordant_script -c $config_filename -d $dataset_directory -o $output_directory -b #<1 > #>1", [$breaks_filename], [$break_concordant_filename]);
 
 	open BRC, $break_concordant_filename or die "Error: Unable to open $break_concordant_filename: $!\n";
 	while (<BRC>)
@@ -1211,7 +1223,7 @@ sub calculate_interrupted
 
 	my $interrupted_filename = $breaks_filename.".interrupted.counts";
 
-	$runner->run("$interrupted_script -c $config_filename -o $output_directory -b #<1 > #>1", [$breaks_filename], [$interrupted_filename]);
+	$runner->run("$interrupted_script -c $config_filename -d $dataset_directory -o $output_directory -b #<1 > #>1", [$breaks_filename], [$interrupted_filename]);
 
 	open BIN, $interrupted_filename or die "Error: Unable to open $interrupted_filename: $!\n";
 	while (<BIN>)

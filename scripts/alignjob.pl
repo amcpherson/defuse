@@ -5,8 +5,10 @@ use warnings FATAL => 'all';
 use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
+use Cwd qw[abs_path];
 
-use lib dirname($0);
+use FindBin;
+use lib "$FindBin::RealBin";
 use configdata;
 use cmdrunner;
 
@@ -17,6 +19,7 @@ push @usage, "Usage: ".basename($0)." [options]\n";
 push @usage, "Run the bowtie alignment pipeline for fusions.\n";
 push @usage, "  -h, --help      Displays this information\n";
 push @usage, "  -c, --config    Configuration Filename\n";
+push @usage, "  -d, --dataset   Dataset Directory\n";
 push @usage, "  -l, --local     Job Local Directory\n";
 push @usage, "  -o, --output    Output Directory\n";
 push @usage, "  -n, --name      Library Name\n";
@@ -25,6 +28,7 @@ push @usage, "  -p, --prefix    Prefix of Job Input/Output\n";
 
 my $help;
 my $config_filename;
+my $dataset_directory;
 my $local_directory;
 my $output_directory;
 my $library_name;
@@ -35,6 +39,7 @@ GetOptions
 (
 	'help'        => \$help,
 	'config=s'    => \$config_filename,
+	'dataset=s'   => \$dataset_directory,
 	'local=s'     => \$local_directory,
 	'output=s'    => \$output_directory,
 	'name=s'      => \$library_name,
@@ -45,6 +50,7 @@ GetOptions
 not defined $help or die @usage;
 
 defined $config_filename or die @usage;
+defined $dataset_directory or die @usage;
 defined $local_directory or die @usage;
 defined $output_directory or die @usage;
 defined $library_name or die @usage;
@@ -53,8 +59,10 @@ defined $job_prefix or die @usage;
 
 print "Starting alignjob $job_name\n";
 
+my $source_directory = abs_path("$FindBin::RealBin/../");
+
 my $config = configdata->new();
-$config->read($config_filename);
+$config->read($config_filename, $dataset_directory, $source_directory);
 
 # Config values
 my $gene_models              = $config->get_value("gene_models");

@@ -6,10 +6,12 @@ use Getopt::Std;
 use Getopt::Long;
 use File::Basename;
 use List::Util qw[min max];
+use Cwd qw[abs_path];
 
 $| = 1;
 
-use lib dirname($0);
+use FindBin;
+use lib "$FindBin::RealBin";
 use configdata;
 use gene_models;
 
@@ -18,26 +20,32 @@ push @usage, "Usage: ".basename($0)." [options]\n";
 push @usage, "Annotate fusions\n";
 push @usage, "  -h, --help      Displays this information\n";
 push @usage, "  -c, --config    Configuration Filename\n";
+push @usage, "  -d, --dataset   Dataset Directory\n";
 push @usage, "  -o, --output    Output Directory\n";
 
 my $help;
 my $config_filename;
+my $dataset_directory;
 my $output_directory;
 
 GetOptions
 (
 	'help'        => \$help,
 	'config=s'    => \$config_filename,
+	'dataset=s'   => \$dataset_directory,
 	'output=s'    => \$output_directory,
 );
 
 not defined $help or usage() and exit;
 
 defined $config_filename or die @usage;
+defined $dataset_directory or die @usage;
 defined $output_directory or die @usage;
 
+my $source_directory = abs_path("$FindBin::RealBin/../");
+
 my $config = configdata->new();
-$config->read($config_filename);
+$config->read($config_filename, $dataset_directory, $source_directory);
 
 # Config values
 my $gene_models_filename = $config->get_value("gene_models");

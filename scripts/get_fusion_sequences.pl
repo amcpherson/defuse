@@ -7,7 +7,8 @@ use Getopt::Long;
 use File::Basename;
 use List::Util qw[min max];
 
-use lib dirname($0)."/../external/BioPerl-1.6.1";
+use FindBin;
+use lib "$FindBin::RealBin/../external/BioPerl-1.6.1";
 use Bio::DB::Fasta;
 use Bio::SeqIO;
 
