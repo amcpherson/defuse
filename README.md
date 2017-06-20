@@ -62,8 +62,10 @@ The recommended way of installing deFuse is using [`conda`](http://conda.pydata.
 With conda installed, deFuse can be installed by first adding my anaconda channel.
 
 ```
+conda config --add channels 'conda-forge'
 conda config --add channels https://conda.anaconda.org/dranew
 conda config --add channels 'bioconda'
+conda config --add channels 'r'
 ```
 
 Then install deFuse.
