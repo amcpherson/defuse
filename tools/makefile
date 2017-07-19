@@ -174,7 +174,7 @@ bamfastq : \
 		$(BAMTOOLSSRC)\
 		$(ZDIR)/$(ZLIB)
 
-tools : clustermatepairs setcover calccov estislands dosplitalign evalsplitalign localalign splitseq matealign bamfastq
+tools : $(ZDIR)/$(ZLIB) $(BAMDIR)/$(BAMLIB) clustermatepairs setcover calccov estislands dosplitalign evalsplitalign localalign splitseq matealign bamfastq
 	
 
 clean : 
