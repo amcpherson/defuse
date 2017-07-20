@@ -67,7 +67,6 @@ GetOptions
 
 not defined $help or die @usage;
 
-defined $config_filename or die @usage;
 defined $dataset_directory or die @usage;
 defined $output_directory or die @usage;
 

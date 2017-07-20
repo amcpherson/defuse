@@ -43,8 +43,10 @@ my $source_directory = abs_path("$FindBin::RealBin/../");
 
 if (not defined $config_filename)
 {
-	my $config_filename = $source_directory."/config.txt";
+	$config_filename = $source_directory."/scripts/config.txt";
 }
+
+-e $config_filename or die "Error: Unable to find config file $config_filename\n";
 
 my $config = configdata->new();
 $config->read($config_filename, $dataset_directory, $source_directory);
