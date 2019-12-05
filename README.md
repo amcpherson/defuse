@@ -116,6 +116,24 @@ The latest version of R can be downloaded from the [R project website](http://ww
 
 Install the ada package. Run R, then at the prompt type `install.packages("ada")`
 
+### Build with conda
+
+To build the latest version with conda inside docker run:
+
+```
+bash run_build_conda.sh
+```
+
+### Build with docker
+
+To build version 0.8.1 of defuse, use the following command:
+
+```
+docker build ./ --build-arg app_version=0.8.1 -t defuse:0.8.1
+```
+
+Note that the docker build installs inside a container via conda thus a conda package must be built first for the given version.
+
 ### Reference Dataset
 
 The reference dataset setup process has been simplified as of deFuse 0.6.0, and deFuse now automatically downloads all required files. 
@@ -356,3 +374,4 @@ You cannot run get_reads.pl if you have removed the temporary files from the out
   * job/reads.*.improper.sam
   * job/reads.*.spanning.filelist
   * job/reads.*.spanning/*
+

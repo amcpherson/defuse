@@ -89,7 +89,7 @@ my $remove_fasta_description_script = $scripts_directory."/remove_fasta_descript
 
 
 # Create cmdrunner for running bowtie-build and samtools faidx
-my $log_directory = dirname($0)."/log";
+my $log_directory = $dataset_directory."/log";
 my $log_prefix = $log_directory."/create_reference_dataset";
 
 mkdir $log_directory if not -d $log_directory;
