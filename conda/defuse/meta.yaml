@@ -1,10 +1,10 @@
 package:
   name: defuse
-  version: '0.8.1'
+  version: '0.8.2'
 
 source:
-  git_url: https://dranew@bitbucket.org/dranew/defuse.git
-  git_rev: v0.8.1
+  git_url: https://github.com/amcpherson/defuse.git
+  git_rev: v0.8.2
 
 requirements:
   build:
@@ -20,6 +20,6 @@ requirements:
     - gmap
 
 about:
-  home: http://bitbucket.org/dranew/defuse
+  home: https://github.com/amcpherson/defuse.git
   summary: 'Bioinformatics tool for gene fusion discovery using RNA-Seq data'
 
