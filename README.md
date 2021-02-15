@@ -203,13 +203,13 @@ Maximum Number of Parallel Jobs (default: 1)
 In the simplest case, deFuse can be run as follows: 
 
 ```
-run_defuse.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir
+defuse_run.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir
 ```
 
 If you have modified the config during building of the reference genome and indices, specify your config on the command line of defuse_run.pl also.
 
 ```
-run_defuse.pl -c myconfig.txt -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir
+defuse_run.pl -c myconfig.txt -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir
 ```
 
 With the above parameters, deFuse will use reads from the files `reads1.fq` and `reads2.fq` the output will be in the `output_dir` directory. 
@@ -219,44 +219,44 @@ _**note: the output directory should be different from the directory containing 
 The above example will not be the fastest way to run deFuse. Given a machine with multiple processes, 8 for example, run deFuse as follows: 
 
 ```
-run_defuse.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -p 8
+defuse_run.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -p 8
 ```
 
 If you want to specify output results' files: 
 
 ```
-run_defuse.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -r output_dir/myresults.tsv -a path/to/my/dir/myresults_cl.tsv -b path/to/my/dir/myresults_fil.tsv
+defuse_run.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -r output_dir/myresults.tsv -a path/to/my/dir/myresults_cl.tsv -b path/to/my/dir/myresults_fil.tsv
 ```
 
 If you have access to a cluster, you may be able to run deFuse as follows for a sun grid engine (SGE) cluster: 
 
 ```
-run_defuse.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -s sge
+defuse_run.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -s sge
 ```
 
 or as follows for a portable batch system (PBS) cluster: 
 
 ```
-run_defuse.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -s pbs
+defuse_run.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -s pbs
 ```
 
 or as follows for a LSF cluster: 
 
 ```
-run_defuse.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -s lsf
+defuse_run.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -s lsf
 ```
 
 In many cases it is beneficial to store intermediate results on a local disk rather than a network share. This can be done using the `--local` command line parameters as follows: 
 
 ```
-run_defuse.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -s lsf -l /localdisk
+defuse_run.pl -d dataset_directory -1 reads1.fq -2 reads2.fq -o output_dir -s lsf -l /localdisk
 ```
 
 to specify that intermediate files be stored on at /localdisk. 
 
 ## Output
 
-The output directory specified on the command line of `run_defuse.pl` will contain the files `results.tsv`, `results.filtered.tsv`, and `results.classify.tsv`. All three files have the same format, though `results.classify.tsv` has a probability column from the application of the classifier to `results.tsv`, and `results.filtered.tsv` has been filtered according to the threshold probability as set in `config.tsv`. The file format is tab delimited with one prediction per line, and the following fields per prediction. 
+The output directory specified on the command line of `defuse_run.pl` will contain the files `results.tsv`, `results.filtered.tsv`, and `results.classify.tsv`. All three files have the same format, though `results.classify.tsv` has a probability column from the application of the classifier to `results.tsv`, and `results.filtered.tsv` has been filtered according to the threshold probability as set in `config.tsv`. The file format is tab delimited with one prediction per line, and the following fields per prediction. 
 
 ### Identification
 
